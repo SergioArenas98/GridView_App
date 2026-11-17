@@ -19,7 +19,7 @@
 
 import type { ProviderHttpClient } from '../../providers/http/provider-http-client';
 import {
-  composeCoordinatedRuntime,
+  composeCoordinatedTransport,
   type CoordinatedRuntimeDependencies,
   type CoordinatedUnavailableReason,
 } from './composition';
@@ -281,7 +281,7 @@ export async function probeJolpicaEgressIdentity(
 export async function probeEgressIdentityUnderComposition(
   dependencies: CoordinatedRuntimeDependencies,
 ): Promise<EgressIdentityResult> {
-  const composition = composeCoordinatedRuntime(dependencies);
+  const composition = composeCoordinatedTransport(dependencies);
   if (composition.kind === 'unavailable') {
     return {
       outcome: 'coordinated-runtime-unavailable',

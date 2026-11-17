@@ -681,7 +681,7 @@ describe('the mock synchronization path is untouched', () => {
     expect(body.data.map((entry) => entry.constructorId)).toContain('red-bull');
   });
 
-  it('does not import the mapping registry anywhere in the runtime', () => {
+  it('limits identity discovery imports to reviewed utilities and bundled-context hashing', () => {
     const sourceDir = join(repoRoot, 'services', 'edge-api', 'src');
     const files = (readdirSync(sourceDir, { recursive: true }) as string[])
       .map((entry) => entry.toString())
@@ -693,9 +693,70 @@ describe('the mock synchronization path is untouched', () => {
 
     for (const file of files) {
       const contents = readFileSync(join(sourceDir, file), 'utf8');
+      // Permit only exact reviewed identity utility imports. U6 adds the
+      // complete bundled/runtime context readers; no arbitrary mapping owner.
+      const discoveryImports: Record<string, readonly string[]> = {
+        'identity/catalog/bundled-context.ts': [
+          "import { decodeProviderMappingKey } from '../../providers/mappings/mapping-key';",
+          "import { providerMappingRegistry } from '../../providers/mappings';",
+        ],
+        'identity/catalog/run-context.ts': [
+          "import type { ProviderMappingRegistry } from '../../providers/mappings/mapping-registry';",
+          "import { canonicalKey } from '../../providers/mappings/mapping-key';",
+        ],
+        'identity/catalog/indexes.ts': [
+          "import { buildProviderMappingRegistry } from '../../providers/mappings/mapping-registry';",
+        ],
+        'identity/catalog/sources.ts': [
+          "import { buildProviderMappingRegistry } from '../../providers/mappings/mapping-registry';",
+        ],
+        'identity/catalog/model.ts': [
+          "import type { ProviderMappingKey } from '../../providers/mappings/mapping-key';",
+        ],
+        'identity/catalog/snapshot.ts': [
+          "import { canonicalKey, decodeProviderMappingKey } from '../../providers/mappings/mapping-key';",
+        ],
+        'identity/catalog/projection.ts': [
+          "import { canonicalKey } from '../../providers/mappings/mapping-key';",
+        ],
+        'identity/catalog/storage.ts': [
+          "import { canonicalKey } from '../../providers/mappings/mapping-key';",
+        ],
+        'identity/factory.ts': [
+          "import { curatedMappingDocuments, curatedRegistries } from '../providers/mappings';",
+        ],
+        'identity/store.ts': [
+          "import { canonicalKey } from '../providers/mappings/mapping-key';",
+        ],
+        'identity/port.ts': [
+          "import type { ProviderMappingKey } from '../providers/mappings/mapping-key';",
+        ],
+        'identity/discovery/persist.ts': [
+          "import type { ProviderMappingRegistry } from '../../providers/mappings/mapping-registry';",
+        ],
+        'identity/discovery/keys.ts': [
+          "import { canonicalKey, decodeProviderMappingKey } from '../../providers/mappings/mapping-key';",
+          "import type { ProviderMappingKey } from '../../providers/mappings/mapping-key';",
+        ],
+        'identity/discovery/model.ts': [
+          "import type { ProviderMappingKey } from '../../providers/mappings/mapping-key';",
+        ],
+        'identity/discovery/extract-jolpica.ts': [
+          "import { decodeProviderMappingKey } from '../../providers/mappings/mapping-key';",
+          "import type { ProviderMappingRegistry } from '../../providers/mappings/mapping-registry';",
+        ],
+      };
+      const normalizeImport = (text: string): string =>
+        text.replace(/\s+/g, ' ').replace(/,\s*}/g, ' }');
+      let checked = normalizeImport(contents);
+      for (const permitted of discoveryImports[file.replace(/\\/g, '/')] ??
+        []) {
+        // Whitespace alone is irrelevant to the import boundary.
+        checked = checked.replace(normalizeImport(permitted), '');
+      }
       expect(
-        contents,
-        `${file} must not consume the dormant mapping registry yet`,
+        checked,
+        `${file} must not consume bundled mapping content outside its owner`,
       ).not.toContain('providers/mappings');
     }
   });

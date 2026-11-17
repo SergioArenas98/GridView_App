@@ -599,9 +599,10 @@ describe('the 2026 circuit evidence corpus', () => {
     expect(evidenceCorpus.acknowledgedUnmapped.filter(isCircuit)).toEqual([]);
   });
 
-  it('keeps exactly the three non-circuit acknowledgements', () => {
+  it('keeps exactly the three existing OpenF1 acknowledgements', () => {
     expect(
       evidenceCorpus.acknowledgedUnmapped
+        .filter((record) => record.source === 'openf1')
         .map((record) => [
           record.source,
           record.entity,
@@ -748,8 +749,8 @@ describe('nothing outside the circuit dataset moved', () => {
       OTHER_MAPPINGS.length + ALL_ASSOCIATIONS.length + 23,
     );
     expect(mappingDocument.mappings).toHaveLength(94);
-    expect(evidenceCorpus.identities).toHaveLength(97);
-    expect(evidenceCorpus.acknowledgedUnmapped).toHaveLength(3);
+    expect(evidenceCorpus.identities).toHaveLength(101);
+    expect(evidenceCorpus.acknowledgedUnmapped).toHaveLength(7);
   });
 
   it('keeps every stated mapping total in the Implementation Plan true', () => {
@@ -776,9 +777,9 @@ describe('nothing outside the circuit dataset moved', () => {
     ].map(([, word]) => word);
     expect(acknowledged.length).toBeGreaterThan(0);
     for (const word of acknowledged) {
-      expect(word).toBe('three');
+      expect(word).toBe('seven');
     }
-    expect(evidenceCorpus.acknowledgedUnmapped).toHaveLength(3);
+    expect(evidenceCorpus.acknowledgedUnmapped).toHaveLength(7);
   });
 });
 

@@ -42,6 +42,14 @@ import {
   type ContractIssue,
   type Field,
 } from '../../contract/normalized';
+import {
+  strictInventoryPolicy,
+  type DriverInventoryPolicy,
+} from '../../identity/inventory/model';
+import {
+  validateDriverInventoryPayload,
+  type DriverInventoryProblem,
+} from '../../identity/inventory/validate';
 import type { CoordinatedPayload } from './resource';
 
 /**
@@ -83,14 +91,29 @@ function roundCheck(nullable: boolean): Check {
  */
 const standingsRound: Field = { key: 'round', check: roundCheck(true) };
 
+const participantsFields: readonly Field[] = [
+  { key: 'drivers', check: arrayOf(driverCheck) },
+  { key: 'constructors', check: arrayOf(constructorCheck) },
+  { key: 'driverEntries', check: arrayOf(driverSeasonEntryCheck) },
+  { key: 'constructorEntries', check: arrayOf(constructorSeasonEntryCheck) },
+];
+
+/**
+ * U9: the explicit optional-driver participants wrapper. A separate closed
+ * shape, not a permissive superset: it *requires* `driverInventory` (an absent
+ * key is `missing`), and the strict wrapper above still refuses it as an
+ * undeclared key. The accounting's own closed rules are checked by
+ * `validateParticipantsInventory`, which needs the trusted run policy and the
+ * coordinator's recomputed digest.
+ */
+const inventoryParticipants = wrapper(...participantsFields, {
+  key: 'driverInventory',
+  check: kindOnly,
+});
+
 const checks: Record<CoordinatedPayload['kind'], Check> = {
   'season-calendar': wrapper({ key: 'events', check: arrayOf(grandPrixCheck) }),
-  'season-participants': wrapper(
-    { key: 'drivers', check: arrayOf(driverCheck) },
-    { key: 'constructors', check: arrayOf(constructorCheck) },
-    { key: 'driverEntries', check: arrayOf(driverSeasonEntryCheck) },
-    { key: 'constructorEntries', check: arrayOf(constructorSeasonEntryCheck) },
-  ),
+  'season-participants': wrapper(...participantsFields),
   'season-circuits': wrapper({ key: 'circuits', check: arrayOf(circuitCheck) }),
   'driver-standings': wrapper(standingsRound, {
     key: 'standings',
@@ -118,7 +141,33 @@ const checks: Record<CoordinatedPayload['kind'], Check> = {
 export function validateCoordinatedPayload(
   payload: CoordinatedPayload,
   path = 'payload',
+  inventoryPolicy: DriverInventoryPolicy = strictInventoryPolicy,
 ): readonly ContractIssue[] {
-  const check = checks[payload.kind];
+  const check =
+    payload.kind === 'season-participants' &&
+    inventoryPolicy.mode === 'optional-drivers'
+      ? inventoryParticipants
+      : checks[payload.kind];
   return collect(path, (collector) => check(payload, path, collector));
+}
+
+/**
+ * U9: the closed accounting rules of an optional-mode participants payload.
+ *
+ * `inventoryPolicy` comes from the trusted run context, never from the
+ * payload. `recomputedDigest` is computed by the coordinator from the same
+ * detached snapshot. Strict policy, and every other payload kind, answer no
+ * problems here; their closed wrappers above are the whole rule.
+ */
+export function validateParticipantsInventory(
+  payload: CoordinatedPayload,
+  inventoryPolicy: DriverInventoryPolicy,
+  recomputedDigest: string | null,
+): readonly DriverInventoryProblem[] {
+  if (payload.kind !== 'season-participants') return [];
+  return validateDriverInventoryPayload(
+    payload,
+    inventoryPolicy,
+    recomputedDigest,
+  );
 }

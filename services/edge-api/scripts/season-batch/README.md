@@ -1,5 +1,49 @@
 # Season batch generator (offline, dormant)
 
+## U7 private catalog generation
+
+Bundled (default) and compare authority retain reviewed schema v1. Compare
+does not authorize runtime output. Runtime generation is explicit:
+
+```text
+npm run season-batch:generate -- --capture <recorded-dir> --out <new-dir> --identity-mode runtime --installation-id <uuid> --catalog-export <local-u5-export.json>
+```
+
+Obtain that file separately using the authenticated U5 read-only export command.
+The file must be valid UTF-8 JSON containing the complete U5 wrapper. Harmless
+whitespace, line-ending, property-order and JSON escape differences preserve
+its canonical commitment. A bare U4 lineage export is refused. The local reader
+bounds it at 2 MiB, independently checks U5's
+`exportHash`, rebuilds the entire U3/U4 lineage, validates the complete registry,
+profiles and supported sealed base, and binds installation and season before
+constructing ports. It never downloads anything.
+
+Schema v2 adds an identical closed `identityCatalog` to artifact and reviewed
+manifest. `catalogHash`, projection and base digests use U3's `sha256:<hex>`;
+`exportSha256` is exactly the verified U5 **`exportHash`**, copied verbatim with
+its `sha256:` prefix. No hash of file bytes, pretty JSON, inner lineage, or the
+hash string itself substitutes for that canonical wrapper commitment. Only
+`strict-v1` is operational. The decoder recognizes the reserved future policy
+name but generation and ingest refuse it.
+
+For a v2 submission, additionally pass `--catalog-export`, `--installation-id`
+and an explicit stable `--operation-id <uuid>` to `season-batch:submission`.
+Retain that operation ID and the exact submission for uncertain-response retry.
+The submission schema version must match both reviewed files. Its artifact and
+manifest digests, predecessor fence, authentication and guarded publication
+remain mandatory. Worker runtime admission independently pins the active
+catalog under the existing season lease and reconstructs the U5 canonical
+wrapper commitment from authoritative lineage/import closure. Old revisions cannot
+authorize new operations. Completed identical receipts remain recoverable.
+
+The fixture converter and frozen preparation accept `--catalog-export` and
+`--installation-id` for v2 review. Provenance stays in the private reviewed
+batch; neither public envelope files nor the frozen APK descriptor gain fields.
+The Android project, signing configuration and application ID are unchanged.
+
+See [the U7 operating report](../../../../docs/operations/GridView_Identity_Catalog_U7.md)
+for compatibility gates, receipt recovery and local validation evidence.
+
 Turns one **recorded** capture of Jolpica responses into a deterministic,
 reviewable season artifact and manifest. It applies exactly the normalization,
 curated mappings, assembly and validation rules the Worker's coordinated

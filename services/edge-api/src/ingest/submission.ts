@@ -33,6 +33,7 @@ import { submissionKind, seasonBatchSchemaVersion } from './batch-format';
 export const maximumSubmissionBytes = 2 * 1024 * 1024;
 
 export interface SeasonBatchSubmission {
+  readonly operationId?: string;
   readonly season: number;
   /**
    * The active release the batch was reviewed against, or `null` for the
@@ -71,7 +72,8 @@ export function decodeSubmission(value: unknown): SeasonBatchSubmission | null {
   if (!isRecord(value)) return null;
   const keys = Object.keys(value);
   if (
-    keys.length !== submissionKeys.length ||
+    keys.length !==
+      submissionKeys.length + (value.schemaVersion === 2 ? 1 : 0) ||
     !submissionKeys.every((key) =>
       Object.prototype.hasOwnProperty.call(value, key),
     )
@@ -80,7 +82,13 @@ export function decodeSubmission(value: unknown): SeasonBatchSubmission | null {
   }
   if (
     value.kind !== submissionKind ||
-    value.schemaVersion !== seasonBatchSchemaVersion ||
+    (value.schemaVersion !== seasonBatchSchemaVersion &&
+      value.schemaVersion !== 2) ||
+    (value.schemaVersion === 2 &&
+      (typeof value.operationId !== 'string' ||
+        !/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(
+          value.operationId,
+        ))) ||
     !Number.isSafeInteger(value.season) ||
     !(
       value.expectedActiveVersion === null ||
@@ -94,7 +102,17 @@ export function decodeSubmission(value: unknown): SeasonBatchSubmission | null {
   ) {
     return null;
   }
+  if (
+    (value.manifest.schemaVersion !== undefined ||
+      value.artifact.schemaVersion !== undefined) &&
+    (value.manifest.schemaVersion !== value.schemaVersion ||
+      value.artifact.schemaVersion !== value.schemaVersion)
+  )
+    return null;
   return {
+    ...(value.schemaVersion === 2
+      ? { operationId: value.operationId as string }
+      : {}),
     season: value.season as number,
     expectedActiveVersion: value.expectedActiveVersion as string | null,
     reviewedManifestSha256: value.reviewedManifestSha256,

@@ -1,0 +1,12 @@
+{
+  "content/registries/drivers.mock.json": "driver-registry",
+  "content/registries/constructors.mock.json": "constructor-registry",
+  "content/registries/circuits.mock.json": "circuit-registry",
+  "content/registries/events.development.json": "event-registry",
+  "content/seasons/2026/provider-mappings.development.json": "provider-mappings",
+  "content/seasons/2026/provider-evidence.development.json": "provider-evidence",
+  "content/seasons/2026/season-metadata.development.json": "season-metadata",
+  "content/seasons/2026/driver-entries.mock.json": "driver-season-entries",
+  "content/seasons/2026/constructor-entries.mock.json": "constructor-season-entries",
+  "content/seasons/2026/overrides.mock.json": "overrides"
+}

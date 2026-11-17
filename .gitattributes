@@ -13,6 +13,9 @@
 *.ts text eol=lf
 *.js text eol=lf
 *.mjs text eol=lf
+*.cjs text eol=lf
+*.mts text eol=lf
+*.cts text eol=lf
 *.json text eol=lf
 *.arb text eol=lf
 *.toml text eol=lf

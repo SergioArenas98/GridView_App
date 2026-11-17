@@ -4,8 +4,36 @@
   "schemaVersion": 1,
   "status": "development",
   "season": 2026,
-  "note": "INTERNAL ONLY. The closed set of exact 2026 provider identities recorded in docs/technical/GridView_Provider_Evaluation.md section 8. Every value was observed through an explicitly authorized request recorded there (8.1 for 2026-08-19, 8.8 for 2026-09-19, 8.9 and 8.10 for 2026-09-23) and copied exactly; nothing was scraped, inferred from a display name or recalled from memory. The 8.8 calendar is recorded as its 23 event locators plus all 23 circuitIds it supplied: a circuitId inside a locator is only a locator component, so a circuit identity is always its own record with its own evidence. Every observed 2026 circuitId is now mapped, so the circuit portion of gap G-l is closed and no circuit is acknowledged below. Every entry must be mapped in provider-mappings.development.json or acknowledged below; validation fails otherwise. An acknowledgement is a temporary blocker, never a mapping: the runtime still resolves it as unmapped and the affected resource fails closed.",
+  "note": "INTERNAL ONLY. Exact 2026 provider identities recorded in docs/technical/GridView_Provider_Evaluation.md section 8, plus four diagnostic-only driverId keys from the operator report in docs/operations/2026-11-12-jolpica-mapping-investigation.md. Each entry cites its own provenance; the November report supplies no canonical full names or approved mappings. Nothing is inferred from provider spelling. Every identity must be mapped in provider-mappings.development.json or explicitly acknowledged below. An acknowledgement is a temporary blocker, never a mapping: runtime resolution remains unmapped and the affected resource fails closed.",
   "identities": [
+    {
+      "source": "jolpica",
+      "entity": "driver",
+      "providerField": "driverId",
+      "providerValue": "rafael_camara",
+      "evidence": "docs/operations/2026-11-12-jolpica-mapping-investigation.md - operator-reported staging mapping failure, 2026-11-12; exact driverId only, no captured name or approved canonical identity."
+    },
+    {
+      "source": "jolpica",
+      "entity": "driver",
+      "providerField": "driverId",
+      "providerValue": "gabriele_mini",
+      "evidence": "docs/operations/2026-11-12-jolpica-mapping-investigation.md - operator-reported staging mapping failure, 2026-11-12; exact driverId only, no captured name or approved canonical identity."
+    },
+    {
+      "source": "jolpica",
+      "entity": "driver",
+      "providerField": "driverId",
+      "providerValue": "freddie_slater",
+      "evidence": "docs/operations/2026-11-12-jolpica-mapping-investigation.md - operator-reported staging mapping failure, 2026-11-12; exact driverId only, no captured name or approved canonical identity."
+    },
+    {
+      "source": "jolpica",
+      "entity": "driver",
+      "providerField": "driverId",
+      "providerValue": "nikola_tsolov",
+      "evidence": "docs/operations/2026-11-12-jolpica-mapping-investigation.md - operator-reported staging mapping failure, 2026-11-12; exact driverId only, no captured name or approved canonical identity."
+    },
     {
       "source": "jolpica",
       "entity": "driver",
@@ -779,6 +807,38 @@
     }
   ],
   "acknowledgedUnmapped": [
+    {
+      "source": "jolpica",
+      "entity": "driver",
+      "providerField": "driverId",
+      "providerValue": "rafael_camara",
+      "reason": "no-canonical-gridview-identity",
+      "detail": "Reported by the staging operator on 2026-11-12. No canonical GridView identity or approved full-name evidence exists in this worktree. Requires identity curation before mapping; the affected resource must remain unavailable. See docs/operations/2026-11-12-jolpica-mapping-investigation.md."
+    },
+    {
+      "source": "jolpica",
+      "entity": "driver",
+      "providerField": "driverId",
+      "providerValue": "gabriele_mini",
+      "reason": "no-canonical-gridview-identity",
+      "detail": "Reported by the staging operator on 2026-11-12. No canonical GridView identity or approved full-name evidence exists in this worktree. Requires identity curation before mapping; the affected resource must remain unavailable. See docs/operations/2026-11-12-jolpica-mapping-investigation.md."
+    },
+    {
+      "source": "jolpica",
+      "entity": "driver",
+      "providerField": "driverId",
+      "providerValue": "freddie_slater",
+      "reason": "no-canonical-gridview-identity",
+      "detail": "Reported by the staging operator on 2026-11-12. No canonical GridView identity or approved full-name evidence exists in this worktree. Requires identity curation before mapping; the affected resource must remain unavailable. See docs/operations/2026-11-12-jolpica-mapping-investigation.md."
+    },
+    {
+      "source": "jolpica",
+      "entity": "driver",
+      "providerField": "driverId",
+      "providerValue": "nikola_tsolov",
+      "reason": "no-canonical-gridview-identity",
+      "detail": "Reported by the staging operator on 2026-11-12. No canonical GridView identity or approved full-name evidence exists in this worktree. Requires identity curation before mapping; the affected resource must remain unavailable. See docs/operations/2026-11-12-jolpica-mapping-investigation.md."
+    },
     {
       "source": "openf1",
       "entity": "driver",

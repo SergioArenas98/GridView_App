@@ -29,7 +29,7 @@ import type { RefusalFingerprint } from '../../providers/http/refusal-fingerprin
 import {
   calendarPageLimit,
   calendarPathFor,
-  composeCoordinatedRuntime,
+  composeCoordinatedTransport,
   type CoordinatedRuntimeDependencies,
   type CoordinatedUnavailableReason,
 } from './composition';
@@ -156,7 +156,7 @@ export async function getCalendarOnceUnderComposition(
   dependencies: CoordinatedRuntimeDependencies,
   season: number,
 ): Promise<CalendarSingleGetResult> {
-  const composition = composeCoordinatedRuntime(dependencies);
+  const composition = composeCoordinatedTransport(dependencies);
   if (composition.kind === 'unavailable') {
     return {
       outcome: 'coordinated-runtime-unavailable',

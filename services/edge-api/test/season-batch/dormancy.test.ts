@@ -47,9 +47,16 @@ describe('season-batch generator: dormancy', () => {
     }
   });
 
-  it('reads no environment variable and names no credential', () => {
+  it('reads only the explicit U6 identity mode at the CLI boundary and names no credential', () => {
     for (const { file, text } of generatorSources()) {
-      expect(text, file).not.toMatch(
+      const remaining =
+        file === 'cli.mjs'
+          ? text.replace(
+              'process.env.IDENTITY_CATALOG_MODE',
+              'explicitIdentityMode',
+            )
+          : text;
+      expect(remaining, file).not.toMatch(
         /process\.env|Deno\.env|import\.meta\.env/,
       );
       expect(text, file).not.toMatch(/ADMIN_TOKEN|CLOUDFLARE_|API_TOKEN/);

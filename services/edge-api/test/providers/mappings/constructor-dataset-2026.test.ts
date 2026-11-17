@@ -554,10 +554,11 @@ describe('the 2026 constructor evidence corpus', () => {
     ).toEqual([]);
   });
 
-  it('keeps the three acknowledgements, with accurate OpenF1 reasons', () => {
-    expect(evidenceCorpus.acknowledgedUnmapped).toHaveLength(3);
+  it('keeps the three OpenF1 acknowledgements with accurate reasons', () => {
+    expect(evidenceCorpus.acknowledgedUnmapped).toHaveLength(7);
     expect(
       evidenceCorpus.acknowledgedUnmapped
+        .filter((record) => record.source === 'openf1')
         .map((record) => [
           record.source,
           record.entity,
@@ -645,8 +646,8 @@ describe('nothing outside the constructor dataset moved', () => {
     // the Jolpica `antonelli` acknowledgement. The 2026-10-07 off-calendar
     // circuit `jeddah` (Provider Evaluation §8.13) added one of each.
     expect(mappingDocument.mappings).toHaveLength(94);
-    expect(evidenceCorpus.identities).toHaveLength(97);
-    expect(evidenceCorpus.acknowledgedUnmapped).toHaveLength(3);
+    expect(evidenceCorpus.identities).toHaveLength(101);
+    expect(evidenceCorpus.acknowledgedUnmapped).toHaveLength(7);
   });
 
   it('leaves drivers to the driver dataset: 33 identities, 32 Jolpica mappings', () => {

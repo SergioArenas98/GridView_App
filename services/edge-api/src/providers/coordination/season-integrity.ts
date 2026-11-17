@@ -209,6 +209,24 @@ export const seasonRelations = [
   'driver-entry-support',
   /** Two payloads claiming one identity that storage keys a single row on. */
   'duplicate-identity',
+  /**
+   * U10 internal boundary, reported by assembly only - never by
+   * `validateSeasonReferences`. The participants contribution's private
+   * driver-inventory accounting disagrees with the run's single admitted
+   * inventory policy or pinned catalog: accounting under a strict policy, no
+   * accounting under the optional policy, a different catalog hash, closed
+   * accounting problems, a duplicate inventory identity, or an inventory
+   * profile that differs from the pinned profile of its identity.
+   */
+  'driver-inventory-context',
+  /**
+   * U10 internal boundary, reported by assembly only. A driver identity the
+   * selected resources require - a result entry, a fastest lap, a standing,
+   * a derived span or a constructor lineup - has no complete, valid,
+   * season-bound profile in the run's pinned catalog. Never repaired by
+   * creating an identity or copying a predecessor profile.
+   */
+  'required-driver-profile',
 ] as const;
 
 export type SeasonRelation = (typeof seasonRelations)[number];

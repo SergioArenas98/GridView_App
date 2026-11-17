@@ -67,6 +67,10 @@
  */
 
 import type { Logger } from '../../../logging/logger';
+import {
+  admitIdentityContext,
+  CatalogAdmissionError,
+} from '../../../identity/catalog/run-context';
 import type { SeasonPublicationSequencerPort } from '../../../publication/sequencer/port';
 import type { SnapshotStorage } from '../../../storage/types';
 import {
@@ -77,6 +81,7 @@ import {
 } from '../outcome';
 import {
   composeCoordinatedRuntime,
+  missingCoordinatedDependencies,
   type CoordinatedRuntime,
   type CoordinatedRuntimeDependencies,
   type CoordinatedUnavailableReason,
@@ -113,6 +118,7 @@ export const COORDINATED_OBSERVATION_OPERATION = 'sync.coordinated.observation';
 
 /** Where a failed run stopped. */
 export const observationStages = [
+  'identity',
   'lease',
   'authority',
   'reconciliation',
@@ -128,6 +134,8 @@ export type ObservationStage = (typeof observationStages)[number];
 
 /** Why a run failed closed. A closed set, safe for logs. */
 export const observationFailures = [
+  'catalog-unavailable',
+  'catalog-invalid',
   ...publishedReadRefusals,
   'ledger-unavailable',
   'ledger-rejected',
@@ -234,19 +242,19 @@ export async function observeCoordinatedSeason(
     season: request.season,
     trigger: request.trigger,
   };
-  const composition = composeCoordinatedRuntime(dependencies);
+  const missing = missingCoordinatedDependencies(dependencies);
   const outcome =
-    composition.kind === 'unavailable'
+    missing.length > 0 || dependencies.ledger === null
       ? logged(dependencies.logger, {
           ...fields,
           status: 'coordinated-runtime-unavailable',
-          reasons: composition.reasons,
+          reasons: missing,
           providerRequests: 0,
         })
       : await runUnderComposition(
           request,
           dependencies,
-          composition.runtime,
+          { ledger: dependencies.ledger },
           fields,
         );
   // Step 9, against whichever ledger is bound, even when another dependency
@@ -284,7 +292,7 @@ export async function observeCoordinatedSeason(
 async function runUnderComposition(
   request: CoordinatedObservationRequest,
   dependencies: CoordinatedObservationDependencies,
-  runtime: CoordinatedRuntime,
+  runtime: Pick<CoordinatedRuntime, 'ledger'>,
   fields: RunFields,
 ): Promise<CoordinatedObservationOutcome> {
   const acquired = await runtime.ledger.acquireLease(request.season);
@@ -338,7 +346,7 @@ async function runUnderComposition(
 async function underLease(
   request: CoordinatedObservationRequest,
   dependencies: CoordinatedObservationDependencies,
-  runtime: CoordinatedRuntime,
+  runtime: Pick<CoordinatedRuntime, 'ledger'>,
   grant: LeaseGrant,
   leased: LedgerSnapshot,
   budget: RunBudget,
@@ -393,7 +401,71 @@ async function underLease(
     return failure('coordination', 'lease-expired', null, 0);
   }
 
-  return observe(dependencies, runtime, grant, budget, snapshot, plan);
+  budget.enterCoordination(dependencies.clock.now());
+  if (budget.signal.aborted && dependencies.identity?.mode === 'runtime')
+    return failure('identity', 'catalog-unavailable', null, 0);
+  try {
+    const context = await admitIdentityContext(
+      dependencies.identity,
+      {
+        runId: crypto.randomUUID(),
+        season: request.season,
+        purpose: request.trigger,
+        leaseFence: grant.fence,
+        signal: budget.signal,
+      },
+      dependencies.logger,
+    );
+    budget.enterCoordination(dependencies.clock.now());
+    if (Date.parse(grant.expiresAt) <= dependencies.clock.now().getTime())
+      return failure('coordination', 'lease-expired', null, 0);
+    if (budget.signal.aborted && context.authority === 'runtime')
+      return failure('identity', 'catalog-unavailable', null, 0);
+    let discovery = dependencies.discovery;
+    try {
+      if (!discovery && dependencies.discoveryFactory)
+        discovery = (await dependencies.discoveryFactory(context)) ?? undefined;
+    } catch {
+      /* Shadow setup has no admission authority. */
+    }
+    const composition = composeCoordinatedRuntime(
+      { ...dependencies, discovery },
+      context,
+    );
+    if (composition.kind !== 'composed')
+      return failure('identity', 'catalog-unavailable', null, 0);
+    const metadata =
+      context.authority === 'runtime'
+        ? () => context.seasonMetadata
+        : (dependencies.metadata ?? (() => context.seasonMetadata));
+    try {
+      budget.enterCoordination(dependencies.clock.now());
+      if (Date.parse(grant.expiresAt) <= dependencies.clock.now().getTime())
+        return failure('coordination', 'lease-expired', null, 0);
+      if (budget.signal.aborted && context.authority === 'runtime')
+        return failure('identity', 'catalog-unavailable', null, 0);
+      return await observe(
+        { ...dependencies, metadata },
+        composition.runtime,
+        grant,
+        budget,
+        snapshot,
+        plan,
+      );
+    } finally {
+      if (discovery !== dependencies.discovery) {
+        try {
+          discovery?.finish();
+        } catch {
+          /* Background only. */
+        }
+      }
+    }
+  } catch (error) {
+    if (error instanceof CatalogAdmissionError)
+      return failure('identity', error.failure, null, 0);
+    throw error;
+  }
 }
 
 /**
@@ -402,7 +474,7 @@ async function underLease(
  */
 async function recover(
   dependencies: CoordinatedObservationDependencies,
-  runtime: CoordinatedRuntime,
+  runtime: Pick<CoordinatedRuntime, 'ledger'>,
   lease: LeaseToken,
   snapshot: LedgerSnapshot,
   activeVersion: string | null,
@@ -640,7 +712,7 @@ function ledgerFailure(
 }
 
 async function release(
-  runtime: CoordinatedRuntime,
+  runtime: Pick<CoordinatedRuntime, 'ledger'>,
   lease: LeaseToken,
 ): Promise<LeaseReleaseResult> {
   try {

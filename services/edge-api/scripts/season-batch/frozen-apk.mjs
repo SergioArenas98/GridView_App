@@ -130,6 +130,12 @@ async function reconversionOutcome(parsed, batch, fixtures, scratch) {
       parsed.manifestSha256,
       '--origin',
       parsed.origin,
+      ...(parsed.catalogExport
+        ? ['--catalog-export', parsed.catalogExport]
+        : []),
+      ...(parsed.installationId
+        ? ['--installation-id', parsed.installationId]
+        : []),
     ],
     { encoding: 'utf8' },
   );

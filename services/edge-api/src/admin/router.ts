@@ -20,6 +20,8 @@ import type {
   SyncJobCategory,
 } from '../storage/types';
 import { adminAuthOk, unauthorized } from './auth';
+import { isIdentityPath } from './identity-routes';
+import { handleIdentityRequest } from './identity/routes';
 import {
   calendarSingleGetPath,
   handleCalendarSingleGetRequest,
@@ -110,6 +112,9 @@ export async function handleAdminRequest(
   request: Request,
   context: AdminContext,
 ): Promise<Response> {
+  if (isIdentityPath(new URL(request.url).pathname)) {
+    return handleIdentityRequest(request, context.env, context.requestId);
+  }
   if (!adminAuthOk(request, context.env)) {
     return unauthorized(context.requestId);
   }

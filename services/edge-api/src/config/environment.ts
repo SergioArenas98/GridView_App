@@ -23,6 +23,55 @@ const validProviderModes = ['mock', 'none', 'coordinated'] as const;
 export type EnvironmentName = (typeof validEnvironments)[number];
 export type ProviderMode = (typeof validProviderModes)[number];
 export type PublicationAuthorityMode = 'legacy' | 'sequencer';
+export type IdentityCatalogMode = 'bundled' | 'compare' | 'runtime';
+export function resolveIdentityCatalogMode(
+  value?: string,
+): IdentityCatalogMode {
+  if (value === undefined) return 'bundled';
+  if (value === 'bundled' || value === 'compare' || value === 'runtime')
+    return value;
+  throw new ConfigurationError(
+    'IDENTITY_CATALOG_MODE must be bundled, compare or runtime.',
+  );
+}
+
+/**
+ * U9: the closed inventory-policy vocabulary (design §11.1). Parsed strictly:
+ * absent is `strict`, and anything outside the two values is a configuration
+ * error, never a permissive default.
+ */
+export type IdentityInventoryMode = 'strict' | 'optional-drivers';
+export function resolveIdentityInventoryMode(
+  value?: string,
+): IdentityInventoryMode {
+  if (value === undefined || value === 'strict') return 'strict';
+  if (value === 'optional-drivers') return value;
+  throw new ConfigurationError(
+    'IDENTITY_INVENTORY_MODE must be strict or optional-drivers.',
+  );
+}
+
+/**
+ * The inventory mode an **operational** run may select (U10, design §11.1).
+ *
+ * `strict` is the default under every catalog mode. `optional-drivers` is
+ * accepted only together with `IDENTITY_CATALOG_MODE=runtime`: bundled and
+ * compare authority cannot enable it, and nothing falls back to strict when it
+ * is refused - the configuration is simply invalid. Runtime binding and
+ * installation checks follow in `identityConfiguration`. Selecting it is an
+ * explicit, owner-approved configuration change; no committed environment
+ * selects it.
+ */
+export function resolveOperationalInventoryMode(
+  value: string | undefined,
+  catalogMode: IdentityCatalogMode,
+): IdentityInventoryMode {
+  const mode = resolveIdentityInventoryMode(value);
+  if (mode === 'strict' || catalogMode === 'runtime') return mode;
+  throw new ConfigurationError(
+    'IDENTITY_INVENTORY_MODE=optional-drivers requires IDENTITY_CATALOG_MODE=runtime.',
+  );
+}
 
 interface TestOnlyBindings {
   __LOCAL_STORAGE?: import('../storage/types').SnapshotStorage;
@@ -74,6 +123,19 @@ interface TestOnlyBindings {
 
 /** Bindings and variables available to the Worker. */
 export interface Env extends TestOnlyBindings {
+  /** U6 explicit selection; absence keeps reviewed bundled authority. */
+  IDENTITY_CATALOG_MODE?: string;
+  /** U9 whole-run inventory policy; absence is strict. Optional is refused before U10. */
+  IDENTITY_INVENTORY_MODE?: string;
+  /** U7 local-only opt-in must exactly name this installation; unset in all environments. */
+  IDENTITY_BATCH_V1_COMPATIBILITY_INSTALLATION_ID?: string;
+  /** U2 shadow capture only; absence is off. No catalog authority switch. */
+  IDENTITY_DISCOVERY_MODE?: string;
+  IDENTITY_ADMIN_MODE?: string;
+  /** Individually issued identity-only credentials. Secret binding, never a var. */
+  IDENTITY_REVIEWER_CREDENTIALS?: string;
+  IDENTITY_INSTALLATION_ID?: string;
+  IDENTITY_CATALOG?: import('../identity/client').IdentityNamespace;
   ENVIRONMENT?: string;
   PROVIDER_MODE?: string;
   /** Optional egress only; unset selects the original direct transport. */
@@ -302,6 +364,16 @@ export function resolveProviderMode(
     );
   }
   return mode as ProviderMode;
+}
+
+export function resolveIdentityDiscoveryMode(
+  value: string | undefined,
+): 'off' | 'shadow' {
+  if (value === undefined || value === 'off') return 'off';
+  if (value === 'shadow') return 'shadow';
+  throw new ConfigurationError(
+    'IDENTITY_DISCOVERY_MODE must be off or shadow.',
+  );
 }
 
 /**

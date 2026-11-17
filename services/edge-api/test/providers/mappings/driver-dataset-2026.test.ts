@@ -276,8 +276,7 @@ const PRE_EXISTING_ROWS = [
 ] as const;
 
 /**
- * The three acknowledgements left after this dataset, each with its closed
- * reason. All are OpenF1; no Jolpica identity is acknowledged.
+ * The three OpenF1 acknowledgements left after this dataset.
  */
 const ACKNOWLEDGEMENTS: readonly (readonly [string, string, string, string])[] =
   [
@@ -340,6 +339,14 @@ const evidenceCorpus = JSON.parse(
 const isJolpicaDriver = (record: CuratedRecord): boolean =>
   record.source === 'jolpica' && record.entity === 'driver';
 
+/** Exact diagnostic keys reported on November 12; canonical identities pending. */
+const PENDING_DRIVERS = [
+  'rafael_camara',
+  'gabriele_mini',
+  'freddie_slater',
+  'nikola_tsolov',
+] as const;
+
 const isOpenF1Twelve = (record: CuratedRecord): boolean =>
   record.source === 'openf1' &&
   record.entity === 'driver' &&
@@ -398,8 +405,8 @@ function isExactlyTheAcceptedTable(
 
 /**
  * The dataset's central corpus predicate: every observed `driverId` is an
- * evidence identity, and none is acknowledged instead - so no captured row can
- * be silently dropped or parked.
+ * evidence identity, and none is acknowledged instead. Later observations
+ * remain separate explicit blockers until their own curation review.
  */
 function coversEveryObservedDriver(
   identities: readonly CuratedRecord[],
@@ -409,9 +416,13 @@ function coversEveryObservedDriver(
     .filter(isJolpicaDriver)
     .map((record) => record.providerValue);
   return (
-    observed.length === ACCEPTED.length &&
+    observed.length === ACCEPTED.length + PENDING_DRIVERS.length &&
     ACCEPTED.every((row) => observed.includes(row.driverId)) &&
-    acknowledged.filter(isJolpicaDriver).length === 0
+    acknowledged
+      .filter(isJolpicaDriver)
+      .every((record) =>
+        PENDING_DRIVERS.some((value) => value === record.providerValue),
+      )
   );
 }
 
@@ -671,12 +682,14 @@ describe('the 2026 Jolpica driver mappings', () => {
 });
 
 describe('the 2026 driver evidence corpus', () => {
-  it('records all 32 observed Jolpica driver identities', () => {
+  it('records the 32 curated identities and four November diagnostic keys', () => {
     expect(evidenceCorpus.season).toBe(2026);
-    expect(driverIdentities).toHaveLength(32);
+    expect(driverIdentities).toHaveLength(36);
     expect(
       driverIdentities.map((record) => record.providerValue).sort(),
-    ).toEqual(ACCEPTED.map((row) => row.driverId).sort());
+    ).toEqual(
+      [...ACCEPTED.map((row) => row.driverId), ...PENDING_DRIVERS].sort(),
+    );
     expect(
       coversEveryObservedDriver(
         evidenceCorpus.identities,
@@ -706,18 +719,40 @@ describe('the 2026 driver evidence corpus', () => {
     );
   });
 
-  it('acknowledges no Jolpica identity at all', () => {
+  it('keeps the four November diagnostic keys explicitly blocked pending identity curation', () => {
     expect(
-      evidenceCorpus.acknowledgedUnmapped.filter(
-        (record) => record.source === 'jolpica',
-      ),
-    ).toEqual([]);
+      evidenceCorpus.acknowledgedUnmapped
+        .filter((record) => record.source === 'jolpica')
+        .map((record) => ({
+          entity: record.entity,
+          field: record.providerField,
+          value: record.providerValue,
+          reason: record.reason,
+        })),
+    ).toEqual(
+      PENDING_DRIVERS.map((value) => ({
+        entity: 'driver',
+        field: 'driverId',
+        value,
+        reason: 'no-canonical-gridview-identity',
+      })),
+    );
+    for (const value of PENDING_DRIVERS) {
+      expect(evidenceFor(value)).toContain(
+        '2026-11-12-jolpica-mapping-investigation.md',
+      );
+      expect(real.resolve(driverKey(value))).toMatchObject({
+        outcome: 'unresolved',
+        failure: { reason: 'unmapped' },
+      });
+    }
   });
 
   it('keeps the three OpenF1 acknowledgements with accurate reasons', () => {
-    expect(evidenceCorpus.acknowledgedUnmapped).toHaveLength(3);
+    expect(evidenceCorpus.acknowledgedUnmapped).toHaveLength(7);
     expect(
       evidenceCorpus.acknowledgedUnmapped
+        .filter((record) => record.source === 'openf1')
         .map((record) => [
           record.source,
           record.entity,
@@ -821,8 +856,8 @@ describe('nothing outside the driver dataset moved', () => {
     // 93 / 96 / 3 when this dataset merged; the 2026-10-07 off-calendar
     // circuit `jeddah` (Provider Evaluation §8.13) added one of each.
     expect(mappingDocument.mappings).toHaveLength(94);
-    expect(evidenceCorpus.identities).toHaveLength(97);
-    expect(evidenceCorpus.acknowledgedUnmapped).toHaveLength(3);
+    expect(evidenceCorpus.identities).toHaveLength(101);
+    expect(evidenceCorpus.acknowledgedUnmapped).toHaveLength(7);
   });
 
   it('leaves constructors, events and circuits at 11 / 23 / 24', () => {

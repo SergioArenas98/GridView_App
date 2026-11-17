@@ -37,11 +37,16 @@ describe('the publication half is wired through one entry, unbound', () => {
     // The one other importer is the guarded staging ingest, which reads the
     // curated season metadata (`metadata.ts`) and nothing else.
     expect(importersOf(outcomeDir)).toEqual([
+      'identity/catalog/run-context.ts',
       'ingest/batch-verification.ts',
       'ingest/service.ts',
       'sync/coordinated/observation/observe.ts',
     ]);
-    for (const file of ['ingest/batch-verification.ts', 'ingest/service.ts']) {
+    for (const file of [
+      'identity/catalog/run-context.ts',
+      'ingest/batch-verification.ts',
+      'ingest/service.ts',
+    ]) {
       expect(
         importsOf(file).filter((imported) => imported.startsWith(outcomeDir)),
       ).toEqual(['sync/coordinated/outcome/metadata.ts']);

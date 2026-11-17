@@ -9,6 +9,18 @@ import type { ProviderTransport } from '../../../../src/providers/http/provider-
 import type { ReconciliationLedgerPort } from '../../../../src/sync/coordinated/ledger-port';
 import { MemoryKv } from '../../../e2e/automatic-updates/controlled-season';
 import {
+  driversEnvelope,
+  fullSeasonDriverRows,
+} from '../../../providers/jolpica/participants-support';
+import {
+  baseRows,
+  resultsEnvelope,
+} from '../../../providers/jolpica/results-support';
+import {
+  baseDriverRows,
+  driverStandingsEnvelope,
+} from '../../../providers/jolpica/standings-support';
+import {
   paths,
   PRE_SEASON,
   seasonPaths,
@@ -114,6 +126,134 @@ function installLimiter(harness: EntryPointHarness) {
 }
 
 describe('optional egress through Worker entry points', () => {
+  it('withholds three resources on the November driver gaps despite 25 HTTP 200 responses, preserving published facts', async () => {
+    // Synthetic model of the reported counts, NOT a November capture/replay.
+    // Only these exact diagnostic keys come from the operator's report.
+    const unmapped = [
+      'rafael_camara',
+      'gabriele_mini',
+      'freddie_slater',
+      'nikola_tsolov',
+    ];
+    const harness = await EntryPointHarness.create('local', bind, {
+      env: { ...proxy, __PROVIDER_TRANSPORT: undefined },
+    });
+    serve(harness, origin);
+    await harness.published();
+    harness.server.results.set(1, 'A');
+    const published = await harness.manual(tickAfter(1, 6));
+    expect(published.body.data).toMatchObject({
+      publication: { outcome: 'published', publishCalls: 1 },
+    });
+    const version = harness.activeVersion()!;
+    const storage = harness.harness.storage;
+    const inventory = (await storage.readVersionInventory(2026, version))!;
+    expect(inventory).toContain('grand-prix:1:results');
+    expect(inventory).toContain('drivers');
+    const readDocuments = () =>
+      Promise.all(
+        inventory.map((name) =>
+          storage.readVersionedDocument(2026, version, name),
+        ),
+      );
+    const documents = structuredClone(await readDocuments());
+    const accepted = (await harness.round(1))!.contentRevision;
+    expect(accepted).not.toBeNull();
+
+    for (let round = 2; round <= 20; round++) {
+      harness.server.results.set(round, 'A');
+    }
+    harness.server.answers.set(paths.drivers, () => ({
+      kind: 'json',
+      body: driversEnvelope([
+        ...fullSeasonDriverRows(),
+        ...unmapped.map((driverId) => ({ driverId })),
+      ]),
+    }));
+    const replaceDrivers = (rows: Record<string, unknown>[]) =>
+      rows.map((row, index) =>
+        index < unmapped.length
+          ? { ...row, Driver: { driverId: unmapped[index] } }
+          : row,
+      );
+    harness.server.answers.set(paths.driverStandings, () => ({
+      kind: 'json',
+      body: driverStandingsEnvelope(replaceDrivers(baseDriverRows()), {
+        round: '20',
+        listRound: '20',
+      }),
+    }));
+    harness.server.answers.set(paths.results(1), () => ({
+      kind: 'json',
+      body: resultsEnvelope(replaceDrivers(baseRows())),
+    }));
+
+    network.mockClear();
+    const failed = await harness.manual(tickAfter(20, 6));
+    expect(network).toHaveBeenCalledTimes(25);
+    for (const result of network.mock.results) {
+      expect(((await result.value) as Response).status).toBe(200);
+    }
+    expect(failed.requests).not.toContain(paths.constructors);
+    expect(failed.body.data).toMatchObject({
+      status: 'observed',
+      coordination: 'completed',
+      providerRequests: 25,
+      committed: true,
+      publication: {
+        outcome: 'withheld',
+        cause: 'classification-unavailable',
+        publishCalls: 0,
+      },
+      leaseRelease: 'released',
+    });
+    expect(failed.logs).toContainEqual(
+      expect.objectContaining({
+        operation: 'provider.coordination.completed',
+        coordinationSelected: 22,
+        coordinationUnavailable: 3,
+      }),
+    );
+    const mappingFailures = failed.logs.filter(
+      (event) => event.operation === 'provider.mapping.resolve',
+    );
+    expect(mappingFailures).toHaveLength(12);
+    expect(
+      failed.logs
+        .filter(
+          (event) =>
+            event.operation === 'provider.coordination.selection' &&
+            event.coordinationOutcome === 'unavailable',
+        )
+        .map((event) => event.coordinationResource)
+        .sort(),
+    ).toEqual([
+      'driver-standings',
+      'season-participants',
+      'session-classification',
+    ]);
+    for (const providerMappingValue of unmapped) {
+      expect(mappingFailures).toContainEqual(
+        expect.objectContaining({
+          providerMappingValue,
+          providerMappingFailure: 'unmapped',
+          providerMappingEntity: 'driver',
+          providerMappingField: 'driverId',
+          providerSourceId: 'jolpica',
+          season: 2026,
+        }),
+      );
+    }
+    expect([failed.prepares, failed.finalizes, failed.storageWrites]).toEqual([
+      0, 0, 0,
+    ]);
+    expect(harness.activeVersion()).toBe(version);
+    expect(await readDocuments()).toEqual(documents);
+    expect((await harness.round(1))!.contentRevision).toBe(accepted);
+    expect(failed.ledgerCalls).toContain('commit');
+    expect(failed.ledgerCalls).toContain('releaseLease');
+  });
+
   it.each(['manual', 'scheduled'] as const)(
     'selects proxy and restores direct transport with all proxy settings removed (%s)',
     async (trigger) => {

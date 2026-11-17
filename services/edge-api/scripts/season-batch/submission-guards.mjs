@@ -11,6 +11,9 @@ const valued = [
   '--manifest-sha256',
   '--expected-active-version',
   '--out',
+  '--catalog-export',
+  '--installation-id',
+  '--operation-id',
 ];
 
 /**
@@ -52,6 +55,10 @@ export function parseSubmissionArguments(argv) {
   const named = '--expected-active-version' in values;
   if (named && first) return { ok: false, reason: 'conflicting-arguments' };
   for (const name of valued) {
+    if (
+      ['--catalog-export', '--installation-id', '--operation-id'].includes(name)
+    )
+      continue;
     if (name === '--expected-active-version' && first) continue;
     if (!(name in values)) return { ok: false, reason: 'missing-argument' };
   }
@@ -64,6 +71,15 @@ export function parseSubmissionArguments(argv) {
     manifestSha256: values['--manifest-sha256'],
     expectedActiveVersion: first ? null : values['--expected-active-version'],
     out: values['--out'],
+    ...(values['--catalog-export']
+      ? { catalogExport: values['--catalog-export'] }
+      : {}),
+    ...(values['--installation-id']
+      ? { installationId: values['--installation-id'] }
+      : {}),
+    ...(values['--operation-id']
+      ? { operationId: values['--operation-id'] }
+      : {}),
   };
 }
 

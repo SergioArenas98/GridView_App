@@ -122,6 +122,8 @@ describe('the reconciliation ledger is exported, resolvable and bound only by th
     ).toEqual([
       'resolveReconciliationLedger(env)',
       'resolveReconciliationLedger(env)',
+      // U7 runtime batch admission requires this same lease, never a second ledger.
+      'resolveReconciliationLedger(env)',
     ]);
   });
 
