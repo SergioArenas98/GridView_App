@@ -2630,3 +2630,9 @@ The decision above is unchanged.
 - [`../technical/GridView_Implementation_Plan.md`](../technical/GridView_Implementation_Plan.md) §14
 - [`../technical/GridView_Backend_Scheme.md`](../technical/GridView_Backend_Scheme.md) §15
 - [`../api/gridview-api-v1.yaml`](../api/gridview-api-v1.yaml) — `SnapshotMeta.sourceUpdatedAt`
+
+## U0 amendment - 2026-11-13
+
+Status: Accepted architecture; implementation and activation pending separate approval.
+
+[ADR 0031](0031-identity-review-authority-and-catalog-cutover.md) D2 adds internal pinned catalog provenance to every identity-consuming run, including operator verification. Catalog revision/hash must not enter classification content hashes or silently extend ledger schema v1. Identity approval/activation supplies neither provider corroboration nor classification acceptance, never resets settling and never clears holds or durable blocks. Reconciliation acceptance remains distinct from publication authority; cadence, immutable classifications and existing recovery rules remain unchanged. Runtime pin failure stops before provider requests while public snapshots remain readable.

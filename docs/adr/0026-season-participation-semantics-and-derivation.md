@@ -1150,3 +1150,15 @@ implemented.
   D11
 - [ADR 0025](0025-season-publication-authority-and-rollback-republication.md)
   (the per-season publication authority D16 relies on)
+
+## U0 amendment - 2026-11-13
+
+Status: Accepted architecture; implementation and activation pending separate approval.
+
+[ADR 0030](0030-provider-driver-inventory-and-required-identity-closure.md) narrows D1-D2 only for driver discovery inventory after U9/U10 and explicit optional-mode activation: a complete decoded inventory accounts for verified and private unresolved observations. Constructor inventory stays strict. Required verified driver profiles may be loaded from the same pinned catalog even when absent from inventory; unresolved race/standings rows remain blocking and are never filtered.
+
+D11 adds assembly-owned required-driver profile closure, retaining assembly-owned participation derivation. D13 permits the constructor request after a structurally valid driver inventory containing only valid unmapped driver cases; pagination, endpoints and actual attempt accounting stay intact.
+
+D3-D10, D12 and D14-D16 remain authoritative: only selected accepted race evidence derives spans; inventory/standings never fabricate participation; publication remains complete and guarded against historical coverage/fact regression and stale predecessors. Earlier snapshots never supply missing current rows. [ADR 0029](0029-persistent-identity-discovery-and-reviewed-runtime-catalog.md) D7 and [ADR 0031](0031-identity-review-authority-and-catalog-cutover.md) forbid destructive identity retargeting and break-glass bypasses.
+
+Original clauses and historical implementation notes remain above for provenance. Existing strict behavior is unchanged by this documentation-only amendment.

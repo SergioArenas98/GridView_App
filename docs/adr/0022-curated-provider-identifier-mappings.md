@@ -1041,3 +1041,15 @@ shorten it.
 production is `none`. Nothing here authorizes a provider request, deployment,
 production synchronization or public release, and no licensing conclusion
 changes.
+
+## U0 amendment - 2026-11-13
+
+Status: Accepted architecture; implementation and activation pending separate approval.
+
+[ADR 0029](0029-persistent-identity-discovery-and-reviewed-runtime-catalog.md) supersedes D6's prohibition on runtime storage/admin mutations only for the controlled identity-catalog migration. After cutover, the complete immutable runtime catalog owns driver profiles and all provider bindings; Git is seed/export/history, not a second editable authority. Before cutover the bundled registry remains authoritative.
+
+D7's repository-only review/provenance mechanism is replaced after cutover by durable evidence, individual decisions, complete revision validation and immutable audit lineage. Acknowledgements remain unresolved and never become bindings. The blanket statement that every acknowledgement blocks its resource is narrowed solely by [ADR 0030](0030-provider-driver-inventory-and-required-identity-closure.md) for private, explicitly accounted driver inventory observations in the future optional mode.
+
+D10 permits bounded sanitized internal discovery evidence under ADR 0029 and the driver-inventory exception under ADR 0030. All required classification/standings identities and constructor inventory remain strict; no unresolved required row is omitted. D1-D5, D8-D9, the event-identity amendment and D10's public secrecy remain authoritative. A reviewer may explicitly create a new canonical identity with sufficient evidence before its binding can activate; lookup never creates one.
+
+[ADR 0031](0031-identity-review-authority-and-catalog-cutover.md) owns pinning, compatibility, versions and cutover. All original reasoning above is retained as the historical decision. This amendment creates no mapping/ID, changes no dataset and approves no implementation or deployment.

@@ -240,3 +240,9 @@ attribution and ShareAlike publication surfaces remain outstanding. Nothing here
 authorizes production synchronization, deployment or public release, and every
 budget, non-commercial, licensing and attribution conclusion of
 [ADR 0019](0019-formula-one-provider-legal-gate.md) is unchanged.
+
+## U0 amendment - 2026-11-13
+
+Status: Accepted architecture; implementation and activation pending separate approval.
+
+[ADR 0030](0030-provider-driver-inventory-and-required-identity-closure.md) adds a future closed internal inventory-policy shape, validated against the expected pinned context after complete detachment. D24.1-D24.5 remain authoritative; this is not an unknown-property allowance. Validate profiles loaded from catalog closure as deeply as provider-normalized profiles. Remove private inventory accounting before public source generation. Public API v1, normalized public contracts and Flutter are unchanged. U0 changes no schema or validator.
