@@ -21,15 +21,15 @@ Evidence folder (outside the repository, not committed):
 Every call was a GET. The Cloudflare OAuth token stayed in process memory and
 was never printed.
 
-| Time (UTC)     | Operation                                                                                         | Effect                                         |
-| -------------- | ------------------------------------------------------------------------------------------------- | ---------------------------------------------- |
-| 18:12:30       | `cf-read.mjs` (account KV, DO namespaces, scripts, schedules, deployments, settings, subdomain)  | Read; `cf-now.json`                            |
-| 18:13-18:15    | `wrangler versions view` for 3 staging versions; `wrangler deployments list --env staging`       | Read                                           |
-| 18:16:28       | `content-read.mjs`: GET the deployed module of version `1d858d56`                                | Read; module saved for comparison              |
-| 18:16-18:17    | Clean detached temp worktree at `027da5d` (`%TEMP%\gv-u11-pf`), `npm ci`, `wrangler deploy --dry-run` | Local only; no upload                    |
-| 18:18:09       | `staging-admin-get.ps1` (GET-only copy of the 11-04 helper, POST branch removed): cutover status, sync status, reconciliation inspect | **HTTP 401** on all three (section 1.3) |
-| 18:18:10       | Public GETs: staging, production, E2E (14 routes each)                                           | Read                                           |
-| ~18:19         | `resolved-vs-live.mjs`: resolved config (no network) plus live script list and staging KV key names | Read                                        |
+| Time (UTC)  | Operation                                                                                                                             | Effect                                  |
+| ----------- | ------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------- |
+| 18:12:30    | `cf-read.mjs` (account KV, DO namespaces, scripts, schedules, deployments, settings, subdomain)                                       | Read; `cf-now.json`                     |
+| 18:13-18:15 | `wrangler versions view` for 3 staging versions; `wrangler deployments list --env staging`                                            | Read                                    |
+| 18:16:28    | `content-read.mjs`: GET the deployed module of version `1d858d56`                                                                     | Read; module saved for comparison       |
+| 18:16-18:17 | Clean detached temp worktree at `027da5d` (`%TEMP%\gv-u11-pf`), `npm ci`, `wrangler deploy --dry-run`                                 | Local only; no upload                   |
+| 18:18:09    | `staging-admin-get.ps1` (GET-only copy of the 11-04 helper, POST branch removed): cutover status, sync status, reconciliation inspect | **HTTP 401** on all three (section 1.3) |
+| 18:18:10    | Public GETs: staging, production, E2E (14 routes each)                                                                                | Read                                    |
+| ~18:19      | `resolved-vs-live.mjs`: resolved config (no network) plus live script list and staging KV key names                                   | Read                                    |
 
 Before the admin GETs I checked the **deployed** source (`027da5d`) to confirm
 all three routes only read. Reconciliation inspect is documented as "Takes no
@@ -40,23 +40,23 @@ any proxy or Jolpica request, any identity route (none exists live).
 
 ### 1.2 Verified deployed state
 
-| Item                        | Verified value                                                                                                                                                                                                                       |
-| --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Worker                      | `gridview-api-staging`, workers.dev enabled, previews disabled                                                                                                                                                                       |
-| Active deployment           | `36b9697d-673c-48fe-a133-6ad8c02367b4`, 2026-11-12T18:48:40Z, version **`1d858d56-f91e-4f62-b10b-1a2c06daece7`** at 100 % (number 22, `triggered_by: secret`)                                                                       |
-| Code version                | `1d858d56` carries the same script as `deabb568-6dd6-4bc5-b088-9446c1ecfb87` (2026-11-12T18:27:04Z, `upload`): script etag `5a55c1b4…5864` in both                                                                                 |
-| Previous code               | `de0dc58a-5c09-4b16-8ce4-aae56199dbde` (2026-11-05)                                                                                                                                                                                  |
-| **Build provenance**        | Deployed `index.js` SHA-256 `7415b82dbc77da64655b33638b1f2afb75f131e036c67db0d834cc783458e49b`, **byte-identical** to a clean `wrangler deploy --dry-run --env staging` of committed `027da5d`. So live staging contains **no identity-catalog code**. |
-| Exports                     | `ProviderRateLimiter`, `SeasonPublicationSequencer`, `ReconciliationLedger`, all `durable-object`/`sqlite`; `migration_tag` null                                                                                                     |
-| DO namespaces (staging)     | Sequencer `294f25eb…12bb`, rate limiter `3d7ad4a9…91b2`, **reconciliation ledger `f4ebd45f…96dd`**. No `IdentityCatalog` namespace on the account.                                                                                 |
-| KV                          | `GRIDVIEW_DATA` → `1d0fb554…942b` (`gridview-snapshots-staging`); 3,982 keys, names digest `596242654fef…ccfc6`, 0 with expiry. **Identical to 2026-11-03.**                                                                         |
+| Item                        | Verified value                                                                                                                                                                                                                                                                           |
+| --------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Worker                      | `gridview-api-staging`, workers.dev enabled, previews disabled                                                                                                                                                                                                                           |
+| Active deployment           | `36b9697d-673c-48fe-a133-6ad8c02367b4`, 2026-11-12T18:48:40Z, version **`1d858d56-f91e-4f62-b10b-1a2c06daece7`** at 100 % (number 22, `triggered_by: secret`)                                                                                                                            |
+| Code version                | `1d858d56` carries the same script as `deabb568-6dd6-4bc5-b088-9446c1ecfb87` (2026-11-12T18:27:04Z, `upload`): script etag `5a55c1b4…5864` in both                                                                                                                                       |
+| Previous code               | `de0dc58a-5c09-4b16-8ce4-aae56199dbde` (2026-11-05)                                                                                                                                                                                                                                      |
+| **Build provenance**        | Deployed `index.js` SHA-256 `7415b82dbc77da64655b33638b1f2afb75f131e036c67db0d834cc783458e49b`, **byte-identical** to a clean `wrangler deploy --dry-run --env staging` of committed `027da5d`. So live staging contains **no identity-catalog code**.                                   |
+| Exports                     | `ProviderRateLimiter`, `SeasonPublicationSequencer`, `ReconciliationLedger`, all `durable-object`/`sqlite`; `migration_tag` null                                                                                                                                                         |
+| DO namespaces (staging)     | Sequencer `294f25eb…12bb`, rate limiter `3d7ad4a9…91b2`, **reconciliation ledger `f4ebd45f…96dd`**. No `IdentityCatalog` namespace on the account.                                                                                                                                       |
+| KV                          | `GRIDVIEW_DATA` → `1d0fb554…942b` (`gridview-snapshots-staging`); 3,982 keys, names digest `596242654fef…ccfc6`, 0 with expiry. **Identical to 2026-11-03.**                                                                                                                             |
 | Vars                        | `ENVIRONMENT=staging`, `PROVIDER_MODE=coordinated`, `JOLPICA_TRANSPORT=proxy`, `JOLPICA_PROXY_ORIGIN=https://gridviewjol.vps.webdock.cloud`, `SEASON_PUBLICATION_AUTHORITY=sequencer`, `SEASON_PUBLICATION_CUTOVER_CONTROL=activate:2026`, `SEASON_BATCH_INGEST=2026`, `PUBLIC_BASE_URL` |
-| Secrets (names only)        | `ADMIN_TOKEN`, `JOLPICA_PROXY_TOKEN`                                                                                                                                                                                                 |
-| `IDENTITY_*` vars / binding | **None.** Absent values resolve to `bundled` / `off` / `strict` in the U10 code, but that code is not deployed.                                                                                                                       |
-| Schedules                   | `[]` (staging, E2E, production)                                                                                                                                                                                                      |
-| Observability               | Logs on, persisted, invocation logs off; traces off                                                                                                                                                                                  |
-| Public snapshot             | 14/14 routes 200, **ETags identical to 2026-11-03**. Manifest `contentVersion 2026.10.07.1`, `attributionVersion data-sources-v2`, `generatedAt 2026-10-19T18:43:32.476Z`. `/v1/status` ok, `lastSuccessfulSyncAt 2026-10-13T03:18:04.776Z`, maintenance false. |
-| Installation UUID / catalog | **Not provisioned** (no var, no binding, no namespace)                                                                                                                                                                               |
+| Secrets (names only)        | `ADMIN_TOKEN`, `JOLPICA_PROXY_TOKEN`                                                                                                                                                                                                                                                     |
+| `IDENTITY_*` vars / binding | **None.** Absent values resolve to `bundled` / `off` / `strict` in the U10 code, but that code is not deployed.                                                                                                                                                                          |
+| Schedules                   | `[]` (staging, E2E, production)                                                                                                                                                                                                                                                          |
+| Observability               | Logs on, persisted, invocation logs off; traces off                                                                                                                                                                                                                                      |
+| Public snapshot             | 14/14 routes 200, **ETags identical to 2026-11-03**. Manifest `contentVersion 2026.10.07.1`, `attributionVersion data-sources-v2`, `generatedAt 2026-10-19T18:43:32.476Z`. `/v1/status` ok, `lastSuccessfulSyncAt 2026-10-13T03:18:04.776Z`, maintenance false.                          |
+| Installation UUID / catalog | **Not provisioned** (no var, no binding, no namespace)                                                                                                                                                                                                                                   |
 
 The November investigation records the operator-reported 2026-11-12 proxy sync,
 which was withheld with zero publication calls. The unchanged KV key set and
@@ -89,14 +89,14 @@ catalog exists), and which individual operators hold which credentials.
 
 ## 2. Actual versus declared configuration
 
-| Aspect                                   | Verified deployed                                         | Repository-declared (`wrangler.toml` = HEAD, byte-identical)             | Note                                                                                                                                                                                           |
-| ---------------------------------------- | --------------------------------------------------------- | ------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Staging bindings, vars, KV, DO, secrets  | As in section 1.2                                         | Same set; the dry-run binding list of `027da5d` equals live              | Match                                                                                                                                                                                          |
-| Staging code                             | `027da5d` bundle                                          | Working tree adds uncommitted U0-U10 (dirty dry-run bundle `fb60cc64…85e3d8`, 1,662 KiB, exports `IdentityCatalog`) | Live is **behind** the tree by all identity work                                                                                                                         |
-| Staging comments                         | n/a                                                       | Still say the live staging version is `453af4fb` with provider `none`, and the ledger "not yet deployed" | **Stale documentation**: live runs `coordinated` + proxy with the ledger. Not a runtime risk; correct it in the rollout change.                                                 |
-| Branch of the deployed code              | `027da5d` (`feat/jolpica-egress-proxy`)                   | `master` is `aea1387`; this branch is 4 commits ahead and unmerged       | Staging runs **unmerged** code. Record it and decide whether the release identity must come from `master`.                                                                                       |
-| Production                               | `62bf40e9…`, `PROVIDER_MODE=none`, `genesis:2026`, no ledger, KV `d76328b3…`, crons `[]`; public 200/503/404 pre-genesis | Same                                                                     | Unchanged                                                                                                                                                                                      |
-| E2E                                      | `6b52bc02…`, controlled KV source, own 3 DO namespaces, KV `f8970084…`, crons `[]`; public 14/14 200 | Same                                                                     | Unchanged; `ENVIRONMENT=staging` is shared with staging, so catalog isolation must come from binding + UUID                                                                                    |
+| Aspect                                  | Verified deployed                                                                                                        | Repository-declared (`wrangler.toml` = HEAD, byte-identical)                                                        | Note                                                                                                                            |
+| --------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| Staging bindings, vars, KV, DO, secrets | As in section 1.2                                                                                                        | Same set; the dry-run binding list of `027da5d` equals live                                                         | Match                                                                                                                           |
+| Staging code                            | `027da5d` bundle                                                                                                         | Working tree adds uncommitted U0-U10 (dirty dry-run bundle `fb60cc64…85e3d8`, 1,662 KiB, exports `IdentityCatalog`) | Live is **behind** the tree by all identity work                                                                                |
+| Staging comments                        | n/a                                                                                                                      | Still say the live staging version is `453af4fb` with provider `none`, and the ledger "not yet deployed"            | **Stale documentation**: live runs `coordinated` + proxy with the ledger. Not a runtime risk; correct it in the rollout change. |
+| Branch of the deployed code             | `027da5d` (`feat/jolpica-egress-proxy`)                                                                                  | `master` is `aea1387`; this branch is 4 commits ahead and unmerged                                                  | Staging runs **unmerged** code. Record it and decide whether the release identity must come from `master`.                      |
+| Production                              | `62bf40e9…`, `PROVIDER_MODE=none`, `genesis:2026`, no ledger, KV `d76328b3…`, crons `[]`; public 200/503/404 pre-genesis | Same                                                                                                                | Unchanged                                                                                                                       |
+| E2E                                     | `6b52bc02…`, controlled KV source, own 3 DO namespaces, KV `f8970084…`, crons `[]`; public 14/14 200                     | Same                                                                                                                | Unchanged; `ENVIRONMENT=staging` is shared with staging, so catalog isolation must come from binding + UUID                     |
 
 Resolved-config differences from 2026-11-03 are all explained: checkout path,
 `traces.enabled=false` pin (#101), and the staging proxy vars and secret (124f995).
@@ -106,16 +106,16 @@ Resolved-config differences from 2026-11-03 are all explained: checkout path,
 The PO decisions are approved as **architecture** (design addendum 2026-11-13;
 ADRs 0029-0031 Accepted). The operational gates they create are not approved.
 
-| Decision                     | Architecture | Operational status for staging                                                                                                                                                                 | Blocker? |
-| ---------------------------- | ------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------- |
-| PO-1 Runtime authority       | Approved     | Runtime cutover needs its own approval (ADR 0031 D6). Not given.                                                                                                                               | Later gate |
-| PO-2 Driver inventory only   | Approved     | Optional-driver staging activation explicitly **not authorized**.                                                                                                                              | Later gate |
-| PO-3 Individual credentials  | Approved     | **No principal named, no `IDENTITY_REVIEWER_CREDENTIALS` provisioned.** Single-person review+activate allowed; separation is by operation only.                                                   | **Yes (B3)** for any admin enablement |
-| PO-4 Evidence and retention  | Approved     | Limits accepted. Restricted export storage location not named.                                                                                                                                 | Yes, with B4 |
-| PO-5 Failure behavior        | Approved     | Implemented and locally tested; remote latency unmeasured.                                                                                                                                     | No (measure in U11) |
-| PO-6 Versions / batch v2     | Approved     | R0 keeps `2026.10.07.1`. v1 compatibility gate stays unset by default.                                                                                                                         | No |
-| PO-7 Historical corrections  | Approved     | Records only; no break-glass.                                                                                                                                                                  | No |
-| PO-8 Capacity, recovery, ownership | Approved as baseline | Capacity validated **locally only** (U8 `capacity.test.mjs`). **Recovery custodian, backup custodian and remote backup plan (catalog, sequencer, ledger, KV, audit, secrets) not assigned or rehearsed.** Staging rollout approval separate. | **Yes (B3, B4)** |
+| Decision                           | Architecture         | Operational status for staging                                                                                                                                                                                                               | Blocker?                              |
+| ---------------------------------- | -------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------- |
+| PO-1 Runtime authority             | Approved             | Runtime cutover needs its own approval (ADR 0031 D6). Not given.                                                                                                                                                                             | Later gate                            |
+| PO-2 Driver inventory only         | Approved             | Optional-driver staging activation explicitly **not authorized**.                                                                                                                                                                            | Later gate                            |
+| PO-3 Individual credentials        | Approved             | **No principal named, no `IDENTITY_REVIEWER_CREDENTIALS` provisioned.** Single-person review+activate allowed; separation is by operation only.                                                                                              | **Yes (B3)** for any admin enablement |
+| PO-4 Evidence and retention        | Approved             | Limits accepted. Restricted export storage location not named.                                                                                                                                                                               | Yes, with B4                          |
+| PO-5 Failure behavior              | Approved             | Implemented and locally tested; remote latency unmeasured.                                                                                                                                                                                   | No (measure in U11)                   |
+| PO-6 Versions / batch v2           | Approved             | R0 keeps `2026.10.07.1`. v1 compatibility gate stays unset by default.                                                                                                                                                                       | No                                    |
+| PO-7 Historical corrections        | Approved             | Records only; no break-glass.                                                                                                                                                                                                                | No                                    |
+| PO-8 Capacity, recovery, ownership | Approved as baseline | Capacity validated **locally only** (U8 `capacity.test.mjs`). **Recovery custodian, backup custodian and remote backup plan (catalog, sequencer, ledger, KV, audit, secrets) not assigned or rehearsed.** Staging rollout approval separate. | **Yes (B3, B4)**                      |
 
 Implementation completion is not treated as approval of any of the open items
 above.
@@ -126,14 +126,14 @@ No assignment has been recorded anywhere in the repository or evidence. The
 product owner's Cloudflare account authored every deployment. That identifies
 an account, not a role assignment.
 
-| Role                                 | Primary    | Backup     | Credential needed                                            | Status          |
-| ------------------------------------ | ---------- | ---------- | ------------------------------------------------------------ | --------------- |
-| Primary staging operator             | Unassigned | -          | Cloudflare deploy access; **current** staging `ADMIN_TOKEN`  | Missing; local admin copy invalid |
-| Backup staging operator              | -          | Unassigned | Same                                                         | Missing         |
-| Reviewer (catalog)                   | Unassigned | Unassigned | Individual `reviewer` credential                             | Not provisioned |
-| Activator (catalog)                  | Unassigned | Unassigned | Individual `activator` credential                            | Not provisioned |
-| Recovery/export custodian            | Unassigned | Unassigned | Individual `reader` credential + restricted storage          | Not provisioned |
-| Release approver (staging change)    | Unassigned (product owner by default authority; must be recorded) | - | Approval record                                             | Not recorded    |
+| Role                              | Primary                                                           | Backup     | Credential needed                                           | Status                            |
+| --------------------------------- | ----------------------------------------------------------------- | ---------- | ----------------------------------------------------------- | --------------------------------- |
+| Primary staging operator          | Unassigned                                                        | -          | Cloudflare deploy access; **current** staging `ADMIN_TOKEN` | Missing; local admin copy invalid |
+| Backup staging operator           | -                                                                 | Unassigned | Same                                                        | Missing                           |
+| Reviewer (catalog)                | Unassigned                                                        | Unassigned | Individual `reviewer` credential                            | Not provisioned                   |
+| Activator (catalog)               | Unassigned                                                        | Unassigned | Individual `activator` credential                           | Not provisioned                   |
+| Recovery/export custodian         | Unassigned                                                        | Unassigned | Individual `reader` credential + restricted storage         | Not provisioned                   |
+| Release approver (staging change) | Unassigned (product owner by default authority; must be recorded) | -          | Approval record                                             | Not recorded                      |
 
 ## 5. Exact staging-only configuration proposal (inert, strict)
 
@@ -182,12 +182,12 @@ new staging-only export. It must not relax the guard that forbids
 
 ## 6. Reproducible build / artifact identification
 
-| Artifact                           | Identity                                                                                                                                       | Usable as release? |
-| ---------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- | ------------------ |
-| Live staging (rollback floor today)| `027da5d`, bundle `7415b82d…e49b`, version `1d858d56`                                                                                          | Yes, verified      |
-| Current working tree               | HEAD `027da5d` + 289 uncommitted paths (77 modified, 212 untracked); dirty dry-run bundle `fb60cc64…85e3d8` (current `wrangler.toml`, no identity binding) | **No (B2)**   |
-| U10 acceptance tree                | `identity-u10-preservation.json`: 1,541 files, **all byte-identical today**, no unrecorded file other than that record                        | Source evidence only |
-| R0 seed set                        | `seed.json 6abc3830…`, `manifest.json bdbaeb37…`, `parity.json 372b67ea…`; regenerated today byte-identical                                    | Yes (content)      |
+| Artifact                            | Identity                                                                                                                                                   | Usable as release?   |
+| ----------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------- |
+| Live staging (rollback floor today) | `027da5d`, bundle `7415b82d…e49b`, version `1d858d56`                                                                                                      | Yes, verified        |
+| Current working tree                | HEAD `027da5d` + 289 uncommitted paths (77 modified, 212 untracked); dirty dry-run bundle `fb60cc64…85e3d8` (current `wrangler.toml`, no identity binding) | **No (B2)**          |
+| U10 acceptance tree                 | `identity-u10-preservation.json`: 1,541 files, **all byte-identical today**, no unrecorded file other than that record                                     | Source evidence only |
+| R0 seed set                         | `seed.json 6abc3830…`, `manifest.json bdbaeb37…`, `parity.json 372b67ea…`; regenerated today byte-identical                                                | Yes (content)        |
 
 **Blocker B2:** the code to deploy exists only as uncommitted bytes. Every
 earlier staging deployment used a commit, a clean detached worktree and a
@@ -249,6 +249,7 @@ section 18 on the clean commit and record its dry-run bundle hash.
 
    Removing only the `IDENTITY_CATALOG` binding is allowed. Removing the export
    is forbidden.
+
 10. **Privileged operations:** `wrangler deploy` (Cloudflare OAuth, account
     holder). Admin GETs need the current staging `ADMIN_TOKEN`. No
     `secret put` in the inert step.
@@ -325,17 +326,17 @@ custodian. **Cloudflare point-in-time recovery has not been verified.**
 
 ## 14. Tests and validators
 
-| Check                                                     | Result                                                                                                     |
-| --------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
-| U10 acceptance log `.wrangler/identity-u10-full-acceptance.log` | SHA-256 `be94fa9e…68ef326` matches the record; 6,381 passed / 6 skipped / 0 failed, exit 0               |
-| Tree vs U10 preservation record                           | 1,541/1,541 byte-identical, 0 missing, no unrecorded file (except the record)                              |
-| Full suite re-run                                         | **Not re-run**: no source byte changed since acceptance. **Required again** on the release commit (B2)     |
-| `git diff --check`                                        | Pass                                                                                                       |
-| `compile-schemas.mjs --check`                             | Pass                                                                                                       |
-| R0 regeneration                                           | Byte-identical (section 8)                                                                                 |
-| Proposed staging diff (scratch)                           | Production/E2E resolved identical; exports preserved; no migrations                                        |
-| Dry-run, clean `027da5d`                                  | Equals the deployed module byte for byte                                                                   |
-| Dry-run, dirty tree                                       | Builds (1,662 KiB); exports `IdentityCatalog` + 3 existing                                                 |
+| Check                                                           | Result                                                                                                 |
+| --------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
+| U10 acceptance log `.wrangler/identity-u10-full-acceptance.log` | SHA-256 `be94fa9e…68ef326` matches the record; 6,381 passed / 6 skipped / 0 failed, exit 0             |
+| Tree vs U10 preservation record                                 | 1,541/1,541 byte-identical, 0 missing, no unrecorded file (except the record)                          |
+| Full suite re-run                                               | **Not re-run**: no source byte changed since acceptance. **Required again** on the release commit (B2) |
+| `git diff --check`                                              | Pass                                                                                                   |
+| `compile-schemas.mjs --check`                                   | Pass                                                                                                   |
+| R0 regeneration                                                 | Byte-identical (section 8)                                                                             |
+| Proposed staging diff (scratch)                                 | Production/E2E resolved identical; exports preserved; no migrations                                    |
+| Dry-run, clean `027da5d`                                        | Equals the deployed module byte for byte                                                               |
+| Dry-run, dirty tree                                             | Builds (1,662 KiB); exports `IdentityCatalog` + 3 existing                                             |
 
 Typecheck, ESLint, Prettier, OpenAPI, content and fixture results from U10
 §15 apply to the unchanged bytes. They were not newly executed.
@@ -352,14 +353,14 @@ Typecheck, ESLint, Prettier, OpenAPI, content and fixture results from U10
 
 ## 16. Remaining risks and stop conditions (blockers)
 
-| ID | Blocker                                                                                                                         | Smallest safe action                                                                                                    |
-| -- | ------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
-| B1 | Staging admin credential invalid (401). Holds, blocks, leases, cutover state and the 11-12 run's ledger effects cannot be verified. | Owner supplies the current staging `ADMIN_TOKEN` into approved custody (DPAPI re-encryption), or confirms a rotation. Then re-run the three GETs. |
-| B2 | No reproducible release identity: identity code is uncommitted.                                                                 | Owner authorizes commits (and decides branch vs `master`); rebuild and test from a clean worktree at that commit.        |
-| B3 | Operator, backup, reviewer, activator, custodian and release approver all unassigned (ADR 0031 D6).                             | Owner records named primary/backup per role (one person may cover reviewer and activator).                              |
-| B4 | No remote backup/recovery plan or custodian; PITR unverified; restricted export storage unnamed.                                | Required before runtime cutover. Name the custodian and storage, and approve a platform plan covering catalog, sequencer, ledger, KV, audit and secrets. |
-| B5 | Staging installation UUID not allocated.                                                                                        | Owner approves a freshly generated UUIDv4 for staging (and a different one for any E2E installation).                   |
-| B6 | Compare runs on staging would mean live provider traffic and possible publication; no controlled source on staging.             | Owner chooses option (a), (b) or (c) in section 9.                                                                      |
+| ID  | Blocker                                                                                                                             | Smallest safe action                                                                                                                                     |
+| --- | ----------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| B1  | Staging admin credential invalid (401). Holds, blocks, leases, cutover state and the 11-12 run's ledger effects cannot be verified. | Owner supplies the current staging `ADMIN_TOKEN` into approved custody (DPAPI re-encryption), or confirms a rotation. Then re-run the three GETs.        |
+| B2  | No reproducible release identity: identity code is uncommitted.                                                                     | Owner authorizes commits (and decides branch vs `master`); rebuild and test from a clean worktree at that commit.                                        |
+| B3  | Operator, backup, reviewer, activator, custodian and release approver all unassigned (ADR 0031 D6).                                 | Owner records named primary/backup per role (one person may cover reviewer and activator).                                                               |
+| B4  | No remote backup/recovery plan or custodian; PITR unverified; restricted export storage unnamed.                                    | Required before runtime cutover. Name the custodian and storage, and approve a platform plan covering catalog, sequencer, ledger, KV, audit and secrets. |
+| B5  | Staging installation UUID not allocated.                                                                                            | Owner approves a freshly generated UUIDv4 for staging (and a different one for any E2E installation).                                                    |
+| B6  | Compare runs on staging would mean live provider traffic and possible publication; no controlled source on staging.                 | Owner chooses option (a), (b) or (c) in section 9.                                                                                                       |
 
 Risks: the class addition is irreversible for `wrangler rollback` (section
 7.9); staging runs unmerged `027da5d`; the stale `wrangler.toml` comments could
@@ -394,3 +395,279 @@ checklist before any production change request:
 7. Separate explicit owner approval.
 
 Nothing here authorizes production.
+
+---
+
+## Addendum A - 2026-11-17: release preparation (local commits only)
+
+- Authorization: the owner's narrow U11 continuation of 2026-11-17. Local Git
+  commits only, after preservation and security review. No push, merge,
+  deployment, secret change or remote mutation.
+- **Outcome: NO-GO remains.** Local release blockers B2 and B5 are resolved.
+  B1, B3, B4 and B6 remain open. The controlled-KV comparison path on staging
+  was found **not demonstrably safe** (A7), so it is not proposed.
+
+### A1. Release-candidate commit and artifact
+
+Local commits on `feat/jolpica-egress-proxy` (not pushed, not merged; `master`
+untouched):
+
+| Commit    | Subject                                                            | Content                                                                                                  |
+| --------- | ------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------- |
+| `6c46b25` | docs: add identity management design and ADRs 0029-0031            | 18 docs (design, ADRs, ADR amendments, November investigation)                                           |
+| `ecab741` | docs: add identity catalog U2-U11 reports, runbook and R0 evidence | 57 paths (reports, runbook, R0 seed set, U5 examples, baselines/preservation/patches, `.gitattributes`)  |
+| `e6c77e9` | feat(edge-api): add identity catalog U1-U10 (inert by default)     | 215 paths (src, tests, scripts, package files, content evidence, local harness config, `.gitattributes`) |
+| `d364bb4` | chore(config): propose inert staging identity catalog (U11)        | `wrangler.toml` staging-only declaration and comment correction; 6 config/E2E test files                 |
+| `6a60954` | fix(identity): anchor R0 corpus checks to the reviewed base commit | `scripts/identity/corpus.mjs` (see A3)                                                                   |
+
+**Release candidate: `6a609543fd762b028e0e3b4101d2f0ce9e851ce0`.** The
+first candidate, `d364bb4`, failed its clean-checkout suite and is superseded
+(A3).
+
+Reproducible build procedure, executed:
+
+```text
+git worktree add --detach %TEMP%\gv-u11-rc 6a609543fd762b028e0e3b4101d2f0ce9e851ce0
+cd %TEMP%\gv-u11-rc\services\edge-api
+npm ci
+npx wrangler deploy --dry-run --env staging --outdir <evidence>\rc-6a60954-dryrun
+```
+
+- `index.js` SHA-256
+  **`fb60cc641359c34026de6b32b5a3e0701c55dbf8c94c276059f174e34485e3d8`**
+  (1,662.04 KiB, gzip 294.44 KiB), wrangler 4.112.0.
+- The same hash comes from this worktree, and the clean checkout stays at 0
+  `git status` lines after `npm ci` and the build.
+- The dry-run lists four DO bindings (`PROVIDER_RATE_LIMITER`,
+  `SEASON_PUBLICATION_SEQUENCER`, `RECONCILIATION_LEDGER`, `IDENTITY_CATALOG`),
+  KV `1d0fb554…`, and the identity vars bundled/off/off with the proposed UUID.
+
+Variables and offline tooling are not part of the bundle, so the hash is
+the same for `d364bb4`, `6a60954` and the preflight's uncommitted-tree build. The deployable identity is the commit plus this hash.
+The uploaded bundle must be checked against it at deploy time.
+
+### A2. Commit hygiene, security review and preservation
+
+- **Exact lists reviewed before each commit.** `git diff --cached --check` is
+  clean for every commit.
+- **Security scan of all 290 candidate paths:**
+  - no private keys and no GitHub/AWS/Google/Slack-style tokens;
+  - no plaintext credential assignments;
+  - bearer literals only in synthetic tests (`synthetic-local-u7-operator`);
+  - credential fixtures are generated in tests or deliberately invalid;
+  - the local harness UUID is a synthetic pattern;
+  - the only e-mail address (`admin@jolpi.ca`) was already committed.
+- **Never staged:** credential stores, `.dev.vars`, `.wrangler/` (logs,
+  runtime SQLite/KV state), evidence folders.
+- **Deliberately left untracked:** `docs/operations/identity-u8-evidence.json`
+  and `identity-u8-evidence-final.json`. Both are unchanged local evidence, but
+  they contain absolute local temp paths with the Windows user name, and the
+  origin repository is **public**. Their hashes remain in the U8-U10
+  preservation records. The owner may decide later whether to redact a copy.
+- **`.gitattributes`:**
+  - identity evidence JSON, patches and the proposal diff are now
+    `-text -whitespace`. The preservation records hash these files, so line
+    endings must not be converted; the patches legitimately contain
+    trailing-space context lines.
+  - LF rules were added for `*.cjs`, `*.mts` and `*.cts`. Only the new files
+    use these extensions, so clean checkouts reproduce generated-schema bytes.
+- **Staged bytes:** every evidence, report and code file was byte-identical
+  between index and working tree. The only differences were `.gitattributes`
+  and `.prettierignore` (tracked text files, normalized as before).
+- **Preservation after commits 1-3:**
+  - all 289 originally inventoried paths are byte-identical;
+  - 1,540 of the 1,541 U10-recorded files are byte-identical;
+  - the one difference is the deliberate `.gitattributes` change;
+  - the U10 acceptance log is unchanged
+    (`be94fa9e…68ef326`, 6,381 / 6 / 0), retained as historical evidence.
+- **Known whitespace note:** `wrangler.identity-local.toml` (U2 local harness)
+  ends with a blank line. It was committed byte-exact instead of being edited.
+- No reset, clean, stash, rewrite, push or merge. `wt-ui-redesign` was not
+  accessed.
+
+### A3. Release-candidate validation
+
+**The full-suite validation of the release candidate is NOT complete.**
+
+| Run / check                                                                                      | Tree                                          | Result                                                                                                                                                                                                                                                                                                                                                 |
+| ------------------------------------------------------------------------------------------------ | --------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Full suite, clean checkout, `npm test -- --maxWorkers=1 --testTimeout=30000`, machine kept awake | `d364bb4`                                     | **FAILED**: 10 tests failed and 24 files failed to load; 6,145 passed, 237 skipped (file-level failures turn into skips); 638 s; exit 1. Log preserved: `rc-d364bb4-full-suite-FAILED.log`, SHA-256 `ec5e2125be4abef28a6cb5bd50fb75a94fd72f2866dbfc6845b0cc0e37def7b0`.                                                                                |
+| Root cause                                                                                       | -                                             | `scripts/identity/corpus.mjs` compared R0 sources with a floating `HEAD`. Once the November evidence was committed, every corpus load refused with "Historical evidence changed without review". This latent defect was hidden while all work was uncommitted. It would also have made R0 manifest provenance drift with `HEAD`.                       |
+| Fix                                                                                              | `6a60954`                                     | Anchored to the reviewed base commit `027da5d` (the `baseCommit` of every reviewed manifest source), with an ancestry check. No comparison relaxed, no test or data changed.                                                                                                                                                                           |
+| R0 regeneration after fix                                                                        | `6a60954`                                     | `seed.json`, `manifest.json`, `parity.json` **byte-identical** to the reviewed set.                                                                                                                                                                                                                                                                    |
+| The 24 previously failing files                                                                  | `6a60954`                                     | **24 files, 241 tests passed**, `--maxWorkers=1 --testTimeout=30000`.                                                                                                                                                                                                                                                                                  |
+| Full suite, clean checkout, same command                                                         | `6a60954`                                     | **INTERRUPTED, NO RESULT.** Started 19:11:36Z. **Claude Code stopped the run because the machine was critically low on memory** (about 3.3 GB free of 31.7 GB afterwards, held by unrelated applications). No result was printed before the stop. Partial log: `rc-6a60954-full-suite-INTERRUPTED.log`. Not restarted without the owner's instruction. |
+| Config, guard and E2E-stage tests (`test/config`, inventory-policy, `test/e2e`)                  | `d364bb4` tree (identical files in `6a60954`) | 188 passed, 6 existing opt-in skips; `test/config` 139/139, including the new staging-identity test                                                                                                                                                                                                                                                    |
+| Content / fixtures / OpenAPI validators                                                          | clean `6a60954`                               | 18/0, 32/0, valid                                                                                                                                                                                                                                                                                                                                      |
+| Generated identity-schema freshness                                                              | clean `6a60954`                               | `compile-schemas.mjs --check` exit 0                                                                                                                                                                                                                                                                                                                   |
+| Typecheck (Worker + scripts)                                                                     | clean `6a60954`                               | exit 0                                                                                                                                                                                                                                                                                                                                                 |
+| ESLint, whole package                                                                            | clean `6a60954`                               | exit 0                                                                                                                                                                                                                                                                                                                                                 |
+| Prettier, whole package                                                                          | clean `6a60954`                               | One warning: `.prettierrc`. **Pre-existing:** a clean Windows checkout gives it CRLF (no `eol` rule, `core.autocrlf=true`). The clean `027da5d` checkout shows the same warning; this worktree's LF copy passes. Not introduced by these commits.                                                                                                      |
+| `git diff --check 027da5d 6a60954`                                                               | -                                             | One finding: `wrangler.identity-local.toml` blank line at EOF (preserved U2 bytes; A2)                                                                                                                                                                                                                                                                 |
+| U10 acceptance (historical)                                                                      | U10 tree                                      | 6,381 passed / 6 skipped / 0 failed, log `be94fa9e…68ef326`, retained unchanged                                                                                                                                                                                                                                                                        |
+
+**Required before G1:** one complete full-suite pass on a clean checkout of
+`6a60954`, run when the machine has enough free memory, with the same command
+and unchanged timeouts. Until then, the 6,381-test U10 result applies only to
+the U10 tree, not to the release candidate.
+
+### A4. Verified forward-recovery strategy
+
+The first deploy of `IdentityCatalog` permanently ends `wrangler rollback`
+for `1d858d56` and all earlier versions. **The pre-migration Worker is not a
+usable Cloudflare rollback after that point.** Recovery is forward only:
+
+| Recovery case                                                     | Build                                                     | Configuration                                                                                                                | Local proof (no deploy)                                                                                                                                                                                                                                                                                    |
+| ----------------------------------------------------------------- | --------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| R-1 return to inert (after any later shadow/admin/compare change) | RC `6a60954` (or a later commit keeping the four exports) | Staging exactly as committed in `6a60954`: catalog `bundled`, discovery `off`, admin `off`, no inventory-mode var (= strict) | Built: RC dry-run, bundle `fb60cc64…85e3d8`, four exports, four DO bindings, bundled/off/off                                                                                                                                                                                                               |
+| R-2 containment (catalog object unreachable, data kept)           | Same code                                                 | As R-1, but the `IDENTITY_CATALOG` binding removed; `[env.staging.exports.IdentityCatalog]` kept                             | Built from the clean RC with a scratch config: four exports kept, `IDENTITY_CATALOG` absent, no migrations. Bundle `732c609e…` is **byte-identical to the RC after normalizing build-root path labels** (the scratch config sits outside the repository); a committed R-2 config builds from the same root |
+| Forbidden                                                         | `027da5d`-era code, or any config without the export      | Removing or renaming the export deletes the class and its data; old code lacks the class                                     | Not built                                                                                                                                                                                                                                                                                                  |
+
+Between versions that all carry the four exports, `wrangler rollback`
+remains available, because there is no class change. A forward deploy of
+R-1 is still the documented path, since a rollback would restore old vars
+together with old code.
+
+### A5. Proposed staging installation UUID
+
+**`c45d60b8-a723-4b6e-8530-750592af2b94`**:
+
+- generated with `crypto.randomUUID()` on 2026-11-17, input-free, UUID v4
+  pattern checked;
+- committed only as a proposal in `d364bb4` (unchanged in `6a60954`);
+- not installed: no namespace and no persisted catalog exist;
+- for staging alone, never for E2E or production;
+- `test/config/staging-identity-catalog.test.ts` pins that only staging
+  declares it, exactly once.
+
+### A6. Responsibility and credential matrix
+
+No assignment has been made; none is invented here.
+
+| Role                      | Primary    | Backup                                                     | Credential / custody                                    | Status          |
+| ------------------------- | ---------- | ---------------------------------------------------------- | ------------------------------------------------------- | --------------- |
+| Primary staging operator  | Unassigned | -                                                          | Cloudflare deploy access; current staging `ADMIN_TOKEN` | Missing         |
+| Backup staging operator   | -          | **Unassigned; a separately identified person is required** | Same                                                    | Missing         |
+| Reviewer                  | Unassigned | Unassigned                                                 | Individual `reviewer` credential                        | Not provisioned |
+| Activator                 | Unassigned | Unassigned                                                 | Individual `activator` credential                       | Not provisioned |
+| Recovery/export custodian | Unassigned | Unassigned                                                 | Individual `reader` credential + restricted storage     | Not provisioned |
+| Release approver          | Unassigned | -                                                          | Recorded approval                                       | Not recorded    |
+
+Under PO-3 (ADR 0031 D1), one individual may hold both reviewer and
+activator; review, validation and activation stay separate audited
+operations. That does not remove the operational-readiness requirement for
+a **separately identified backup operator** (ADR 0031 D6; runbook §1).
+
+**Staging `ADMIN_TOKEN` (B1): unresolved.** The local DPAPI store
+(`staging-admin-token.dpapi`) is unchanged since 2026-09-13, i.e. no current
+token has been provided. The three authorized GETs were therefore **not
+re-run**: repeating them with a known-stale token would only add refused
+requests. Once the owner places the current token in that store, only these
+three run:
+
+```text
+staging-admin-get.ps1 -Op CutoverStatus
+staging-admin-get.ps1 -Op SyncStatus
+staging-admin-get.ps1 -Op Inspect
+```
+
+No hold, drain or mutation follows from them.
+
+### A7. Controlled comparison plan
+
+**Requested approach examined:** controlled KV source on staging under an
+existing operator hold, with active operations drained. Verified against RC
+code:
+
+| Requirement                | Finding                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
+| -------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Staging-only configuration | `CONTROLLED_PROVIDER_SOURCE = "kv"` is admitted only with `ENVIRONMENT=staging` and `PROVIDER_MODE=coordinated` (`resolveControlledProviderSource`); staging qualifies. **It is a configuration error together with `JOLPICA_TRANSPORT=proxy`** (`resolveJolpicaTransport`), so the window config must also drop `JOLPICA_TRANSPORT` and `JOLPICA_PROXY_ORIGIN`, plus set `IDENTITY_CATALOG_MODE=compare` (only after R0 activation).                                                                                                                                                                                                                 |
+| Source provenance          | Documents live in staging's own `GRIDVIEW_DATA` under `__controlled-source/v1/jolpica…`. Loading them is a remote KV write into the live snapshot namespace (separate prefix, unread by public routes). Documents would be built from a reviewed recorded capture with per-file hashes.                                                                                                                                                                                                                                                                                                                                                               |
+| No live provider traffic   | **Verified:** `controlledSourceTransport` reads one KV key per request and never fetches; non-Jolpica URLs and non-GET answer 404, malformed documents 503 (`providers/controlled/source.ts`; `providerTransport` in `index.ts`).                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| No publication             | **Verified:** a hold ends the run "before anything is prepared, reserved or sent" (`outcome/publish.ts`, `publicationStop`).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| Safe restoration           | A forward deploy of RC configuration (R-1) restores the proxy vars. No class change between those versions.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
+| **Ledger integrity**       | **NOT SAFE.** The hold does not stop the observation commit (`observation/observe.ts`: `recordRunObservations` → `ledger.commit`). An identical re-observation increments `consecutiveConfirmations` and can settle a record (`policy/classification.ts`, T1). Ledger provenance is only `absent / reconciled`: no source or transport marker. Controlled replays would count as genuine Jolpica confirmations in the **real staging ledger**, could settle real unsettled rounds (R1 and R12 on 11-04), and would shape the next real publication after the hold is released. A differing replay would instead create candidate/competing revisions. |
+
+**Conclusion:** the controlled-KV staging path is **not proposed**; I stopped
+here as instructed. Alternatives for the owner:
+
+1. **Recommended: offline parity against the real staging catalog.**
+   - After R0 activation, obtain one authenticated read-only U5 export of the
+     staging catalog (an audited read).
+   - Run three complete offline generations (U7 `--catalog-export`,
+     replay-only transport that throws on unrecorded URLs, fixed clocks,
+     three reviewed recorded captures). Run each under bundled authority and
+     under the exported staging catalog.
+   - Compare request order and count, limiter reservations, resolution,
+     profiles, all resource families, generated documents and publication
+     eligibility.
+   - Effects: zero staging ledger or KV writes, zero provider traffic.
+   - It is evidence about the **staging catalog's content**, not about the
+     staging Worker's runtime. Pin latency on the Worker needs a real staging
+     run (option 3 or a later runtime run).
+   - It departs from the literal "three compare runs on staging" in ADR 0031
+     D6 / runbook §7, and needs the owner's explicit acceptance.
+2. **Isolated staging-class compare Worker.** A new Worker with its own
+   ledger, sequencer, KV and catalog installation, seeded from R0, using the
+   controlled source. This is new infrastructure needing separate approval.
+   Like E2E, it is **not** staging evidence.
+3. **Accept ledger effects explicitly.** Controlled documents byte-equal to
+   the latest real observations, Inspect before/after (needs B1), and the
+   owner's written acceptance that confirmations may advance from replayed
+   data. **Not recommended.**
+4. **New diagnostic no-commit sync mode.** This changes reconciliation
+   semantics and needs its own ADR and unit. Out of scope.
+
+E2E comparisons may supplement any option, labelled as E2E evidence only.
+
+### A8. Recovery and backup plan (prerequisites)
+
+| Layer                             | What it is                                                                                                                                          | Covers                                                                                                     | Does not cover                                                                                                 | Status                                                                         |
+| --------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------ |
+| Revision export (U5)              | Authenticated read-only `GET /revisions/{id}/export`; `exportHash` verified; U7 `exportSha256` = that prefixed value                                | Revision lineage, evidence/decision closure, mappings, profiles, dataset commitments, installation binding | Activation history, pins, receipts, audit beyond closure, admission flags; ledger, sequencer, KV               | Procedure exists (U5/U8 local); **no staging catalog yet**                     |
+| Full operational backup           | Per-store custody: catalog SQLite DO, reconciliation ledger DO, publication sequencer DO, KV snapshots, admin audit, secrets inventory (names only) | A consistent, reviewed restore point across stores                                                         | No single Cloudflare mechanism provides it; a DO's storage cannot be copied out like U8's local stopped tree   | **Not designed or rehearsed remotely**; needs custodian (B3/B4)                |
+| Cloudflare platform recovery      | SQLite DO point-in-time recovery (per object, platform feature)                                                                                     | Platform-level object history within its window                                                            | Cross-store consistency, published-release reconciliation, audit continuity; never a catalog rollback protocol | **Not exercised.** Remote PITR has **not** been tested and must not be claimed |
+| Forward code recovery             | A4 R-1 / R-2 builds from `6a60954`                                                                                                                  | Returning to inert/bundled behavior and containing the catalog binding                                     | State: Worker rollback is not state rollback                                                                   | **Verified locally (A4)**                                                      |
+| Fresh-installation reconstruction | New UUID, namespace and credentials; U5 seed/validate/activate of R0                                                                                | Effective R0 content parity                                                                                | Original receipts, head UUID, actors                                                                           | Locally rehearsed (U8)                                                         |
+
+Required before **runtime cutover** (not before the inert deploy):
+
+- named custodian and backup custodian;
+- restricted storage location with access list;
+- a verified staging revision export and an isolated restore of it;
+- a written per-store backup/restore procedure approved by the custodian;
+- an explicit decision on whether PITR is part of the plan (and if so, an
+  approved, evidenced exercise).
+
+### A9. Exact proposed remote operations and approval boundaries
+
+Each gate needs its own explicit approval naming the exact values. None is
+requested by this addendum.
+
+| Gate | Operation (from clean `%TEMP%\gv-u11-rc`, `services/edge-api`)                                                                                              | Preconditions                                                                            | Effects / irreversibility                                                                           |
+| ---- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
+| G0   | The three admin GETs (A6) + `cf-read.mjs`, `resolved-vs-live.mjs`, `public-etags.mjs` (read-only)                                                           | Current token in DPAPI store (B1)                                                        | Reads only                                                                                          |
+| G1   | `npx wrangler deploy --env staging` of `6a60954`; the uploaded bundle must equal `fb60cc64…85e3d8`                                                          | G0 clean (no hold/lease/uncertain intent); B3 operator + backup named; no sync in window | Creates `gridview-api-staging_IdentityCatalog`; **ends `wrangler rollback` to ≤ `1d858d56`**; inert |
+| G1v  | Post-deploy reads: bindings and namespaces, KV names digest, public ETags, schedules `[]`, production/E2E unchanged, `wrangler versions view`               | G1                                                                                       | Reads only                                                                                          |
+| G2   | `wrangler secret put IDENTITY_REVIEWER_CREDENTIALS --env staging`; append to `secrets.required`; deploy with `IDENTITY_ADMIN_MODE=read-only`, then `review` | Named principals (B3); secure token distribution                                         | Secret change; new versions (no class change)                                                       |
+| G3   | `npm run identity -- seed`, `validate`, `activate` for R0 with the U5 reviewed wrapper; readback `status`, `revision inspect`, `export`                     | G2; reviewer and activator credentials; recovery custodian for the export (B4)           | Durable catalog state; never reseeded                                                               |
+| G4   | Comparison per the owner's choice in A7                                                                                                                     | G3; A7 decision (B6)                                                                     | Depends on option                                                                                   |
+| G5   | Runtime-strict cutover: operator hold, drain, deploy `IDENTITY_CATALOG_MODE=runtime`                                                                        | All design §12 preconditions; recovery plan (A8); explicit cutover approval              | Runtime authority; hold release separately approved                                                 |
+| -    | Optional-driver inventory                                                                                                                                   | Separate owner decision after G5 acceptance                                              | Not proposed                                                                                        |
+
+### A10. Updated GO/NO-GO
+
+| Blocker                      | Status after Addendum A                                                                                                                                   |
+| ---------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| B1 staging admin credential  | **Open**: store unchanged; three GETs await the current token                                                                                             |
+| B2 release identity          | **Identity resolved, validation pending**: `6a60954`, bundle `fb60cc64…85e3d8`; the full suite was interrupted by low memory (A3) and must pass before G1 |
+| B3 human roles               | **Open**: all unassigned; separate backup operator required                                                                                               |
+| B4 recovery plan / custodian | **Open** (needed before runtime cutover; A8)                                                                                                              |
+| B5 staging UUID              | **Resolved as proposal**: `c45d60b8-a723-4b6e-8530-750592af2b94`, not installed                                                                           |
+| B6 comparison method         | **Open, re-scoped**: controlled-KV on staging not safe; owner chooses an A7 alternative                                                                   |
+
+**Decision: NO-GO for G1.** G1 becomes approvable once (1) the full suite
+passes on a clean `6a60954` checkout, (2) B1 is cleared (G0 clean), and (3) B3
+names a primary and a backup operator. B4 and B6 gate later
+steps (G3-G5), not the inert deploy. Nothing in this addendum authorizes
+any remote operation.
