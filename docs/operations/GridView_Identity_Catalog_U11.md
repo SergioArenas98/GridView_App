@@ -671,3 +671,130 @@ passes on a clean `6a60954` checkout, (2) B1 is cleared (G0 clean), and (3) B3
 names a primary and a backup operator. B4 and B6 gate later
 steps (G3-G5), not the inert deploy. Nothing in this addendum authorizes
 any remote operation.
+
+---
+
+## Addendum B - 2026-11-17: release-candidate acceptance and comparison-policy proposal
+
+- Authorization: the owner's U11 continuation for release-candidate
+  verification only. **NO-GO remains for every remote change.**
+- Nothing was pushed, merged, deployed, provisioned, synchronized or sent to
+  a provider. No secret was changed. The release-candidate source was not
+  altered.
+
+### B1. Clean release-candidate acceptance: PASSED
+
+| Item                 | Value                                                                                                                                                                                                         |
+| -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Tree                 | Clean detached checkout of **`6a609543fd762b028e0e3b4101d2f0ce9e851ce0`** (`%TEMP%\gv-u11-rc`), 0 status lines before and after                                                                               |
+| Command              | `npm test -- --maxWorkers=1 --testTimeout=30000` (same as U10 run 3); timeouts, deadlines and assertions unchanged                                                                                            |
+| Conditions           | Machine kept awake (`SetThreadExecutionState`); 17.7 GB free at start and 17.9 GB at end (the interrupted run had about 3.3 GB); CPU about 20 %, no competing build or test workload                          |
+| Time                 | 20:30:05Z - 20:40:41Z, Vitest 634.96 s                                                                                                                                                                        |
+| Result               | **6,386 passed, 6 existing opt-in skips, 0 failed**; 315 files passed, 3 skipped (318); **exit 0**                                                                                                            |
+| Log                  | `identity-u11-rc-6a60954-acceptance.log` (in the RC checkout's ignored `.wrangler/`), copy `rc-6a60954-full-suite-ACCEPTANCE.log`, SHA-256 `4ab3fd4ae039fda63c3a1bd3767eae8d3101273d6be7ad75a7aa6a28a3cea876` |
+| Count reconciliation | U10 6,381 + 5 tests in the new `test/config/staging-identity-catalog.test.ts` = 6,386; 317 + 1 files = 318                                                                                                    |
+
+Earlier runs are retained unchanged as evidence:
+
+- `d364bb4` **failed**: log SHA-256 `ec5e2125…def7b0`;
+- `6a60954` **interrupted** (low memory): log SHA-256 `4bd9e86b…`.
+
+The U10 acceptance (6,381 / 6 / 0, `be94fa9e…68ef326`) remains the U10
+tree's result. The static checks from A3 (validators, schema freshness,
+typecheck, ESLint) were run on this same clean tree and still apply. Prettier's
+only warning remains the pre-existing CRLF `.prettierrc` of a Windows checkout.
+
+### B2. R0 seed-loader provenance (independent verification)
+
+`scripts/identity/corpus.mjs` compares against the constant
+`R0_REVIEWED_BASE_COMMIT = 027da5da59bf6b8c75a3fc432ef4fdc691772528`, the
+`baseCommit` of every reviewed manifest source, never `HEAD`. It refuses when
+that commit is not an ancestor of `HEAD`. No comparison was relaxed.
+
+Checks in a separate throwaway worktree at `6a60954`, using the real seed
+tool (`evidence/r0-provenance-checks.json`, script `tamper_checks.py`):
+
+| Case                                                                                         | Result                                                                                     |
+| -------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------ |
+| Authentic regeneration                                                                       | exit 0; `seed.json`, `manifest.json`, `parity.json` **byte-identical** to the reviewed set |
+| Canonical driver profile changed (`drivers.mock.json`)                                       | **Refused**: `Unreviewed source change`                                                    |
+| Typed mapping retargeted (`provider-mappings.development.json`)                              | **Refused**: `Unreviewed source change`                                                    |
+| Historical evidence identity altered                                                         | **Refused**: `Historical evidence changed without review`                                  |
+| Contradictory extra acknowledgement (invented key)                                           | **Refused**: `Historical evidence changed without review`                                  |
+| One of the four pending November keys removed                                                | **Refused**: `Incomplete pending November evidence`                                        |
+| `HEAD` moved to a commit that does not descend from `027da5d` (throwaway detached HEAD only) | **Refused**: `git merge-base --is-ancestor 027da5d… HEAD` failed; no output written        |
+
+The throwaway worktree was restored after each case, its package junction
+removed first, then the worktree itself. The RC checkout stayed clean, with
+its packages intact.
+
+### B3. Deployable artifact versus documentation commits
+
+- **Deployable source: `6a60954`.** A fresh `wrangler deploy --dry-run
+--env staging` on the clean checkout reproduces `index.js`
+  **`fb60cc641359c34026de6b32b5a3e0701c55dbf8c94c276059f174e34485e3d8`**, the
+  third identical build.
+- **Documentation-only commits after it:**
+  - `433c35c` (Addendum A) changes only this report;
+  - the commit recording Addendum B adds this addendum, the comparison-policy
+    proposal and `identity-u11-preservation.json`.
+
+  Neither touches `services/`, `content/` or app code. Either may be the
+  repository tip, but the deployment must name `6a60954` and its bundle hash.
+
+### B4. Comparison policy: proposed amendment (not accepted)
+
+[GridView_Identity_Catalog_U11_Comparison_Policy_Proposal.md](GridView_Identity_Catalog_U11_Comparison_Policy_Proposal.md)
+proposes exact amendment text for ADR 0031 D6 and runbook §7. Three
+independent offline catalog-parity comparisons (captures `2026-10-07`,
+`2026-10-13`, `2026-10-19`, against a verified U5 export of the active staging
+revision) would replace writing controlled replays into the authoritative
+staging ledger. Staging-specific checks S1-S7 remain mandatory. It states what
+the offline checks prove (catalog content and output parity under the deployed
+code) and what they do not (live pin path, deadlines, fail-closed behavior on
+Cloudflare, binding, restart). **ADR 0031 and the runbook are unchanged**, and
+the staging comparison gate stays unmet until the owner decides.
+
+### B5. Preservation evidence
+
+New file `docs/operations/identity-u11-preservation.json` (no earlier record
+modified). It contains:
+
+- the RC commit, bundle hash and build procedure;
+- the six local commits;
+- all three full-suite runs with log hashes;
+- the R0 provenance results;
+- SHA-256 of the two deliberately untracked U8 evidence files;
+- blob hashes of all 296 files changed from `027da5d` to `6a60954`.
+
+### B6. GO/NO-GO and remaining conditions for the first inert staging deployment (G1)
+
+**Decision: NO-GO.** Release-candidate validation is now complete: B2 is
+resolved (`6a60954`, `fb60cc64…85e3d8`, 6,386 / 6 / 0). G1 still requires,
+all verified rather than assumed:
+
+1. **B1, staging `ADMIN_TOKEN`: unresolved.** The local DPAPI store is
+   unchanged since 2026-09-13. After the owner provisions the current token
+   there, run only the three read-only GETs (G0). They must show no operator
+   hold or durable block, the lease released, no uncertain verification or
+   batch intent, and no pending publication recovery. Repeat the Cloudflare,
+   resolved-config, KV and public-ETag reads and confirm they are unchanged.
+2. **B3, people: unresolved.** A named primary staging operator, a
+   **separately identified backup operator**, and a recorded release
+   approver. Under PO-3, one person may hold reviewer and activator, but that
+   does not replace the backup operator.
+3. **An explicit G1 approval naming** commit `6a60954`, bundle
+   `fb60cc64…85e3d8` and UUID `c45d60b8-a723-4b6e-8530-750592af2b94`. It must
+   also accept that creating `IdentityCatalog` permanently ends `wrangler
+rollback` to `1d858d56` and earlier, with forward recovery R-1/R-2 (A4) as
+   the only recovery path.
+4. Deployment window conditions: no synchronization, schedules `[]`, uploaded
+   bundle equal to the recorded hash, post-deploy reads G1v.
+
+These gate later steps, not G1, and remain **unresolved**:
+
+- B4: recovery and backup custodian, and the per-store backup plan (G3, G5);
+- B6: the comparison-policy decision (G4);
+- individual reviewer/activator credentials (G2).
+
+Optional-driver inventory is not proposed. Production is untouched.
