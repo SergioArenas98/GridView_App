@@ -929,3 +929,62 @@ holds:
 
 This addendum requests no approval for any remote operation and authorizes
 none.
+
+---
+
+## Addendum D - 2026-11-21: owner acceptance of SOE-1 (Tier A only)
+
+- Authorization used: documentation only. No remote environment was read or
+  changed. Nothing was deployed, rotated, activated, synchronized, pushed or
+  merged.
+- Release candidate unchanged: `6a609543fd762b028e0e3b4101d2f0ce9e851ce0`,
+  bundle `fb60cc64…85e3d8`, UUID `c45d60b8-a723-4b6e-8530-750592af2b94`,
+  acceptance 6,386 / 6 / 0 (Addendum B).
+
+### D1. Owner decision (recorded)
+
+The product owner, as GridView's sole operator, on 2026-11-21:
+
+- **accepts SOE-1** for Tier A gates **G0, G1 and G1v only**, as revised in
+  commit `d50301e`;
+- **explicitly accepts residual risks RS-1 to RS-8** within that limited
+  scope;
+- acknowledges that backup-operator requirements **X1, X6, X9 and X10 remain
+  unmet**, neither satisfied nor waived for other environments or gates;
+- keeps **CC-1 to CC-11 mandatory** at their specified gates, including the
+  **eight-hour separation** before an irreversible operation (required for
+  G1);
+- confirms the expiry: documented conditions, at the latest **2027-02-28**.
+
+Recorded in: SOE-1 §10 (status now ACCEPTED, Tier A only); ADR 0031 (header
+and a note under D6); runbook §1 (note below the ownership text). The
+original backup requirements in ADR 0031 D6 and runbook §1 are unchanged.
+Addendum C is left as written: it records the proposal stage.
+
+### D2. Updated blocker status
+
+| Blocker                      | Status after Addendum D                                                                                                                                           |
+| ---------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| B1 staging admin credential  | **Open.** Not verified; G0 GETs not run. Rotation not authorized                                                                                                  |
+| B2 release identity          | **Resolved** (Addendum B)                                                                                                                                         |
+| B3 human roles               | **Resolved for Tier A only** by SOE-1: operator and release approver recorded; backup unmet and excepted for G0/G1/G1v. Reviewer, activator, custodian open (G2+) |
+| B4 recovery / custodian      | **Open** (G3, G5)                                                                                                                                                 |
+| B5 staging UUID              | **Resolved as proposal**, not installed                                                                                                                           |
+| B6 comparison method         | **Open** (G4)                                                                                                                                                     |
+| B7 single-operator exception | **Resolved for Tier A**: SOE-1 accepted 2026-11-21. Not applicable beyond G1v                                                                                     |
+
+### D3. GO/NO-GO
+
+**Decision: NO-GO for G1.** The owner's acceptance authorizes **no** gate: not
+G1, catalog activation, runtime cutover, optional-driver inventory, a
+production change, credential rotation, deployment or synchronization. G1
+stays NO-GO until:
+
+1. the current staging `ADMIN_TOKEN` is verified (B1; proposal §7.1);
+2. G0 passes (proposal §7.2 item 2), which needs no further acceptance;
+3. compensating-control evidence for Tier A is complete (CC-1 to CC-9 and
+   CC-11, including the controlled no-sync window plan and an approval record
+   committed at least eight hours before execution);
+4. the owner separately approves the exact irreversible deployment, naming
+   `6a60954`, `fb60cc64…85e3d8` and `c45d60b8-a723-4b6e-8530-750592af2b94`
+   and accepting the rollback floor.

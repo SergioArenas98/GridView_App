@@ -4,6 +4,7 @@
 - Date: 2026-11-13
 - Authorization: U0 documentation only. U1-U11 and every deployment require separate approval.
 - Product-owner decisions: PO-3, PO-5, PO-6, PO-7 and PO-8.
+- Staging exception: SOE-1, accepted 2026-11-21, Tier A only (note under D6). The D6 requirements are unchanged.
 - Supplements: [ADR 0009](0009-protected-staging-administration-token.md), [ADR 0020](0020-provider-source-observation-and-reconciliation.md), [ADR 0025](0025-season-publication-authority-and-rollback-republication.md) and [ADR 0028](0028-automatic-end-to-end-season-updates.md).
 - Design: [Identity Management Design](../technical/GridView_Identity_Management_Design.md), sections 6-7, 9 and 11.
 
@@ -180,6 +181,21 @@ or credentials. Every assignment below is **unassigned**; none is provisioned.
 Record named primary and backup coverage before provisioning or staging
 activation. One person may cover reviewer and activator; accountability remains
 separate by operation.
+
+> **Staging exception SOE-1 (accepted by the product owner on 2026-11-21).**
+> GridView has one operator: the product owner, who is primary staging
+> operator and staging release approver. The backup coverage required above is
+> **not met** and is **not waived**. For the staging Worker
+> `gridview-api-staging` and installation
+> `c45d60b8-a723-4b6e-8530-750592af2b94` only, Tier A gates G0, G1 and G1v may
+> go ahead without a backup operator under exception SOE-1, with compensating
+> controls CC-1 to CC-11 mandatory at their gates (including the eight-hour
+> separation before an irreversible operation) and residual risks RS-1 to RS-8
+> accepted within that scope. It expires on its documented conditions, at the
+> latest 2027-02-28. This requirement remains in force, unexcepted, for G2-G5,
+> optional-driver activation, E2E and production. Acceptance authorizes no
+> gate: G1 still needs its own approval. Record:
+> [SOE-1](../operations/GridView_Identity_Catalog_U11_Solo_Operator_Exception_Proposal.md).
 
 | Responsibility                      | Required named ownership/evidence                                                                                                            |
 | ----------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |

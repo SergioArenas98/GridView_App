@@ -23,6 +23,21 @@ validation and activation remain separate operations. Incident coordinator
 escalates unresolved identity/historical corrections to the product owner;
 there is no break-glass publication procedure.
 
+> **Staging exception SOE-1 (accepted by the product owner on 2026-11-21).**
+> GridView has one operator. The product owner is the primary staging
+> operator and the staging release approver. The **Backup** column above is
+> **not met** and is **not waived**; the table is left as written. For staging
+> Tier A gates G0, G1 and G1v only (`gridview-api-staging`, installation
+> `c45d60b8-a723-4b6e-8530-750592af2b94`), work may go ahead without a backup
+> operator under SOE-1: CC-1 to CC-11 are mandatory at their gates (including
+> the eight-hour separation before an irreversible operation and the
+> controlled no-sync window), RS-1 to RS-8 are accepted within that scope, and
+> the exception expires at the latest on 2027-02-28. Reviewer, activator,
+> custodian and incident-coordinator rows stay unassigned. G2-G5,
+> optional-driver activation, E2E and production are not excepted. Acceptance
+> authorizes no gate. Record:
+> [SOE-1](GridView_Identity_Catalog_U11_Solo_Operator_Exception_Proposal.md).
+
 Approve the exact environment, Worker/build and artifact hashes, individual
 credential/secret plan, namespace lifecycle, affected seasons, controlled source,
 permitted operations and recovery build. Existing licensing, PRD and release

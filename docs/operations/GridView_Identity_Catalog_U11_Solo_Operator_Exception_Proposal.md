@@ -1,7 +1,9 @@
 # GridView identity catalog - U11: single-operator staging exception (SOE-1) and risk acceptance
 
 - Date: 2026-11-21
-- Status: **PROPOSED. Not accepted.** Documentation only.
+- Status: **ACCEPTED by the product owner on 2026-11-21, for Tier A gates G0,
+  G1 and G1v only**, as revised in `d50301e` (section 10). Accepting it
+  authorizes no gate. Earlier status: PROPOSED (revisions 1 and 2).
 - Revision 2 (2026-11-21): corrections after owner review. The owner found
   SOE-1 acceptable in principle for Tier A only; that is **not** formal
   acceptance of SOE-1 or of RS-1 to RS-8. Changes: execution paths and the
@@ -18,8 +20,8 @@
   provisioned, seeded, activated, synchronized or published. No provider was
   contacted. Nothing was pushed or merged.
 
-This proposal does **not** mark any backup-operator requirement as satisfied.
-Every such requirement stays recorded as **unmet**. The exception only proposes
+This document does **not** mark any backup-operator requirement as satisfied.
+Every such requirement stays recorded as **unmet**. The exception only states
 which staging steps may go ahead while it is unmet, and under which extra
 controls.
 
@@ -187,18 +189,18 @@ before the gate is approved.
 | CC-10 | **PO-3 separation of operations**         | Same person reviewing and activating            | G2, G3       | Review and activation are separate authenticated operations, with separate operation IDs and audit receipts, never one command. Activation re-reads the reviewed head and hash first. Proposed: separate credential IDs per role even for the same principal, so the audit trail shows which authority acted. No role is assigned and no credential is created by this document.                                                                                                                                                   |
 | CC-11 | **Scope containment**                     | Wider blast radius from an unchecked error      | All          | Production and E2E version IDs, schedules and KV digests read before and after each window and confirmed unchanged. No E2E or production command in a staging window.                                                                                                                                                                                                                                                                                                                                                              |
 
-## 6. Residual risks (pending product-owner review; none accepted)
+## 6. Residual risks (accepted 2026-11-21 within Tier A scope only)
 
-| ID   | Risk                                                                                                                 | Mitigation                     | Remaining exposure                                                                                                                                                |
-| ---- | -------------------------------------------------------------------------------------------------------------------- | ------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| RS-1 | An operator error goes unnoticed in real time: nobody else watches                                                   | CC-4, CC-8, CC-3               | Errors are caught only after the fact, by checks and logs                                                                                                         |
-| RS-2 | The recommended second reviewer for new or ambiguous identities cannot be used                                       | CC-10; R0 is a reviewed corpus | Review quality depends on one person (relevant at G3, not G1)                                                                                                     |
-| RS-3 | Operator unavailable: staging cannot be recovered until they return                                                  | CC-5, CC-9, section 3.2        | Staging may stay degraded for an unbounded time. **Pending owner review.** No cron runs, but HTTP-triggered work by a token holder remains possible (section 3.1) |
-| RS-4 | Credential loss (workstation, DPAPI profile or Cloudflare account) with nobody else holding access                   | CC-2                           | Losing the Cloudflare account blocks all operations until account recovery                                                                                        |
-| RS-5 | Self-approval: approver, operator and escalation target are one person                                               | CC-4 time separation, CC-3     | No independent veto                                                                                                                                               |
-| RS-6 | G1 is irreversible for `wrangler rollback`; with one operator there is no second check before the point of no return | CC-1, CC-4, CC-7               | Same irreversibility as before; only forward recovery exists                                                                                                      |
-| RS-7 | Local evidence can be altered by the same person who produced it                                                     | CC-3 hash manifests committed  | Hashes show later change, not who made it                                                                                                                         |
-| RS-8 | Fatigue or time pressure during a window                                                                             | CC-4 time gap, CC-5 stops      | Residual human error                                                                                                                                              |
+| ID   | Risk                                                                                                                 | Mitigation                     | Remaining exposure                                                                                                                                                                        |
+| ---- | -------------------------------------------------------------------------------------------------------------------- | ------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| RS-1 | An operator error goes unnoticed in real time: nobody else watches                                                   | CC-4, CC-8, CC-3               | Errors are caught only after the fact, by checks and logs                                                                                                                                 |
+| RS-2 | The recommended second reviewer for new or ambiguous identities cannot be used                                       | CC-10; R0 is a reviewed corpus | Review quality depends on one person (relevant at G3, not G1)                                                                                                                             |
+| RS-3 | Operator unavailable: staging cannot be recovered until they return                                                  | CC-5, CC-9, section 3.2        | Staging may stay degraded for an unbounded time. **Accepted 2026-11-21 within Tier A scope only.** No cron runs, but HTTP-triggered work by a token holder remains possible (section 3.1) |
+| RS-4 | Credential loss (workstation, DPAPI profile or Cloudflare account) with nobody else holding access                   | CC-2                           | Losing the Cloudflare account blocks all operations until account recovery                                                                                                                |
+| RS-5 | Self-approval: approver, operator and escalation target are one person                                               | CC-4 time separation, CC-3     | No independent veto                                                                                                                                                                       |
+| RS-6 | G1 is irreversible for `wrangler rollback`; with one operator there is no second check before the point of no return | CC-1, CC-4, CC-7               | Same irreversibility as before; only forward recovery exists                                                                                                                              |
+| RS-7 | Local evidence can be altered by the same person who produced it                                                     | CC-3 hash manifests committed  | Hashes show later change, not who made it                                                                                                                                                 |
+| RS-8 | Fatigue or time pressure during a window                                                                             | CC-4 time gap, CC-5 stops      | Residual human error                                                                                                                                                                      |
 
 ## 7. Exact remaining gates
 
@@ -283,7 +285,7 @@ G1 stays **NO-GO** until all of these are true and evidenced:
 - **Optional-driver inventory**: separate decision after G5 acceptance.
 - **Production**: U11 §18 checklist, unchanged; no exception applies.
 
-## 8. Proposed acceptance wording (for the owner; not signed)
+## 8. Proposed acceptance wording (superseded by the owner's own wording, section 10)
 
 > I, the product owner and sole GridView operator, accept exception SOE-1 as
 > written in `GridView_Identity_Catalog_U11_Solo_Operator_Exception_Proposal.md`
@@ -295,7 +297,7 @@ G1 stays **NO-GO** until all of these are true and evidenced:
 > does not approve G1. G1 needs its own approval naming commit `6a60954`,
 > bundle `fb60cc64…85e3d8` and UUID `c45d60b8-a723-4b6e-8530-750592af2b94`.
 
-## 9. Proposed notes for the normative documents (not applied)
+## 9. Notes for the normative documents (applied 2026-11-21 in final wording)
 
 ADR 0031 D6 and runbook §1 are **not edited** by this proposal, so the
 original requirement stays visible. If SOE-1 is accepted, the proposed
@@ -308,3 +310,29 @@ addition, placed directly below each requirement, is:
 > `GridView_Identity_Catalog_U11_Solo_Operator_Exception_Proposal.md`. The
 > requirement remains in force for G2-G5, optional-driver activation and
 > production unless separately excepted.
+
+Applied in final wording below ADR 0031 D6 (first paragraph) and below the
+runbook §1 ownership text. Neither original requirement was changed.
+
+## 10. Owner acceptance record (2026-11-21)
+
+The product owner, as GridView's sole operator, recorded this decision on
+2026-11-21. It applies to this document **as revised in commit `d50301e`**.
+The later edits in this file record the acceptance only and change no
+substance.
+
+| Item                  | Decision                                                                                                                                                                    |
+| --------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| SOE-1                 | **Accepted** for Tier A gates **G0, G1 and G1v only**                                                                                                                       |
+| Residual risks        | RS-1 to RS-8 **explicitly accepted within that limited scope**                                                                                                              |
+| Backup requirements   | X1, X6, X9 and X10 **remain unmet**. Not considered satisfied, and not waived for other environments or gates                                                               |
+| Compensating controls | CC-1 to CC-11 **mandatory** at their specified gates. The eight-hour separation between the approval record and an irreversible operation (CC-4) is **required** for G1     |
+| Expiry                | Documented conditions in section 3 (second operator named, withdrawal, G5 approval requested), at the latest **2027-02-28**                                                 |
+| Not authorized        | G1, catalog activation, runtime cutover, optional-driver inventory, production changes, credential rotation, deployment, synchronization, push or merge                     |
+| G1 status             | **NO-GO** until the current staging `ADMIN_TOKEN` is verified, G0 passes, compensating-control evidence is complete, and the owner separately approves the exact deployment |
+
+CC-4 also proposes the eight-hour separation for G3. G3 is outside Tier A,
+so that remains a proposal for a later Tier B decision.
+
+Recorded in: this section; ADR 0031 (header and the note under D6); runbook
+§1 (note below the ownership text); U11 Addendum D.
