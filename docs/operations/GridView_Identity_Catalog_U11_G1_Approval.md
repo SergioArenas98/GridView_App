@@ -90,3 +90,36 @@ Approved by: **the GridView product owner** (sole staging operator and
 staging release approver), 2026-11-21, by explicit written instruction:
 "This message constitutes my explicit G1 approval as GridView product
 owner."
+
+---
+
+## Amendment 1 (2026-11-21): window change only
+
+The product owner explicitly changed the G1 deployment window to **Sunday
+2026-11-22, 11:00-12:00 UTC**, with an intended start of 11:00 UTC subject
+to a successful preflight. This supersedes the 10:00-11:00 UTC window
+above and any other earlier window. **Scope, values, conditions and
+exclusions are unchanged.** The original approval above is preserved as
+recorded in `c9022a4579cbfcb185ce691b32608daa4c83e03a`
+(2026-11-21T19:32:53Z).
+
+**Timing (CC-4).** The separation runs from the approval record's commit
+to execution.
+
+- Original record `c9022a4`: eight hours end at 2026-11-22T03:32:53Z.
+- Applied conservatively to this amendment as well: eight hours from this
+  amendment's commit, which ends before 04:00Z on 2026-11-22.
+- Both end well before the window opens. **Earliest valid deployment:
+  2026-11-22T11:00:00Z** (window start).
+- Preflight (NSW-1) begins no earlier than 10:30Z, so it falls within the
+  30 minutes before the upload.
+- No deployment after 12:00:00Z without a newly approved window.
+
+**Execution conditions (unchanged):**
+
+- live, owner-supervised session only;
+- no scheduled, background or automatic deployment;
+- any failed or different preflight value means no deployment.
+
+No further authorization is needed for G1 beyond this amended timing and
+the mandatory execution conditions.
