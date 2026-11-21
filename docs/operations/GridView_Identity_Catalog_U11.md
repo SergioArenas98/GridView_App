@@ -1410,3 +1410,40 @@ Packet: `GridView_Identity_Catalog_U11_G1_Readiness.md` (`f04146c`).
   record with objective abort conditions (section 8). The only remaining
   blocker is the owner's explicit G1 approval, committed, followed by at
   least eight hours.
+
+---
+
+## Addendum H - 2026-11-21: G1 approved and window amended; G2-G5 prepared
+
+- **G1 approval:** `GridView_Identity_Catalog_U11_G1_Approval.md`, commit
+  `c9022a4` (19:32:53Z). **Amendment 1** (commit `254f40f`, 19:48:25Z)
+  sets the window to **2026-11-22 11:00-12:00 UTC**; scope is unchanged.
+  - CC-4: eight hours from each commit end at 03:32:53Z and 03:48:25Z.
+  - **Earliest valid deployment: 11:00:00Z.**
+  - Supervised session only. No deployment after 12:00Z without a new
+    window.
+- **Deployment-day preparation:** readiness packet §9 and a private
+  evidence folder holding the command sequence, operation log and manifest
+  script.
+  - Recovery cards C1-C8 and the R-1/R-2 procedures are unchanged.
+  - R-1 and R-2 expected hashes: `fb60cc64…` and `c4714402…7953`.
+- **Incident, 19:33:54Z, no remote effect:** while the assistant was
+  updating a local note, shell command substitution ran
+  `npx wrangler deploy --env staging` in a directory with no Wrangler
+  config.
+  - Wrangler stopped during local project detection; its debug log has no
+    Cloudflare API request.
+  - Read-only state at 19:34:22Z was identical to 19:26Z: staging still
+    `bc9b9315`, only the three GridView Workers, no Pages projects.
+  - Prevention: notes are written with file tools, never shell-quoted
+    prose.
+- **G2-G5:** `GridView_Identity_Catalog_U11_G2_G5_Preparation.md`
+  (proposals only):
+  - the role proposal and SOE-1-B extension text;
+  - the credential and config procedure;
+  - the R0 sequence, custody and restore;
+  - G4 capture integrity: 2026-10-07, 2026-10-13 and 2026-10-19 verified,
+    22/23/23 files, 0 mismatches;
+  - the G5 checklist and optional-inventory and production dependencies.
+    Nothing accepted or executed.
+- **G1 readiness:** no new finding changes it.

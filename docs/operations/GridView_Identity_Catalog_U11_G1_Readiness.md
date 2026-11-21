@@ -8,6 +8,15 @@
   builds below are local `--dry-run` builds.
 - Revision 2 (2026-11-21 19:30Z): fresh read-only checks, CC-2 and CC-9
   completed, final unsigned approval text (sections 5-8).
+- **Revision 3 (2026-11-21 19:50Z): G1 APPROVED.** The signed record is
+  `GridView_Identity_Catalog_U11_G1_Approval.md` (commit `c9022a4`,
+  19:32:53Z), with Amendment 1 (commit `254f40f`, 19:48:25Z) changing the
+  window to **2026-11-22 11:00-12:00 UTC**.
+  - Earliest valid deployment: **11:00:00Z** (both eight-hour periods end
+    before 04:00Z).
+  - Section 8 below is kept as the pre-signature draft. The signed record
+    governs.
+  - Deployment-day sequence: section 9.
 
 ## 1. Fixed values
 
@@ -217,3 +226,20 @@ else is either satisfied or is a deployment-window step.
 > difference follows recovery cards C1-C8 and never a rollback.
 >
 > Signed: `<product owner>` Date/time (UTC): `<…>` Commit: `<…>`
+
+## 9. Deployment-day sequence (2026-11-22)
+
+The private evidence folder `identity-u11-g1-2026-11-22` holds the exact
+commands (`00-SEQUENCE.md`), the operation-log template
+(`01-OPERATION-LOG.md`) and the SHA-256 manifest script
+(`02-make-manifest.ps1`).
+
+| Phase          | When (UTC)                                | Content                                                                                                                                                                                                                          |
+| -------------- | ----------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| A. Preparation | from about 10:15                          | Owner present; checkout clean at `6a60954`; local Wrangler 4.112.0 (always run inside the RC `services/edge-api`, never elsewhere); account check; R-1 rebuild = `fb60cc64…`; R-2 rebuild = `c4714402…7953` from its pinned path |
+| B. NSW-1       | not before 10:30, within 30 min of upload | `staging-state.mjs` zero differences vs the 19:26Z baseline; the three G0 GETs 200 and identical bodies; 14/14 ETags unchanged. Any difference means ABORT                                                                       |
+| C. Deploy      | ≥ 11:00:00, before 12:00:00               | `npx wrangler deploy --env staging --outdir <evidence>/deploy`, once. Expect "Created: IdentityCatalog" and no "Deleted" or "Renamed"; output `index.js` = `fb60cc64…`. Ambiguous: no retry, go to G1v and cards C1-C8           |
+| D. G1v         | immediately                               | Section 4 checks; G0 GETs and ETags unchanged; catalog inert (admin off, discovery off; identity routes not probed); manifest; U11 docs commit                                                                                   |
+
+No deployment after 12:00:00Z without a newly approved window. No
+unattended, scheduled or background execution.
