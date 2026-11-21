@@ -988,3 +988,126 @@ stays NO-GO until:
 4. the owner separately approves the exact irreversible deployment, naming
    `6a60954`, `fb60cc64…85e3d8` and `c45d60b8-a723-4b6e-8530-750592af2b94`
    and accepting the rollback floor.
+
+---
+
+## Addendum E - 2026-11-21: staging `ADMIN_TOKEN` investigation and G0 readiness
+
+- Authorization used: read-only investigation of the existing credential and
+  local records; G0 preparation. **No request was sent to staging or any
+  other remote service** in this addendum. The known-401 credential was not
+  retried. No secret was printed, logged, copied or committed. Nothing was
+  deployed, rotated, synchronized or published.
+- Release candidate `6a609543fd762b028e0e3b4101d2f0ce9e851ce0`, bundle
+  `fb60cc64…85e3d8`, UUID `c45d60b8-a723-4b6e-8530-750592af2b94`, SOE-1
+  (accepted, Tier A) and CC-1 to CC-11 are unchanged. The backend suite was
+  not re-run: no implementation or configuration changed.
+- Local evidence folder (outside the repository): `identity-u11-g0-2026-11-21`
+  under the existing GridView evidence directory.
+
+### E1. Verified facts
+
+| #   | Fact                                                                                                                                                                                                                                                                                                                                          | Source                                                     |
+| --- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------- |
+| F1  | The staging DPAPI store exists, is 262 bytes, was created and last written on 2026-09-13 18:27:44Z, and its folder grants Full Control to the current Windows user only (no inherited entries).                                                                                                                                               | File metadata and ACL, read 2026-11-21                     |
+| F2  | The store **decrypts** under the current user. The value has base64url characters and at least 32 characters. Only these two properties were output.                                                                                                                                                                                          | In-memory check; value discarded                           |
+| F3  | The store was written by the 2026-09-13 recovery-window rotation and was then recorded as the only copy of the live token.                                                                                                                                                                                                                    | 2026-09-13 operation record; staging runbook rotation note |
+| F4  | On 2026-11-05 at 19:15Z the same store, with the same Bearer construction, authenticated: `POST /internal/admin/sync/full` returned **200** on version `de0dc58a`.                                                                                                                                                                            | 2026-11-05 run record and script                           |
+| F5  | On 2026-11-17 at 18:18Z the three G0 GETs returned **401** with the Worker's own `UNAUTHORIZED` envelope (request IDs recorded), on version `1d858d56`.                                                                                                                                                                                       | 2026-11-17 evidence                                        |
+| F6  | Admin authentication (`src/admin/auth.ts`) compares the whole `Authorization` header with `Bearer <ADMIN_TOKEN>` in constant time, and returns 401 if the secret is empty. The file is unchanged since phase 5A, so the 401 is not an authentication-scheme change.                                                                           | `git log` of `auth.ts`                                     |
+| F7  | The G0 helper targets the staging Worker's workers.dev host, sends GET only to `/internal/admin/publication/cutover/status`, `/internal/admin/sync/status` and `/internal/admin/reconciliation` (each `?season=2026`), and uses the same Bearer scheme. It matches the routes in `027da5d` and `6a60954`.                                     | Helper source and route constants                          |
+| F8  | Version `de0dc58a` (2026-11-05, `upload`) had secret `ADMIN_TOKEN` only. Version `deabb568` (2026-11-12 18:27:04Z, `upload`) had `ADMIN_TOKEN` and `JOLPICA_PROXY_TOKEN`. Version `1d858d56` (18:48:40Z, `triggered_by: secret`) has the same two names and the **same script etag** `5a55c1b4…5864`.                                         | `wrangler versions view` output of 2026-11-17              |
+| F9  | The proxy activation procedure (`services/jolpica-proxy/deploy/staging.md`) adds `JOLPICA_PROXY_TOKEN` through `wrangler deploy --secrets-file`, keeps `ADMIN_TOKEN`, and says **not** to run a separate `secret put` or rotate the admin token. A separate secret-only version (`1d858d56`) nevertheless exists 21 minutes after the upload. | Procedure text; F8                                         |
+| F10 | The operator-reported 2026-11-12 proxy synchronization was run through an admin route, so a valid `ADMIN_TOKEN` existed and was used that day.                                                                                                                                                                                                | 2026-11-12 investigation report                            |
+| F11 | No other DPAPI store or admin-token file exists in the GridView project folders or the GridView credential folder. No repository commit or document records an `ADMIN_TOKEN` change on 2026-11-12.                                                                                                                                            | Bounded file search; `git log --all` 11-11 to 11-14        |
+
+### E2. Conclusions and hypotheses
+
+- **Established:** the value held in the store no longer matches the staging
+  Worker's `ADMIN_TOKEN` (F2, F4, F5, F6). The secret value changed between
+  2026-11-05 19:15Z and 2026-11-17 18:18Z. The only staging versions in that
+  interval are `deabb568` and `1d858d56` (F8).
+- **Not established:** which deployment changed it, or which value it now
+  holds. Version metadata gives secret names, not values or a per-secret
+  change log.
+- Hypotheses, unverified:
+  - **H1 (most consistent):** the 18:48Z secret-only version replaced
+    `ADMIN_TOKEN` (for example, a `secret put` because the stored value was
+    not to hand during the proxy session), contrary to F9.
+  - **H2:** the 18:27Z `--secrets-file` deploy included an `ADMIN_TOKEN`
+    entry with a new value, and the 18:48Z version re-put
+    `JOLPICA_PROXY_TOKEN`.
+  - **H3:** some other value change at 18:48Z, such as an empty or mistyped
+    `ADMIN_TOKEN`. F6 would give 401 in that case too.
+- Under every hypothesis, **the current value exists only where the 2026-11-12
+  operator kept it, if anywhere** (F10, F11). That is outside the GridView
+  workflow folders I am authorized to inspect, so I did not search further.
+
+### E3. Credential status
+
+**B1: OPEN. The current staging `ADMIN_TOKEN` is not available in authorized
+local custody.** The existing store is intact but holds the superseded
+2026-09-13 value. G0 cannot run yet.
+
+### E4. Outcome A, prepared: you supply the current value
+
+Three local scripts, none run, in the evidence folder:
+
+- `store-candidate.ps1`: SHA-256 `1d84b096…2db7`;
+- `g0-admin-get.ps1`: SHA-256 `cc4e5af8…f7aa`;
+- `promote-candidate.ps1`: SHA-256 `bbf5ef70…1f57`.
+
+1. **Owner, in their own PowerShell window:** `store-candidate.ps1`. The
+   value is entered hidden (`Read-Host -AsSecureString`), checked (non-empty,
+   no whitespace, at least 32 characters), DPAPI-protected for the current
+   user and written as a separate candidate file. The existing store is
+   untouched and nothing is printed.
+2. `g0-admin-get.ps1 -TokenFile candidate`: one `CutoverStatus` GET first;
+   **any non-200 stops everything, with no retry**. Then `SyncStatus` and
+   `Inspect`. Status lines and response bodies go to the evidence folder.
+   Bodies hold operational state, not credentials.
+3. If all three return 200: `promote-candidate.ps1` makes the candidate the
+   standard store. It renames, not deletes, the superseded store.
+4. Then the remaining G0 reads: `cf-read.mjs`, `resolved-vs-live.mjs`,
+   schedules, `public-etags.mjs` and the KV names digest, compared with the
+   2026-11-17 baseline.
+5. G0 passes only if all of these hold: no operator hold or durable block,
+   lease released, no uncertain verification or batch intent, no pending
+   publication recovery, and every comparison unchanged. In particular, the
+   active version must still be `1d858d56`. Anything else is reported, and
+   **no mutation follows**.
+
+### E5. Outcome B, proposed for separate approval: staging-only rotation
+
+Use this only if the current value cannot be recovered from an authorized
+source. **Not approved, not prepared as a script, not performed.**
+
+| Item                 | Proposal                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| -------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Operation            | `wrangler secret put ADMIN_TOKEN --env staging` from a clean worktree's `services/edge-api`, Worker `gridview-api-staging` only. No code upload. `JOLPICA_PROXY_TOKEN`, vars and bindings untouched.                                                                                                                                                                                                                                                      |
+| Value handling       | Generated in memory from 32 bytes of a cryptographic RNG, encoded as unpadded base64url (43 characters). It is **first** DPAPI-stored as the candidate, then passed to Wrangler on standard input. It never appears in arguments, environment variables, files, history, logs, chat or Git.                                                                                                                                                               |
+| Remote effect        | Cloudflare creates and deploys at 100% a **new staging Worker version** (`triggered_by: secret`) with the same script etag `5a55c1b4…5864`, bindings, vars and secret names. The current value stops working immediately for every holder. No class or migration change. E2E and production are not touched.                                                                                                                                              |
+| Rollback note        | A `wrangler rollback` to `1d858d56` would restore the previous secret value along with it. Fixing a bad value means rotating again, not rolling back.                                                                                                                                                                                                                                                                                                     |
+| Single-operator note | SOE-1 covers G0, G1 and G1v only. This rotation concerns the legacy shared token (ADR 0009), not catalog provisioning (ADR 0031 D6). The approval should still state explicitly that the product owner performs it alone.                                                                                                                                                                                                                                 |
+| Preconditions        | Approval record naming the operation and window. Controlled window in the style of SOE-1 §3.2, with no admin calls or deploys in it. Pre-reads: deployment list (active still `1d858d56`, nothing newer), versions view of the active version (two secret names, script etag), schedules `[]` for staging, E2E and production, public ETags and KV digest unchanged from 2026-11-17, and Wrangler signed in to the expected account.                      |
+| Abort before the put | Any newer version or changed secret names, non-empty schedules, changed ETags or KV digest, a wrong account, or a candidate-store failure. Nothing has changed at that point.                                                                                                                                                                                                                                                                             |
+| Validation after     | `g0-admin-get.ps1 -TokenFile candidate`: one `CutoverStatus` GET. If 401, allow one re-check after 30 seconds for propagation, then stop. Then the full G0 and promotion as in E4.                                                                                                                                                                                                                                                                        |
+| Refreshed baselines  | The new version ID replaces `1d858d56` everywhere it is the expected active version. Re-record versions view (same script etag), resolved-versus-live (no drift), the downloaded bundle hash (must still equal the `027da5d` build `7415b82d…`), KV digest, ETags and schedules. The G1 approval, recovery card and NSW-1 baseline must name the new version, and the G1 rollback-floor statement becomes "ends rollback to the new version and earlier". |
+
+### E6. Updated blockers and GO/NO-GO
+
+| Blocker                     | Status after Addendum E                                                                                                           |
+| --------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| B1 staging admin credential | **Open.** Store intact but superseded; current value not in authorized custody. Outcome A ready; outcome B proposed, not approved |
+| B3 human roles              | Resolved for Tier A only (Addendum D)                                                                                             |
+| B4, B6                      | Open (G3-G5, G4)                                                                                                                  |
+
+**Decision: NO-GO for G1**, unchanged. G0 has not run.
+
+**Next owner action (exactly one of these):**
+
+1. If you hold the current staging `ADMIN_TOKEN` in an authorized secure
+   source: run `store-candidate.ps1` yourself and tell me. I then run E4 steps
+   2-5, read-only.
+2. If you do not: approve, or decline, the E5 staging-only rotation as a
+   separate remote mutation. If you approve, name the window.
