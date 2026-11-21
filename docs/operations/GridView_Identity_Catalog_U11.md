@@ -798,3 +798,101 @@ These gate later steps, not G1, and remain **unresolved**:
 - individual reviewer/activator credentials (G2).
 
 Optional-driver inventory is not proposed. Production is untouched.
+
+---
+
+## Addendum C - 2026-11-21: single-operator staffing decision and staging exception proposal
+
+- Authorization used: documentation and approval proposal only. No remote
+  environment was read or changed in this addendum. Nothing was deployed,
+  rotated, provisioned, activated, synchronized, pushed or merged. No provider
+  was contacted.
+- Release candidate unchanged: `6a609543fd762b028e0e3b4101d2f0ce9e851ce0`,
+  bundle `fb60cc64…85e3d8`, acceptance 6,386 / 6 / 0 (Addendum B). This
+  addendum touches only `docs/operations/`.
+- Full proposal:
+  `GridView_Identity_Catalog_U11_Solo_Operator_Exception_Proposal.md`
+  (exception **SOE-1**, PROPOSED, not accepted).
+
+### C1. Staffing decision (recorded)
+
+Product-owner decision of 2026-11-21: GridView has **one operator**. The
+**product owner** is the **primary staging operator** and the **staging
+release approver**. **No separate backup operator is available**, and none
+is named or invented.
+
+Reviewer, activator and recovery/export custodian stay **unassigned**. PO-3
+allows one authorized individual to hold reviewer and activator, but that is
+not an assignment, and no credential exists or is created.
+
+### C2. Backup-operator requirements: not met, not waived
+
+Requirements X1-X10 in proposal section 2 (ADR 0031 D6 opening rule and its
+reviewer, activator and backup-recovery rows; runbook §1 backup column and
+availability text; U5 guide provisioning text; U8 closing text; this
+report's §4, §16 B3, A6, A8, A9, A10 and B6 item 2) **remain unmet**. None is
+marked satisfied. ADR 0031 and the runbook are not edited; proposal
+section 9 gives the note to add below each requirement if SOE-1 is accepted.
+
+### C3. Updated role and credential matrix
+
+| Role                      | Primary                                 | Backup                                                | Credential / custody                                    | Status                                |
+| ------------------------- | --------------------------------------- | ----------------------------------------------------- | ------------------------------------------------------- | ------------------------------------- |
+| Primary staging operator  | **Product owner** (decision 2026-11-21) | **None available.** Requirement unmet; SOE-1 proposed | Cloudflare deploy access; current staging `ADMIN_TOKEN` | Assigned; token **not verified** (B1) |
+| Staging release approver  | **Product owner** (decision 2026-11-21) | -                                                     | Recorded approval per gate                              | Assigned; no gate approved            |
+| Reviewer                  | Unassigned                              | Unassigned (X2 unmet)                                 | Individual `reviewer` credential                        | Not provisioned (G2)                  |
+| Activator                 | Unassigned                              | Unassigned (X3 unmet)                                 | Individual `activator` credential                       | Not provisioned (G2)                  |
+| Recovery/export custodian | Unassigned                              | Unassigned (X4 unmet)                                 | Individual `reader` credential + restricted storage     | Not provisioned (G3, B4)              |
+
+### C4. Tiers and compensating controls (summary)
+
+- **Tier A (G0, G1, G1v):** SOE-1 would allow them without a backup operator,
+  under compensating controls CC-1 to CC-9 and CC-11: verified forward
+  recovery on the day, credential custody with offline account recovery,
+  complete hashed operation logs, approval records committed before each
+  window (8-hour gap proposed for irreversible steps), holds/drain checks and
+  safe stopping points, durable receipts, a written recovery card, mechanical
+  before/after cross-checks, a private continuity note, and scope
+  containment for E2E and production.
+- **Tier B (G2, G3, G4):** needs role assignment, CC-10 (PO-3: separate
+  authenticated review and activation operations, separate operation IDs and
+  receipts, separate credential IDs per role proposed), and an explicit SOE-1
+  extension.
+- **Tier C (G5 runtime cutover, optional-driver activation):** not covered.
+  Needs B4 in full and either a named backup or a new, separate exception.
+  SOE-1 ends when G5 approval is requested, or on 2027-02-28 at the latest.
+- **Production:** excluded; §18 checklist unchanged.
+
+Residual risks RS-1 to RS-8 (proposal section 6) must be accepted explicitly.
+
+### C5. Updated blocker status
+
+| Blocker                      | Status after Addendum C                                                                                                          |
+| ---------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
+| B1 staging admin credential  | **Open.** Not verified; G0 GETs not run                                                                                          |
+| B2 release identity          | **Resolved** (Addendum B)                                                                                                        |
+| B3 human roles               | **Re-scoped, open.** Operator and release approver recorded. Backup unmet; for G1 it depends on SOE-1 acceptance. G2+ roles open |
+| B4 recovery / custodian      | **Open** (G3, G5)                                                                                                                |
+| B5 staging UUID              | **Resolved as proposal**, not installed                                                                                          |
+| B6 comparison method         | **Open** (G4)                                                                                                                    |
+| B7 single-operator exception | **New, open.** SOE-1 proposed; needs explicit owner acceptance                                                                   |
+
+### C6. GO/NO-GO
+
+**Decision: NO-GO for G1.** It stays NO-GO until all of proposal section 7.1
+holds:
+
+1. B1: the current `ADMIN_TOKEN` is in the DPAPI store and the three G0 GETs
+   return 200;
+2. G0 read-only checks pass (no hold or block, lease released, no uncertain
+   intent, no pending publication recovery, Cloudflare/config/KV/ETag reads
+   unchanged, live versions and crons `[]` as recorded);
+3. SOE-1 and RS-1 to RS-8 are explicitly accepted by the product owner;
+4. the role record in C3 stands;
+5. Tier A compensating-control evidence exists;
+6. a separate G1 approval names `6a60954`, `fb60cc64…85e3d8` and
+   `c45d60b8-a723-4b6e-8530-750592af2b94` and accepts the rollback floor;
+7. window conditions hold.
+
+This addendum requests no approval for any remote operation and authorizes
+none.
