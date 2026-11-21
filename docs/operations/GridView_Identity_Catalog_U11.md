@@ -846,8 +846,11 @@ section 9 gives the note to add below each requirement if SOE-1 is accepted.
 
 ### C4. Tiers and compensating controls (summary)
 
-- **Tier A (G0, G1, G1v):** SOE-1 would allow them without a backup operator,
-  under compensating controls CC-1 to CC-9 and CC-11: verified forward
+- **Read-only G0 checks:** already authorized (A6, A9). They may run with a
+  valid staging token and **do not depend on SOE-1 acceptance**.
+- **Tier A (G0, G1, G1v):** SOE-1 would allow G1 and G1v without a backup
+  operator, only once accepted, inside a controlled no-sync window
+  (proposal §3.2), under compensating controls CC-1 to CC-9 and CC-11: verified forward
   recovery on the day, credential custody with offline account recovery,
   complete hashed operation logs, approval records committed before each
   window (8-hour gap proposed for irreversible steps), holds/drain checks and
@@ -863,13 +866,40 @@ section 9 gives the note to add below each requirement if SOE-1 is accepted.
   SOE-1 ends when G5 approval is requested, or on 2027-02-28 at the latest.
 - **Production:** excluded; §18 checklist unchanged.
 
-Residual risks RS-1 to RS-8 (proposal section 6) must be accepted explicitly.
+Residual risks RS-1 to RS-8 (proposal section 6) are **pending
+product-owner review; none is accepted**.
+
+### C4a. Corrections after owner review (2026-11-21)
+
+The owner reviewed SOE-1 and found it acceptable in principle for Tier A
+only. **That is not formal acceptance** of SOE-1 or of RS-1 to RS-8. Three
+corrections were made, in the proposal and here:
+
+1. **Empty schedules do not prove that nothing runs unattended.** Verified:
+   no cron trigger on 2026-11-17, so `scheduled()` is not invoked. Not
+   excluded: HTTP-triggered synchronization, ingest, verification, cutover,
+   rollback and purge through the admin routes for any holder of the current
+   `ADMIN_TOKEN`; other Cloudflare principals; work admitted before the
+   window (proposal §3.1, paths P1-P7). G1 therefore requires a documented
+   controlled no-sync window with pre- and post-window reads and abort
+   conditions (proposal §3.2). No production or runtime logic was added or
+   changed.
+2. **Staging token recovery (B1).** If the current token is available through
+   authorized secure custody, it is placed in the existing encrypted local
+   store without being shown. If it is not, a staging-only rotation is a
+   remote mutation that needs its own explicit authorization. It is **not
+   done**. A rotation would create a new deployed staging Worker version, so
+   the preflight baselines and every approval record naming the active
+   version would have to be refreshed (proposal §7.1).
+3. **RS-3** no longer reads as accepted. The read-only G0 checks may be run
+   with valid credentials without SOE-1 acceptance; SOE-1 acceptance is a
+   prerequisite for G1 only.
 
 ### C5. Updated blocker status
 
 | Blocker                      | Status after Addendum C                                                                                                          |
 | ---------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
-| B1 staging admin credential  | **Open.** Not verified; G0 GETs not run                                                                                          |
+| B1 staging admin credential  | **Open.** Not verified; G0 GETs not run. Recovery routes in proposal §7.1; rotation not authorized                               |
 | B2 release identity          | **Resolved** (Addendum B)                                                                                                        |
 | B3 human roles               | **Re-scoped, open.** Operator and release approver recorded. Backup unmet; for G1 it depends on SOE-1 acceptance. G2+ roles open |
 | B4 recovery / custodian      | **Open** (G3, G5)                                                                                                                |
@@ -879,20 +909,23 @@ Residual risks RS-1 to RS-8 (proposal section 6) must be accepted explicitly.
 
 ### C6. GO/NO-GO
 
-**Decision: NO-GO for G1.** It stays NO-GO until all of proposal section 7.1
+**Decision: NO-GO for G1.** It stays NO-GO until all of proposal section 7.2
 holds:
 
-1. B1: the current `ADMIN_TOKEN` is in the DPAPI store and the three G0 GETs
-   return 200;
+1. B1: the current `ADMIN_TOKEN` is in the DPAPI store (from authorized
+   custody, or after a separately authorized rotation with refreshed
+   baselines) and the three G0 GETs return 200;
 2. G0 read-only checks pass (no hold or block, lease released, no uncertain
    intent, no pending publication recovery, Cloudflare/config/KV/ETag reads
-   unchanged, live versions and crons `[]` as recorded);
+   unchanged, live versions and schedules `[]` as recorded). These checks do
+   not need SOE-1 acceptance;
 3. SOE-1 and RS-1 to RS-8 are explicitly accepted by the product owner;
 4. the role record in C3 stands;
 5. Tier A compensating-control evidence exists;
 6. a separate G1 approval names `6a60954`, `fb60cc64…85e3d8` and
    `c45d60b8-a723-4b6e-8530-750592af2b94` and accepts the rollback floor;
-7. window conditions hold.
+7. the controlled no-sync window (proposal §3.2) is recorded, its pre- and
+   post-window reads are clean and no abort condition occurs.
 
 This addendum requests no approval for any remote operation and authorizes
 none.
