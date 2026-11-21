@@ -1204,3 +1204,121 @@ Local scripts (outside the repository), SHA-256:
 **G1 remains NO-GO.** No U11 deployment, catalog provisioning,
 synchronization, provider or proxy request, publication, other secret
 change, E2E or production change, push or merge occurred.
+
+### E8. Corrective `ADMIN_TOKEN` rotation, 2026-11-21: B1 RESOLVED; G0 PASSED
+
+Owner authorization: an explicit GO for exactly one corrective staging-only
+`wrangler secret put ADMIN_TOKEN --name gridview-api-staging`, using the
+existing candidate and the reviewed `rotate-put-v2.ps1`, followed by
+read-only verification. One mutation was performed. The token value was
+never displayed, logged, committed or transmitted.
+
+**Pre-execution safeguards (all passed):**
+
+1. **Target:** exactly `gridview-api-staging` (fixed in the script's
+   arguments; account fixed; empty run directory, so no Wrangler config).
+2. **Live state (16:57:31Z):** **no difference** from the recorded `986cf8a2`
+   state (version active and latest, script etag, code hash, exports,
+   bindings and var values, secret names, settings, DO namespaces, KV,
+   schedules, E2E, production).
+3. **Script digest:** full SHA-256 of `rotate-put-v2.ps1` =
+   `19574b7a0c30fbaa0cf50a1ed73c45bc90f0f1cc20e84d4071962098eccdb016`,
+   equal to the approved digest.
+4. **Script review:** one remote-capable call (Wrangler `secret put`, fixed
+   arguments). Otherwise only local DPAPI decryption, validation and a local
+   echo test. No code upload, deploy, config read, other secret, provider
+   contact or retry.
+5. **Candidate:** 43 base64url characters, decodes to 32 bytes (booleans only
+   output).
+6. **Channel:** standalone test with a mixed dummy value through the
+   identical mechanism (BOM-less input encoding, `Process.Start`, raw
+   stream write): 43 bytes sent and 43 received, byte-identical, no BOM, no
+   trailing newline. The script's own self-test gave `43:414141`.
+
+**Execution:** 16:57:54-56Z, one call. Wrangler exit **0**, output
+`Creating the secret for the Worker "gridview-api-staging"` and
+`Success! Uploaded secret ADMIN_TOKEN`. 43 bytes were written to stdin.
+
+**Authoritative result:** exactly **one** new version,
+**`bc9b9315-c228-42cc-b406-9892ad601034`** (number 24,
+`triggered_by: secret`), at **100%**, deployment
+`59913912-53f4-4793-89e6-d12f1bad8cc4`, created 16:57:55Z.
+
+- Unchanged against the pre-execution state: script etag `5a55c1b4…5864`,
+  `index.js` `7415b82d…`, handlers, the three DO exports, compatibility,
+  all 14 bindings with var values, secret names (`ADMIN_TOKEN`,
+  `JOLPICA_PROXY_TOKEN`), script settings, DO namespaces.
+- No `IdentityCatalog`. KV 3,982 keys, digest `59624265…ccfc6`.
+- Schedules `[]` for staging, E2E and production. E2E `6b52bc02` and
+  production `62bf40e9` unchanged.
+- Secret values cannot be read back. `JOLPICA_PROXY_TOKEN`'s name is
+  retained, and the secrets API call names only `ADMIN_TOKEN`.
+
+**Admin verification (G0), 16:58:31-32Z, new token:**
+
+| GET                                     | HTTP    | Finding                                                                                                                                                                                           |
+| --------------------------------------- | ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `CutoverStatus`                         | **200** | `state: active`, `phase: activate`, `admissionClosed: false`, `authoritative: true`, active `pm1-000000000001d-aed72435`, previous `pm1-000000000001c-a82904e2`, fingerprint `cutover1:38f72606…` |
+| `SyncStatus`                            | **200** | Legacy sync record: last completed 2026-10-13T03:18:04Z, no failure, no skipped jobs; last publication `pm1-000000000001b-cbcf2628` applied                                                       |
+| `Inspect` (reconciliation, season 2026) | **200** | `seasonRecordVersion 11`; operator hold **none**; durable block **none**; publication disposition and due time **none**; lease **released**; backlog 0/60 `normal`                                |
+
+Across all 20 rounds there are no markers, terminal reasons, candidate,
+staged or competing corrections, dispositions or verification activity. So
+there is **no unresolved hold, block, lease, uncertain operation or pending
+publication recovery**. Informational only: rounds 18 and 19 are
+`unsettled` with observed content never published, and round 20 is
+`absent`. This is consistent with the 2026-11-12 sync whose publication was
+withheld. `publishedReconciliation` is `pm1-000000000001d-aed72435`, at
+2026-11-12T19:15:33Z.
+
+**Other checks:**
+
+- Public routes: 14/14 return 200 with ETags identical to 2026-11-17.
+- Token-value scan of the evidence folders, session scratchpad, Wrangler
+  log folder and `docs/operations`: 378 files, **0** matches.
+
+**Credential custody:** after all three GETs authenticated and the checks
+passed, the candidate was promoted.
+
+- The standard DPAPI store's ciphertext equals the former candidate's.
+- It decrypts to 43 characters (boolean output only).
+- The candidate file no longer exists.
+- The 2026-09-13 store is kept as
+  `staging-admin-token.OBSOLETE-from-20260913-superseded-20261121.dpapi`,
+  ciphertext unchanged, invalid on staging.
+
+**B1: RESOLVED.** The current staging `ADMIN_TOKEN` is in authorized custody
+and verified.
+
+**Refreshed G0 baseline (2026-11-21 16:58Z).** Every G1 approval, recovery
+card and NSW-1 check must name this version:
+
+- **staging active version `bc9b9315-c228-42cc-b406-9892ad601034`**;
+- script etag `5a55c1b4…5864`, `index.js` `7415b82d…` (the `027da5d` build);
+- bindings and var values as on 2026-11-17;
+- secrets `ADMIN_TOKEN` (new) and `JOLPICA_PROXY_TOKEN`;
+- KV 3,982 keys `59624265…ccfc6`; public ETags as on 2026-11-17;
+- schedules `[]` x3; E2E `6b52bc02`, production `62bf40e9`;
+- admin state as in the table above.
+
+The G1 rollback-floor statement becomes: creating `IdentityCatalog` ends
+`wrangler rollback` to `bc9b9315` and every earlier version. Versions
+`986cf8a2` and `1d858d56` carry superseded `ADMIN_TOKEN` values and are not
+recovery targets.
+
+Scripts (local, outside the repository): `rotate-put-v2.ps1` (as executed)
+`19574b7a…b016`; `staging-state.mjs` `0917fc56…feda`.
+
+**GO/NO-GO.** G0 has **PASSED**. **G1 remains NO-GO.** Still required:
+
+- compensating-control evidence for Tier A (CC-1 to CC-9 and CC-11,
+  including the no-sync window plan and the recovery card, both naming
+  `bc9b9315`);
+- an approval record committed at least eight hours before execution;
+- the owner's separate approval of the exact irreversible deployment
+  (`6a60954`, `fb60cc64…85e3d8`,
+  `c45d60b8-a723-4b6e-8530-750592af2b94`, rollback floor `bc9b9315`).
+
+Nothing else happened: no U11 deployment, catalog provisioning,
+synchronization, publication, provider or proxy request, other secret
+change, E2E or production change, push or merge.
