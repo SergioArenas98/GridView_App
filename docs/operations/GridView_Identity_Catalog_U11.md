@@ -1381,3 +1381,32 @@ Packet: `GridView_Identity_Catalog_U11_G1_Readiness.md` (`f04146c`).
 3. The separate G1 approval, recorded and committed. The eight-hour interval
    starts only then.
 4. Deployment-day work: CC-1 rebuilds, NSW-1 reads, log and manifest.
+
+---
+
+## Addendum G - 2026-11-21: owner attestations, CC-9, final G1 packet
+
+- Authorization used: documentation and read-only checks. No mutation.
+  G1 remains **NOT AUTHORIZED**.
+- **Owner attestations (2026-11-21), recorded as statements only:** Cloudflare
+  MFA is enabled; account recovery codes are stored securely outside the
+  computer. No secret or code was requested, inspected or recorded. The
+  product owner remains sole operator and staging release approver under
+  SOE-1.
+- **CC-9:** the private continuity note exists outside the repository, in
+  the GridView private operations directory. It contains no secrets and is
+  readable by the owner's account.
+- **Fresh read-only checks, 19:26-19:27Z:** Cloudflare state identical to
+  E8 (`bc9b9315` active and latest; no `IdentityCatalog`); G0 GETs 200 with
+  bodies identical to E8; public ETags unchanged; E2E and production
+  unchanged.
+- **Baseline references:** sections 4-16 and Addenda A-D name `1d858d56`
+  as the staging version. Those statements were correct when written and
+  are kept as history. From E8 onward the verified pre-G1 baseline and
+  rollback boundary is **`bc9b9315-c228-42cc-b406-9892ad601034`**. The
+  readiness packet and SOE-1 use it.
+- **Readiness:** `GridView_Identity_Catalog_U11_G1_Readiness.md` revision 2
+  holds the control status (sections 5-7) and the final unsigned approval
+  record with objective abort conditions (section 8). The only remaining
+  blocker is the owner's explicit G1 approval, committed, followed by at
+  least eight hours.
