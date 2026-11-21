@@ -1111,3 +1111,96 @@ source. **Not approved, not prepared as a script, not performed.**
    2-5, read-only.
 2. If you do not: approve, or decline, the E5 staging-only rotation as a
    separate remote mutation. If you approve, name the window.
+
+### E7. Staging `ADMIN_TOKEN` rotation, 2026-11-21: executed; authentication NOT verified
+
+Owner authorization: an explicit GO for one staging-only
+`wrangler secret put ADMIN_TOKEN --name gridview-api-staging`, run from an
+empty scratch directory with the value supplied from a DPAPI candidate on
+stdin, plus verification steps 1-7. No other remote mutation was performed.
+The token value was never displayed, logged or committed.
+
+**Method chosen and why.** The classic `secret put` is one server-side call,
+`PUT …/workers/scripts/gridview-api-staging/secrets`. Cloudflare copies the
+deployed version and changes only that secret, which is the mechanism that
+produced `1d858d56`. It was run from an empty directory, where no Wrangler
+configuration resolves (verified), so the U11 `wrangler.toml` was never
+read. `wrangler versions secret put` was **rejected**: Wrangler 4.112
+re-uploads the modules with `exports` undefined, while the live runtime
+declares three Durable Object exports. How deploying such a version would
+reconcile those classes is not verifiable, and the ledger and sequencer
+data depend on them.
+
+| Time (UTC)  | Step                                                                                                                                         | Result                                                                                                                                                                                                                                                                                                                                                                                   |
+| ----------- | -------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 16:21       | Candidate generated locally: 32 bytes from the OS CSPRNG, 43-character base64url, DPAPI CurrentUser, separate file, previous store untouched | OK                                                                                                                                                                                                                                                                                                                                                                                       |
+| 16:28:03    | Step 1 read-only preflight compared with the approved baseline (16:19)                                                                       | **No differences**: active and latest `1d858d56`, script etag `5a55c1b4…5864`, `index.js` `7415b82d…`, three DO exports, 14 bindings with identical var values, secret names `ADMIN_TOKEN` and `JOLPICA_PROXY_TOKEN`, settings, DO namespaces, no `IdentityCatalog`, KV 3,982 keys `59624265…ccfc6`, schedules `[]` x3, E2E `6b52bc02`, production `62bf40e9`                            |
+| 16:28:26    | In-memory safeguard on the candidate                                                                                                         | Non-empty, exactly 43 base64url characters, decodes to 32 bytes; 43 bytes written to stdin                                                                                                                                                                                                                                                                                               |
+| 16:28:26-29 | `secret put`, executed once                                                                                                                  | Exit 0, empty output (`WRANGLER_LOG=warn` hides the success line), so **ambiguous**. Not repeated                                                                                                                                                                                                                                                                                        |
+| 16:28:43    | Authoritative state read                                                                                                                     | **One new version `986cf8a2-89a3-4654-8000-67d751dcc8b6`** (number 23, `triggered_by: secret`) at 100%, deployment `96be14aa-f3a2-48de-84bf-d0adaea1530c`. Everything else equals the preflight: script etag, `index.js` hash, handlers, exports, compatibility, bindings and var values, secret names, settings, DO namespaces, KV, schedules, E2E and production. No `IdentityCatalog` |
+| 16:29:06    | One `CutoverStatus` GET with the candidate                                                                                                   | **HTTP 401. Stopped**; no retry, no `SyncStatus` or `Inspect`, no promotion                                                                                                                                                                                                                                                                                                              |
+| after       | Public routes                                                                                                                                | 14/14 return 200, ETags identical to 2026-11-17                                                                                                                                                                                                                                                                                                                                          |
+| after       | Token-value scan (count only) of the evidence folders, the session scratchpad and Wrangler's log folder                                      | 298 files, **0** contain the value                                                                                                                                                                                                                                                                                                                                                       |
+
+**Root cause (verified locally with a dummy value, no remote request).** On
+this machine the console input code page is 65001, UTF-8 with a 3-byte
+preamble. Windows PowerShell's `Process.StandardInput` is a `StreamWriter`
+in that encoding, and it wrote the preamble (`EF BB BF`) before the raw
+bytes the script wrote to the underlying stream. A local echo of 43 dummy
+bytes through the identical procedure received 46 bytes, starting with
+`efbbbf`. Wrangler removes only trailing whitespace. The staging secret is
+therefore, with near certainty, U+FEFF followed by the candidate (44
+characters), which no Bearer header matches. The safeguard validated the
+candidate and the byte count written, but not what the channel added.
+
+**Current state.**
+
+- Staging serves version `986cf8a2` with unchanged code, configuration and
+  data.
+- Its admin routes are unusable for every holder: the unknown 2026-11-12
+  value no longer works, and the new value was stored with the leading BOM.
+- No cron or other automatic path depends on `ADMIN_TOKEN` (§3.1 of SOE-1).
+  Public routes are unaffected.
+- A `wrangler rollback` to `1d858d56` would restore the unknown 2026-11-12
+  value, so it is not a recovery path.
+- B1 remains **open**. The candidate is kept, not promoted. The previous
+  store is unchanged and still invalid.
+
+**Refreshed G0 baseline (Cloudflare and public parts only).**
+
+- Active staging version `986cf8a2…` (replaces `1d858d56` as the expected
+  active version).
+- Script etag `5a55c1b4…5864`; `index.js` `7415b82d…`.
+- Exports, bindings and var values, and secret names as above.
+- KV 3,982 keys, digest `59624265…ccfc6`.
+- Schedules `[]` on all three Workers; E2E `6b52bc02`, production `62bf40e9`.
+- Public ETags as on 2026-11-17.
+- The admin part (holds, blocks, lease, intents) is **still unread**.
+
+**Proposed correction (needs a new explicit GO, not run).**
+`rotate-put-v2.ps1` repeats the same single `secret put` with the **same
+candidate value**, with two changes:
+
+- it sets a BOM-less UTF-8 input encoding before starting Wrangler; a local
+  dummy echo then receives exactly 43 bytes with no preamble;
+- immediately before the real call, it self-tests the exact channel with a
+  dummy value and aborts unless exactly `43:414141` comes back.
+
+It also logs at `log` level, so Wrangler's success line is visible. The
+expected effect is one more `triggered_by: secret` version with everything
+else unchanged. Then: one `CutoverStatus` GET, stopping on non-200; then
+`SyncStatus`, `Inspect`, promotion and the remaining checks, as in the
+original plan.
+
+Local scripts (outside the repository), SHA-256:
+
+| Script                                  | SHA-256         |
+| --------------------------------------- | --------------- |
+| `generate-candidate.ps1`                | `dabadbfd…b10e` |
+| `staging-state.mjs`                     | `0917fc56…feda` |
+| `rotate-put.ps1` (v1, as executed)      | `24961614…0d8b` |
+| `rotate-put-v2.ps1` (proposed, not run) | `19574b7a…b016` |
+
+**G1 remains NO-GO.** No U11 deployment, catalog provisioning,
+synchronization, provider or proxy request, publication, other secret
+change, E2E or production change, push or merge occurred.
