@@ -1322,3 +1322,62 @@ Scripts (local, outside the repository): `rotate-put-v2.ps1` (as executed)
 Nothing else happened: no U11 deployment, catalog provisioning,
 synchronization, publication, provider or proxy request, other secret
 change, E2E or production change, push or merge.
+
+---
+
+## Addendum F - 2026-11-21: formal SOE-1 acceptance and G1 readiness
+
+- Authorization used: documentation and local `--dry-run` builds only. No
+  remote change. G1 remains **NOT AUTHORIZED**.
+- Release candidate `6a609543fd762b028e0e3b4101d2f0ce9e851ce0`, bundle
+  `fb60cc64…85e3d8`, UUID `c45d60b8-a723-4b6e-8530-750592af2b94` and the
+  6,386 / 6 / 0 acceptance are unchanged.
+
+### F1. Owner decision
+
+SOE-1 was formally accepted, effective 2026-11-21, for staging Tier A only
+(G0, G1 subject to its own authorization, G1v).
+
+- RS-1 to RS-8 were accepted individually (SOE-1 §11).
+- The product owner is primary staging operator and staging release
+  approver. No backup operator exists.
+- X1, X6, X9 and X10 remain unmet and are excepted for Tier A only.
+- Expiry at the latest 2027-02-28, with no automatic extension.
+- ADR 0031 D6 and runbook §1 already carry the narrow exception note
+  (`b055dcb`); their requirements are unchanged.
+- The offline-comparison policy proposal stays pending.
+
+### F2. Clarifications reconciled
+
+- **A, empty schedules:** SOE-1 §3.1 and §3.2 distinguish cron triggers
+  from HTTP-triggered and manual paths, and define the controlled no-sync
+  window.
+- **B, token:** the corrective rotation succeeded and G0 passed (E8). No
+  further rotation is required or authorized. History is kept: `1d858d56`
+  (prior), `986cf8a2` (failed authentication, BOM), `bc9b9315` (current).
+- **C, RS-3:** recorded as accepted on 2026-11-21. Read-only G0 checks do
+  not require SOE-1; G1 requires its formal acceptance.
+
+### F3. G1 readiness
+
+Packet: `GridView_Identity_Catalog_U11_G1_Readiness.md` (`f04146c`).
+
+- Baseline and rollback boundary: `bc9b9315-c228-42cc-b406-9892ad601034`.
+  Existing reconciliation observations (rounds 18-19 unsettled, round 20
+  absent) are left untouched.
+- R-1 `--dry-run` reproduced `fb60cc64…85e3d8` on 2026-11-21. R-2 is
+  byte-identical to R-1 after build-path normalization. Its raw hash
+  depends on where the scratch config sits; it is `c4714402…7953` from the
+  pinned location.
+- RC config vs live: only the four `IDENTITY_*` vars, the `IdentityCatalog`
+  export and the `IDENTITY_CATALOG` binding are added.
+- Unsigned G1 authorization text: packet section 6.
+
+### F4. Remaining blockers for G1 (NO-GO)
+
+1. Owner attestation for CC-2: Cloudflare MFA enabled and recovery codes
+   stored offline. Codes are not to be shared.
+2. CC-9 private continuity note.
+3. The separate G1 approval, recorded and committed. The eight-hour interval
+   starts only then.
+4. Deployment-day work: CC-1 rebuilds, NSW-1 reads, log and manifest.
