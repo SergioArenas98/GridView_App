@@ -219,12 +219,12 @@ describe('operator recovery route', () => {
       season: 2026,
       command: 'bookmark',
     });
-    expect(t.catalog.seen[0].name).toBe(
+    expect(t.catalog.seen[0]!.name).toBe(
       'identity:c45d60b8-a723-4b6e-8530-750592af2b94',
     );
-    expect(t.ledger.seen[0].name).toBe('reconciliation');
-    expect(t.sequencer.seen[0].name).toBe('2026');
-    expect(t.catalog.seen[0].body).toEqual({ command: 'bookmark' });
+    expect(t.ledger.seen[0]!.name).toBe('reconciliation');
+    expect(t.sequencer.seen[0]!.name).toBe('2026');
+    expect(t.catalog.seen[0]!.body).toEqual({ command: 'bookmark' });
   });
 
   it('refuses restore and restart unless RECOVERY_RESTORE is enabled', async () => {

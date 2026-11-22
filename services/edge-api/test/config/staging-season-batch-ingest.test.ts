@@ -106,6 +106,20 @@ function fallbackVars(): Partial<Env> {
   return { ...resolvedVars('staging'), PROVIDER_MODE: 'none' };
 }
 
+/**
+ * Identity U11 G5: staging commits runtime catalog authority, under which a
+ * v1 batch is refused (`runtime-batch-requires-u7`) before any later ingest
+ * stage, and the legacy provider path is never built. The guarded ingest
+ * pipeline's own properties below (mode admission, attribution version,
+ * guarded sequencer, staleness, no legacy fallback) are authority-independent
+ * and are exercised under explicit bundled authority, the authority of every
+ * environment without identity variables (production). The committed
+ * runtime behaviour is pinned separately ("under runtime authority").
+ */
+function bundled(vars: Partial<Env>): Partial<Env> {
+  return { ...vars, IDENTITY_CATALOG_MODE: 'bundled' };
+}
+
 function bindingNames(environment: Environment): string[] {
   return resolved(environment).durable_objects.bindings.map(
     (binding: { readonly name: string }) => binding.name,
@@ -123,12 +137,12 @@ describe('the resolved configuration', () => {
       SEASON_PUBLICATION_CUTOVER_CONTROL: 'activate:2026',
       SEASON_PUBLICATION_AUTHORITY: 'sequencer',
       SEASON_BATCH_INGEST: '2026',
-      // Identity U11: staging installation, bundled authority with review
-      // administration (G2b; inventory mode absent = strict).
+      // Identity U11: staging installation, runtime authority with read-only
+      // administration (G5; inventory mode absent = strict).
       IDENTITY_INSTALLATION_ID: 'c45d60b8-a723-4b6e-8530-750592af2b94',
-      IDENTITY_CATALOG_MODE: 'bundled',
+      IDENTITY_CATALOG_MODE: 'runtime',
       IDENTITY_DISCOVERY_MODE: 'off',
-      IDENTITY_ADMIN_MODE: 'review',
+      IDENTITY_ADMIN_MODE: 'read-only',
     });
     // Assigned only in staging and production (W1), never in development.
     expect(rawConfig.match(/^\s*SEASON_BATCH_INGEST\s*=/gm)).toHaveLength(2);
@@ -369,11 +383,29 @@ describe("staging's fallback variables cannot publish mock data", () => {
 
     await worker.scheduled?.(
       {} as ScheduledController,
-      workerEnv({ ...fallbackVars(), PROVIDER_MODE: 'mock' }, context),
+      workerEnv(bundled({ ...fallbackVars(), PROVIDER_MODE: 'mock' }), context),
     );
 
     expect(spies.mockFetch).toHaveBeenCalledTimes(1);
     expect(spies.sequencedPublish).toHaveBeenCalledTimes(1);
+  });
+
+  it('under the committed runtime authority, even mock mode builds no legacy provider and publishes nothing', async () => {
+    const context = await ingestContext();
+    const before = await context.coordinator.readAuthority(SEASON);
+    const spies = publicationSpies();
+    const env = workerEnv(
+      { ...fallbackVars(), PROVIDER_MODE: 'mock' },
+      context,
+    );
+    expect(env.IDENTITY_CATALOG_MODE).toBe('runtime');
+
+    await worker.scheduled?.({} as ScheduledController, env);
+
+    expect(spies.mockFetch).not.toHaveBeenCalled();
+    expect(spies.sequencedPublish).not.toHaveBeenCalled();
+    expect(spies.legacyPublish).not.toHaveBeenCalled();
+    expect(await context.coordinator.readAuthority(SEASON)).toEqual(before);
   });
 });
 
@@ -439,12 +471,51 @@ describe('the committed production ingest needs its genesis control', () => {
 });
 
 describe('the committed staging ingest under the coordinated mode', () => {
-  it('refuses a valid, authenticated submission as provider-mode-coordinated, before reading it', async () => {
+  it('under runtime authority, refuses a v1 submission as runtime-batch-requires-u7, before reading it', async () => {
     const context = await ingestContext();
     const before = await context.coordinator.readAuthority(SEASON);
     context.storage.writeLog.length = 0;
     const spies = publicationSpies();
     const env = workerEnv(resolvedVars('staging'), context);
+    expect(env.IDENTITY_CATALOG_MODE).toBe('runtime');
+
+    const answer = await ingestResponse(
+      env,
+      adminPost(INGEST, submissionFor(batch, SEED_VERSION)),
+    );
+
+    expect(answer).toEqual({
+      status: 409,
+      data: {
+        outcome: 'refused',
+        stage: 'admission',
+        reason: 'runtime-batch-requires-u7',
+      },
+      bodyUsed: false,
+    });
+    expect(spies.guardedPublish).not.toHaveBeenCalled();
+    expect(context.storage.writeLog).toEqual([]);
+    expect(await context.coordinator.readAuthority(SEASON)).toEqual(before);
+  });
+
+  it('under runtime authority, the fallback to none still refuses a v1 submission', async () => {
+    const context = await ingestContext();
+    const spies = publicationSpies();
+    const answer = await ingestResponse(
+      workerEnv(fallbackVars(), context),
+      adminPost(INGEST, submissionFor(batch, SEED_VERSION)),
+    );
+    expect(answer.status).toBe(409);
+    expect(answer.data).toMatchObject({ reason: 'runtime-batch-requires-u7' });
+    expect(spies.guardedPublish).not.toHaveBeenCalled();
+  });
+
+  it('refuses a valid, authenticated submission as provider-mode-coordinated, before reading it', async () => {
+    const context = await ingestContext();
+    const before = await context.coordinator.readAuthority(SEASON);
+    context.storage.writeLog.length = 0;
+    const spies = publicationSpies();
+    const env = workerEnv(bundled(resolvedVars('staging')), context);
     expect(env.PROVIDER_MODE).toBe('coordinated');
 
     const answer = await ingestResponse(
@@ -469,7 +540,7 @@ describe('the committed staging ingest under the coordinated mode', () => {
   it('is sensitive: the fallback to none admits the same submission', async () => {
     const context = await ingestContext();
     const answer = await ingestResponse(
-      workerEnv(fallbackVars(), context),
+      workerEnv(bundled(fallbackVars()), context),
       adminPost(INGEST, submissionFor(batch, SEED_VERSION)),
     );
     expect(answer.status).toBe(200);
@@ -528,7 +599,7 @@ describe('the forward fallback to manual batches, the ledger kept', () => {
     logger = new CapturingLogger(),
   ): Env {
     return {
-      ...workerEnv(fallbackVars(), context, logger),
+      ...workerEnv(bundled(fallbackVars()), context, logger),
       RECONCILIATION_LEDGER: ledger,
     };
   }
@@ -622,7 +693,7 @@ describe("the staging ingest stays authenticated and guarded (committed token ch
   it('publishes a reviewed batch through the guarded sequencer only, and refuses its resend as stale', async () => {
     const context = await ingestContext();
     const spies = publicationSpies();
-    const env = workerEnv(fallbackVars(), context);
+    const env = workerEnv(bundled(fallbackVars()), context);
 
     const first = await ingestResponse(
       env,
@@ -668,7 +739,7 @@ describe("the staging ingest stays authenticated and guarded (committed token ch
     // fewer classified rounds than the batch, as mock round 12 does against a
     // real capture. D14 refuses any rollback that drops a classified round.
     const context = await ingestContext();
-    const env = workerEnv(fallbackVars(), context);
+    const env = workerEnv(bundled(fallbackVars()), context);
     const first = await ingestResponse(
       env,
       adminPost(INGEST, submissionFor(batch, SEED_VERSION)),
@@ -698,7 +769,7 @@ describe("the staging ingest stays authenticated and guarded (committed token ch
     context.storage.writeLog.length = 0;
     const spies = publicationSpies();
     const env = {
-      ...workerEnv(fallbackVars(), context),
+      ...workerEnv(bundled(fallbackVars()), context),
       __SEASON_PUBLICATION_SEQUENCER: undefined,
     } as Env;
 

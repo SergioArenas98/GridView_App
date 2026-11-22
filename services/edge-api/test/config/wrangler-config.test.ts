@@ -146,9 +146,9 @@ describe('season 2026 activation-phase configuration (ADR 0025 D12)', () => {
       // Identity U11: the proposed, inert staging installation (no
       // inventory-mode variable: absent resolves to strict).
       'IDENTITY_INSTALLATION_ID = "c45d60b8-a723-4b6e-8530-750592af2b94"',
-      'IDENTITY_CATALOG_MODE = "bundled"',
+      'IDENTITY_CATALOG_MODE = "runtime"',
       'IDENTITY_DISCOVERY_MODE = "off"',
-      'IDENTITY_ADMIN_MODE = "review"',
+      'IDENTITY_ADMIN_MODE = "read-only"',
     ]);
     // The seed phase is no longer configured anywhere.
     expect(config).not.toMatch(/^[^#\n]*"seed:/m);

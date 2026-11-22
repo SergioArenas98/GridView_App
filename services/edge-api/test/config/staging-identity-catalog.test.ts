@@ -1,11 +1,11 @@
 /**
  * Identity U11: the staging identity catalog is staging-only and, as
- * committed for G2b, keeps bundled authority with review administration
+ * committed for G5, selects runtime authority with read-only administration
  * (ADR 0031 D5; design §11.1-11.2).
  *
  * The committed staging declaration is a proposal awaiting the owner's
  * deployment approval. These assertions pin what that proposal may contain:
- * one fresh installation UUID, bundled/off/review modes, no inventory-mode
+ * one fresh installation UUID, runtime/off/read-only modes, no inventory-mode
  * variable (absent = strict), the reviewer credentials secret required by
  * name but never committed, one named SQLite
  * export and Worker-local binding, and nothing at all in production, the
@@ -49,17 +49,17 @@ describe('the proposed staging identity catalog (identity U11)', () => {
     const vars = identityVars(resolved('staging').vars);
     expect(vars).toEqual({
       IDENTITY_INSTALLATION_ID: 'c45d60b8-a723-4b6e-8530-750592af2b94',
-      IDENTITY_CATALOG_MODE: 'bundled',
+      IDENTITY_CATALOG_MODE: 'runtime',
       IDENTITY_DISCOVERY_MODE: 'off',
-      IDENTITY_ADMIN_MODE: 'review',
+      IDENTITY_ADMIN_MODE: 'read-only',
     });
     expect(vars.IDENTITY_INSTALLATION_ID).toMatch(uuidV4);
   });
 
-  it('resolves to bundled authority and strict inventory at runtime', () => {
+  it('resolves to runtime authority and strict inventory at runtime', () => {
     const vars = resolved('staging').vars as Record<string, string | undefined>;
     const catalogMode = resolveIdentityCatalogMode(vars.IDENTITY_CATALOG_MODE);
-    expect(catalogMode).toBe('bundled');
+    expect(catalogMode).toBe('runtime');
     expect(
       resolveOperationalInventoryMode(
         vars.IDENTITY_INVENTORY_MODE,

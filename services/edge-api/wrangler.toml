@@ -160,18 +160,21 @@ SEASON_PUBLICATION_AUTHORITY = "sequencer"
 # ingest"). Development and production do not set it.
 SEASON_BATCH_INGEST = "2026"
 
-# Identity catalog (ADRs 0029-0031; identity U11). G1 (bundled/off/off) is
-# deployed to staging as 13c3a90c (2026-11-22). This commit is the G2b
-# proposal, deployed only after G2a (admin `read-only`) is verified; both
-# need the owner's signed U11 P1 approval
-# (docs/operations/GridView_Identity_Catalog_U11_P1_Packet.md).
+# Identity catalog (ADRs 0029-0031; identity U11). Staging history: G1
+# (bundled/off/off) 2026-11-22; P1 (G2 credentials and admin review, G3 R0
+# seed, validation and activation) 2026-11-22, staging 59a882a0.
+# This commit is the G5 runtime-strict cutover configuration. Deploying it
+# needs the owner's live confirmation under U11 amendment A1.
 #
-# Catalog `bundled` keeps the bundled mappings authoritative; discovery `off`
-# builds no collector. Admin `review` (G2b) also accepts identity writes, each
-# from an individual credential holding the exact role the route requires
-# (reviewer or activator), with its own operation ID and durable receipt. The
-# shared ADMIN_TOKEN is never accepted on identity routes. Without a valid
-# credentials secret every identity route still answers 404.
+# Catalog `runtime`: coordinated runs pin the active staging catalog revision
+# and fail closed (`catalog-unavailable`, no provider request, no bundled
+# fallback) if the catalog is unbound or unreadable. Discovery `off` builds no
+# collector. Admin `read-only` (owner decision D14): individual credentials
+# may read the catalog; every identity write is refused
+# (`IDENTITY_WRITES_DISABLED`); re-enabling `review` is a separate decision.
+# In `read-only` the shared ADMIN_TOKEN reaches only the U2 discovery-health
+# compatibility read, never catalog routes. With no valid credentials secret
+# the catalog routes answer 503 `CATALOG_UNAVAILABLE`.
 # The inventory-mode variable is deliberately absent, which resolves to
 # `strict`; no committed configuration may name it (inventory-policy
 # acceptance 37), so the optional-driver policy cannot be selected here.
@@ -181,9 +184,9 @@ SEASON_BATCH_INGEST = "2026"
 # never to be reused by E2E or production. It binds the catalog object
 # `identity:<id>`; a different persisted ID refuses initialization.
 IDENTITY_INSTALLATION_ID = "c45d60b8-a723-4b6e-8530-750592af2b94"
-IDENTITY_CATALOG_MODE = "bundled"
+IDENTITY_CATALOG_MODE = "runtime"
 IDENTITY_DISCOVERY_MODE = "off"
-IDENTITY_ADMIN_MODE = "review"
+IDENTITY_ADMIN_MODE = "read-only"
 
 # Bindings are not inherited by named environments, so each one redeclares it.
 [[env.staging.durable_objects.bindings]]

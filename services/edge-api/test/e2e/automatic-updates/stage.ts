@@ -331,6 +331,13 @@ export class AutomaticUpdateStage {
     options: {
       /** The KV namespace a `demonstration` Worker reads its source from. */
       readonly controlledSource?: ControlledSourceStore;
+      /**
+       * Keep the committed identity authority. Since identity U11 G5, staging
+       * commits runtime authority, which needs a bound, active catalog; this
+       * in-process stage binds none, so with the committed authority every run
+       * fails closed (pinned in staging-automatic-updates.test.ts).
+       */
+      readonly committedAuthority?: boolean;
     } = {},
   ): Promise<AutomaticUpdateStage> {
     const harness = await ObservationHarness.create({
@@ -350,6 +357,13 @@ export class AutomaticUpdateStage {
     }
     const env: Env = {
       ...committedVars(demonstration ? 'staging' : environment),
+      // The automatic-update behaviour under test is the coordinated pipeline,
+      // run under bundled authority unless the committed one is requested. The
+      // runtime path is output-identical for the active R0 catalog (U11 G4
+      // offline parity; cutover.test.mjs compares bundled, compare, runtime).
+      ...(options.committedAuthority
+        ? {}
+        : { IDENTITY_CATALOG_MODE: 'bundled' }),
       ...(demonstration ? DEMONSTRATION_DELTA : {}),
       PROVIDER_MODE: AUTOMATIC_ACTIVATION_DELTA.PROVIDER_MODE,
       ADMIN_TOKEN: 'never-used-by-the-gate',

@@ -99,8 +99,29 @@ describe('the committed staging configuration (gate AU-4 step 1)', () => {
 });
 
 describe('the committed staging variables at run time', () => {
+  it('under runtime authority with no catalog bound, every run fails closed before any provider request or publication', async () => {
+    const stage = await AutomaticUpdateStage.create('staging', {
+      committedAuthority: true,
+    });
+    expect(stage.env.IDENTITY_CATALOG_MODE).toBe('runtime');
+    expect(stage.env.IDENTITY_CATALOG).toBeUndefined();
+    const before = stage.activeVersion();
+
+    const first = await stage.tick(PRE_SEASON);
+    const second = await stage.tick(later(PRE_SEASON, HOUR));
+
+    expect(first.requests).toEqual([]);
+    expect(second.requests).toEqual([]);
+    expect(stage.releases()).toHaveLength(0);
+    expect(stage.activeVersion()).toBe(before);
+  });
+
+  // The coordinated pipeline itself (bootstrap, then publication) under
+  // explicit bundled authority; the runtime path with an active catalog is
+  // exercised by test/identity/integration/cutover.test.mjs and restore.test.mjs.
   it('with the ledger bound, bootstrap and publish through the coordinated path', async () => {
     const stage = await AutomaticUpdateStage.create('staging');
+    expect(stage.env.IDENTITY_CATALOG_MODE).toBe('bundled');
     // The stage's env is the committed variables; the delta it lays over
     // them no longer changes the mode.
     expect(stage.env.PROVIDER_MODE).toBe(
