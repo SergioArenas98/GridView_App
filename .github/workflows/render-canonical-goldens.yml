@@ -52,13 +52,15 @@ jobs:
       - name: Install dependencies
         run: flutter pub get
 
-      # Only the suites that own a golden assertion.
+      # Only the suites that own a golden assertion: the same list, in the same
+      # order, as the golden-freshness job in pull_request.yml.
       - name: Render every golden
         run: |
           flutter test \
             test/design_system/golden_test.dart \
             test/screens/screen_golden_test.dart \
             test/screens/light_theme_golden_test.dart \
+            test/screens/global_ui_golden_test.dart \
             test/settings/settings_golden_test.dart \
             test/media/media_golden_test.dart \
             --update-goldens
