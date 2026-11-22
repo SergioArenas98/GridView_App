@@ -1927,3 +1927,75 @@ removed from unresolved. Totals: 34 drivers, 95 bindings, 6 unresolved.
   classification, so the optional-driver policy (P3) can unblock
   publication while race and standings guards stay strict.
 - Candidates remain for those three keys (unresolved, not quarantined).
+
+---
+
+## Addendum P - 2026-11-22: optional-driver inventory (P3) activated; first runtime publication
+
+Code `51f7667`. Each remote step was confirmed live by the owner (C1 and
+C2). Evidence: `~/.gridview/evidence/identity-u11-p3-2026-11-22/`
+(manifest `48e373f0…`, 37 files).
+
+### P1. Change
+
+- Only `[env.staging.vars]` gains `IDENTITY_INVENTORY_MODE =
+"optional-drivers"`. Acceptance 37 now allows exactly that one assignment;
+  production, E2E, development and every other committed config stay
+  forbidden.
+- New config test: the committed staging variables resolve to
+  `optional-drivers` only with the catalog binding. Without the binding, or
+  under bundled authority, they are a configuration error (500 on admin
+  routes, including hold and release).
+- **Recovery builds must drop the variable.** R-3 (strict) and R-4 (catalog
+  unbound) were regenerated from `51f7667` with it removed, and both dry-run
+  cleanly (`recovery/`).
+- Unit tests that run the committed staging variables without a bound
+  catalog keep exercising the strict policy. The runtime + optional path with
+  a real catalog stays covered by `optional-inventory.test.mjs` (T23-T25,
+  T24 race guard).
+- Targeted verification (owner instruction, no full cycle): config,
+  inventory-policy, optional-inventory integration, driver-inventory,
+  catalog-v2-optional and automatic-update suites, 272 passed / 0 failed;
+  eslint and `tsc --noEmit` clean.
+
+### P2. Remote steps
+
+| Step                   | Time (UTC)        | Result                                                                                                                                                                                                          |
+| ---------------------- | ----------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| C1 deploy `51f7667`    | 21:28:12          | version **`5ee3b49c`**; by-name comparison: only the `IDENTITY_INVENTORY_MODE` binding added; bundle `4595219f…` and script etag unchanged; 14 ETags identical                                                  |
+| Pre-C2 recovery point  | 21:29             | bookmarks catalog `00000007-…b40a`, ledger `00000023-…d075`, sequencer `0000009f-…2e4c`; G0 PASS; KV 3,982 keys `df568003…`                                                                                     |
+| **C2 sync (D9 run 3)** | 21:29:40-21:31:27 | observed, 27 requests (the constructors request now runs), committed; `classification.first-write` 2, `refresh.first-observation` 2; **published `pm1-000000000001e-3aa0228f`**, 1 publish call, lease released |
+
+### P3. Publication review
+
+- **KV:** +124 keys (the new release), 0 removed; only `meta:content-schema`
+  changed. All 29 earlier releases are retained.
+- **Against the previous release `…1d`:**
+  - GP1-17 results are identical apart from `meta` (D14 held). 72 of 119
+    common documents are data-identical.
+  - New: results for GP18-21 and the driver document for `rafael-camara`.
+  - Changed: standings and points, calendar `hasResults` for rounds 18-21,
+    and dependent driver and constructor documents.
+- **Participation (D15):** 26 → 28 entries, none removed or reassigned.
+  Added `2026-rafael-camara-20` (Haas, from R20) and `2026-ryo-hirakawa-19`
+  (Haas, R19 only). Esteban Ocon's entry gained `endRound 18`.
+- **Câmara:** GP20 present, GP21 P16 Haas (grid 15), in driver standings;
+  published name "Rafael Câmara". Mini, Slater and Tsolov are not published
+  (optional inventory).
+- `contentVersion` is now `2026.11.22.1`, the R1 dataset.
+- Cloudflare state differs from C1 only in the KV key count and names digest.
+- Post-C2 bookmarks: catalog `00000008-…1904`, ledger `00000024-…3627`,
+  sequencer `000000a0-…0f3b`. Post-C2 KV snapshot: 4,106 keys `f5d7eebf…`.
+
+### P4. Consequences and status
+
+- **First runtime-derived publication.** R-1/R-2 (return to bundled) are
+  now invalid for good. Recovery is forward-only: R-3/R-4 from `51f7667`,
+  PITR to the bookmarks above, and the KV snapshots.
+- D9 stability: runs 1-3 done (S7, A2, C2). Runs 1 and 2 withheld
+  legitimately, run 3 published.
+- Staging `5ee3b49c` (code `51f7667`), runtime catalog R1, optional-driver
+  inventory, admin read-only, discovery off, no hold, crons `[]`.
+- Open: the offline GnuPG copy of the R1 export (owner); the unresolved
+  candidates for Mini, Slater and Tsolov (no curation needed while they stay
+  inventory-only); production (P4) needs separate confirmation.
