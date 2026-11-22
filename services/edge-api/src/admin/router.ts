@@ -31,6 +31,7 @@ import {
   handleEgressIdentityRequest,
 } from './egress-identity-route';
 import { handleCutoverRequest, isCutoverPath } from './cutover-routes';
+import { handleRecoveryRequest, recoveryPath } from './recovery-route';
 import {
   handleCoordinatedRollback,
   handleReconciliationRequest,
@@ -120,6 +121,8 @@ export async function handleAdminRequest(
   }
 
   const url = new URL(request.url);
+  if (url.pathname === recoveryPath)
+    return handleRecoveryRequest(request, context.env, context.requestId);
   // Dispatched before the shared season resolution below: a cutover names its
   // season explicitly, and must never inherit `meta:current-season`.
   if (isCutoverPath(url.pathname)) {

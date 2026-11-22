@@ -1,4 +1,9 @@
 import { serveIdentityAdmin } from '../admin/identity/service';
+import {
+  handleRecoveryCommand,
+  recoveryObjectPath,
+  type RecoveryHost,
+} from '../recovery/pitr';
 import { CatalogOriginProof } from './catalog/origin-proof';
 import { CatalogRunPins } from './catalog/pin';
 import { CatalogBatchAdmissions } from './catalog/batch-admission';
@@ -35,6 +40,11 @@ export class IdentityCatalog {
     this.store = new IdentityStore(state.storage, env.IDENTITY_INSTALLATION_ID);
   }
   async fetch(request: Request): Promise<Response> {
+    if (new URL(request.url).pathname === recoveryObjectPath)
+      return handleRecoveryCommand(
+        request,
+        this.state as unknown as RecoveryHost,
+      );
     if (
       ['/batch-admit', '/batch-transition'].includes(
         new URL(request.url).pathname,

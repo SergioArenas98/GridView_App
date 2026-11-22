@@ -182,6 +182,12 @@ export interface Env extends TestOnlyBindings {
   PUBLIC_BASE_URL?: string;
   ADMIN_TOKEN?: string;
   /**
+   * U11 G5 recovery: "enabled" lets the operator recovery route schedule a
+   * point-in-time restore and restart an object. Absent everywhere committed;
+   * reading a bookmark never needs it.
+   */
+  RECOVERY_RESTORE?: string;
+  /**
    * The one season the guarded staging ingest of a reviewed season batch
    * accepts (`POST /internal/admin/season/ingest`). Unset, the route is
    * disabled: it refuses before reading a body. Even when set, it admits

@@ -38,6 +38,11 @@ import {
   durableObjectSequencerHost,
   type SequencerDurableHost,
 } from '../../../publication/sequencer/hosts';
+import {
+  handleRecoveryCommand,
+  recoveryObjectPath,
+  type RecoveryHost,
+} from '../../../recovery/pitr';
 import type { ReconciliationLedgerPort } from '../ledger-port';
 import {
   RECONCILIATION_LEDGER_OBJECT_NAME,
@@ -95,8 +100,11 @@ function isLedgerCommand(value: unknown): value is LedgerCommand {
  */
 export class ReconciliationLedger {
   private readonly store: ReconciliationLedgerStore;
+  /** The raw object state, for point-in-time recovery only. */
+  private readonly recoveryHost: RecoveryHost;
 
   constructor(state: SequencerDurableHost, options: LedgerStoreOptions = {}) {
+    this.recoveryHost = state as unknown as RecoveryHost;
     this.store = new ReconciliationLedgerStore(
       durableObjectSequencerHost(state),
       options,
@@ -104,6 +112,8 @@ export class ReconciliationLedger {
   }
 
   async fetch(request: Request): Promise<Response> {
+    if (new URL(request.url).pathname === recoveryObjectPath)
+      return handleRecoveryCommand(request, this.recoveryHost);
     if (request.method !== 'POST') {
       return jsonResponse({ error: 'method-not-allowed' }, 405);
     }

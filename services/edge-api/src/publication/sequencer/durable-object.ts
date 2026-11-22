@@ -45,6 +45,11 @@
 
 import { durableObjectSequencerHost, type SequencerDurableHost } from './hosts';
 import {
+  handleRecoveryCommand,
+  recoveryObjectPath,
+  type RecoveryHost,
+} from '../../recovery/pitr';
+import {
   SeasonPublicationCoordinator,
   type SequencerOptions,
 } from './coordinator';
@@ -115,8 +120,11 @@ function isSequencerCommand(value: unknown): value is SequencerCommand {
  */
 export class SeasonPublicationSequencer {
   private readonly coordinator: SeasonPublicationCoordinator;
+  /** The raw object state, for point-in-time recovery only. */
+  private readonly recoveryHost: RecoveryHost;
 
   constructor(state: SequencerDurableHost, options: SequencerOptions = {}) {
+    this.recoveryHost = state as unknown as RecoveryHost;
     this.coordinator = new SeasonPublicationCoordinator(
       durableObjectSequencerHost(state),
       options,
@@ -124,6 +132,8 @@ export class SeasonPublicationSequencer {
   }
 
   async fetch(request: Request): Promise<Response> {
+    if (new URL(request.url).pathname === recoveryObjectPath)
+      return handleRecoveryCommand(request, this.recoveryHost);
     if (request.method !== 'POST') {
       return jsonResponse({ error: 'method-not-allowed' }, 405);
     }
