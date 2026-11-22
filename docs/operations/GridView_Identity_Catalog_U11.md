@@ -1702,3 +1702,96 @@ throughout. Evidence: `~/.gridview/evidence/identity-u11-p1-2026-11-22/`
 - G3 complete. G4 comparisons pass. **G4 acceptance waits only for the
   offline-copy evidence.**
 - G5 stays blocked (recovery, Recovery proposals §2.3).
+
+---
+
+## Addendum M - 2026-11-22: G5 recovery implemented and drilled in isolation
+
+Under amendment A1. Staging was not mutated: it was only read (the KV
+snapshot). Evidence:
+`~/.gridview/evidence/identity-u11-g5-recovery-drill-2026-11-22/`.
+
+### M1. Storage backend
+
+All four staging Durable Objects are **SQLite-backed**: exports have
+`storage: sqlite` and namespaces `use_sqlite: true`. Cloudflare PITR is
+therefore available for each of them. None is a legacy KV-backed object.
+
+### M2. Implementation (local commits, not deployed to staging)
+
+- **`7e2ebf4`:** in-object PITR commands and an `ADMIN_TOKEN`-authenticated
+  `POST /internal/admin/recovery`, for IdentityCatalog, ReconciliationLedger
+  and SeasonPublicationSequencer.
+  - Commands: bookmark, bookmark-for-time (30 days), schedule-restore (only
+    against the exact current bookmark; returns the undo bookmark), restart.
+  - Restore and restart are refused unless `RECOVERY_RESTORE=enabled`. No
+    committed configuration sets it.
+- **`8a5d018`:** Workers KV snapshot, restore and verify tool.
+  - Per-key SHA-256 over value, metadata and expiration.
+  - Restore refuses the snapshot source, every committed namespace and an
+    unconfirmed target.
+- **Tests:**
+  - handler and route units (10);
+  - end-to-end through the real Worker and objects in Miniflare (3:
+    routing, addressing, auth, gate, stale-bookmark refusal);
+  - KV tool units (4).
+  - Targeted suites for the touched classes and admin: 1,010 passed.
+
+### M3. Isolated drill on Cloudflare
+
+- **Drill Worker:** `gridview-recovery-drill`, version `191349d9`.
+  - Own new SQLite Durable Object namespaces (4).
+  - Own KV namespace `a1dfe9f1d35549829c160743bfecbabf`.
+  - Own throwaway secrets and installation `61fe817b-…`.
+  - `PROVIDER_MODE=coordinated` with the controlled KV source, no
+    schedules, `RECOVERY_RESTORE=enabled` (drill only).
+- **Method, per store:** bookmark B0, visible change, bookmark B1, restore
+  to B0 (expected B1), restart, verify; then restore the undo bookmark,
+  restart, verify.
+
+| Store                                       | Change                                                                                       | After restore to B0              | After undo                                       | Verdict  |
+| ------------------------------------------- | -------------------------------------------------------------------------------------------- | -------------------------------- | ------------------------------------------------ | -------- |
+| ReconciliationLedger                        | operator hold (record v0 → v1)                                                               | no hold, v0                      | hold, v1                                         | **pass** |
+| SeasonPublicationSequencer                  | cutover genesis (uninitialized → genesis)                                                    | uninitialized                    | genesis                                          | **pass** |
+| IdentityCatalog, including durable receipts | validation of the R0 proposal (seed receipt committed, validate receipt unknown → committed) | seed committed, validate unknown | both committed                                   | **pass** |
+| Workers KV (staging data)                   | snapshot of staging, 3,982 keys (`df568003…`), restored into the drill namespace             | —                                | verify: identical, 0 missing, 0 changed, 0 extra | **pass** |
+
+Restoring the KV snapshot onto staging itself was refused by the tool
+(`target-is-snapshot-source`).
+
+### M4. What is and is not recoverable
+
+- **Recoverable and drilled:** catalog content, receipts and audit rows (one
+  SQLite store, by PITR, plus the verified export and S3 reconstruction);
+  ledger and sequencer state (PITR, 30-day window); KV content (snapshot).
+- **Not demonstrated separately:** catalog run pins. They live in the same
+  catalog SQLite store that PITR restored, but bundled mode creates none,
+  so no pin was exercised.
+- **Not recoverable by GridView:**
+  - Cloudflare-persisted operational logs. Their retention is set by the
+    platform.
+  - Point-in-time KV history. Only the snapshot moments exist, so a snapshot
+    must be taken immediately before each gate.
+- **Consistency:** PITR is per object and approximate in time, and the KV
+  snapshot is separate. A coordinated restore needs a hold, bookmarks for
+  all three objects and a KV snapshot taken together, restored in the order
+  catalog, ledger, sequencer, then KV. It is never a single transactional
+  backup.
+
+### M5. Remaining before G5
+
+1. The acceptance suite on `8a5d018` and an independent review of the
+   recovery code.
+2. **G5-1 config tests.** Runtime authority deliberately changes staging
+   behaviour:
+   - v1 batches are refused (`runtime-batch-requires-u7`);
+   - the manual-batch fallback needs v2 batches from the verified export;
+   - coordinated runs fail closed without an active catalog.
+
+   Nine committed staging behaviour tests encode the bundled behaviour.
+   They are being re-authored to prove the same safety properties under
+   runtime. They are not being weakened.
+
+3. Live owner confirmation for: G5-0 (deploy the recovery-capable code with
+   the bundled config, then capture bookmarks and a KV snapshot), the hold,
+   S6 on R-4, the runtime-strict cutover, S7, and the hold release.
