@@ -161,15 +161,17 @@ SEASON_PUBLICATION_AUTHORITY = "sequencer"
 SEASON_BATCH_INGEST = "2026"
 
 # Identity catalog (ADRs 0029-0031; identity U11). G1 (bundled/off/off) is
-# deployed to staging as 13c3a90c (2026-11-22). This commit is the G2a
-# proposal: deploying it needs the owner's signed U11 P1 approval
+# deployed to staging as 13c3a90c (2026-11-22). This commit is the G2b
+# proposal, deployed only after G2a (admin `read-only`) is verified; both
+# need the owner's signed U11 P1 approval
 # (docs/operations/GridView_Identity_Catalog_U11_P1_Packet.md).
 #
 # Catalog `bundled` keeps the bundled mappings authoritative; discovery `off`
-# builds no collector. Admin `read-only` (G2a) serves the authenticated GET
-# identity routes to individual credentials and refuses every identity write
-# (`IDENTITY_WRITES_DISABLED`); without a valid credentials secret every
-# identity route still answers 404.
+# builds no collector. Admin `review` (G2b) also accepts identity writes, each
+# from an individual credential holding the exact role the route requires
+# (reviewer or activator), with its own operation ID and durable receipt. The
+# shared ADMIN_TOKEN is never accepted on identity routes. Without a valid
+# credentials secret every identity route still answers 404.
 # The inventory-mode variable is deliberately absent, which resolves to
 # `strict`; no committed configuration may name it (inventory-policy
 # acceptance 37), so the optional-driver policy cannot be selected here.
@@ -181,7 +183,7 @@ SEASON_BATCH_INGEST = "2026"
 IDENTITY_INSTALLATION_ID = "c45d60b8-a723-4b6e-8530-750592af2b94"
 IDENTITY_CATALOG_MODE = "bundled"
 IDENTITY_DISCOVERY_MODE = "off"
-IDENTITY_ADMIN_MODE = "read-only"
+IDENTITY_ADMIN_MODE = "review"
 
 # Bindings are not inherited by named environments, so each one redeclares it.
 [[env.staging.durable_objects.bindings]]

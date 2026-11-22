@@ -1,11 +1,11 @@
 /**
  * Identity U11: the staging identity catalog is staging-only and, as
- * committed for G2a, keeps bundled authority with read-only administration
+ * committed for G2b, keeps bundled authority with review administration
  * (ADR 0031 D5; design §11.1-11.2).
  *
  * The committed staging declaration is a proposal awaiting the owner's
  * deployment approval. These assertions pin what that proposal may contain:
- * one fresh installation UUID, bundled/off/read-only modes, no inventory-mode
+ * one fresh installation UUID, bundled/off/review modes, no inventory-mode
  * variable (absent = strict), the reviewer credentials secret required by
  * name but never committed, one named SQLite
  * export and Worker-local binding, and nothing at all in production, the
@@ -51,7 +51,7 @@ describe('the proposed staging identity catalog (identity U11)', () => {
       IDENTITY_INSTALLATION_ID: 'c45d60b8-a723-4b6e-8530-750592af2b94',
       IDENTITY_CATALOG_MODE: 'bundled',
       IDENTITY_DISCOVERY_MODE: 'off',
-      IDENTITY_ADMIN_MODE: 'read-only',
+      IDENTITY_ADMIN_MODE: 'review',
     });
     expect(vars.IDENTITY_INSTALLATION_ID).toMatch(uuidV4);
   });

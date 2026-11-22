@@ -148,7 +148,7 @@ describe('season 2026 activation-phase configuration (ADR 0025 D12)', () => {
       'IDENTITY_INSTALLATION_ID = "c45d60b8-a723-4b6e-8530-750592af2b94"',
       'IDENTITY_CATALOG_MODE = "bundled"',
       'IDENTITY_DISCOVERY_MODE = "off"',
-      'IDENTITY_ADMIN_MODE = "read-only"',
+      'IDENTITY_ADMIN_MODE = "review"',
     ]);
     // The seed phase is no longer configured anywhere.
     expect(config).not.toMatch(/^[^#\n]*"seed:/m);
