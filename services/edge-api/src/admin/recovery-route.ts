@@ -20,6 +20,9 @@ import {
 } from '../recovery/pitr';
 
 export const recoveryPath = '/internal/admin/recovery';
+/** The Durable Object request URL (an object address, never an outbound origin). */
+export const recoveryRequestUrl =
+  'https://recovery-object' + recoveryObjectPath;
 const stores = [
   'identity-catalog',
   'reconciliation-ledger',
@@ -114,14 +117,11 @@ export async function handleRecoveryRequest(
   const stub = object.namespace.get(object.namespace.idFromName(object.name));
   let response: Response;
   try {
-    response = await stub.fetch(
-      'https://recovery.internal' + recoveryObjectPath,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(rest),
-      },
-    );
+    response = await stub.fetch(recoveryRequestUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(rest),
+    });
   } catch {
     // A restart aborts the object, so its own response may never arrive.
     if (command.command === 'restart')
