@@ -882,7 +882,7 @@
       "providerField": "driverId",
       "providerValue": "rafael_camara",
       "gridviewId": "rafael-camara",
-      "evidence": "GridView_Identity_Catalog_U11.md Addendum O - staging catalog R1 (revision 8723d5ec-f779-4ac4-ae11-8b0cc8a41d54, activated 2026-11-22T21:14:12Z) reviewed dossier sha256:67ef0399ed707d5ef4a17d3117f34b4978332fa127e0939a2c2b4c07beef8a62: Jolpica F1 (CC BY-NC-SA 4.0) driverId rafael_camara observed 2026-11-22 (season drivers, driver standings, 2026 rounds 20 and 21 race results: Rafael Camara, Haas, #51); official F1 driver page and 2026 Sao Paulo race result; owner-approved display name Rafael Câmara."
+      "evidence": "U11 Addendum O: staging catalog R1 revision 8723d5ec-f779-4ac4-ae11-8b0cc8a41d54 (activated 2026-11-22), dossier sha256:67ef0399; Jolpica F1 (CC BY-NC-SA 4.0) rafael_camara seen 2026-11-22 (Haas, #51, rounds 20-21); official F1 driver page and Sao Paulo result. Name: Rafael Câmara."
     }
   ]
 }
