@@ -1561,3 +1561,39 @@ I3. No retry, no recovery deployment, no other remote write.
   - authorization of the G2 configuration commit and credential
     provisioning.
   SOE-1 still covers Tier A only. Nothing for G2-G5 was executed.
+
+---
+
+## Addendum J - 2026-11-22: G1 accepted; owner decisions D0-D11
+
+- **D0, G1 accepted** by the product owner. The new staging baseline is
+  `13c3a90c-4fd8-4794-9fd6-efaf4f950bb6` (bundle `fb60cc64…`), with
+  comparisons against the G1v snapshot. Addendum I and the G1 approval
+  record are kept as they are, with an execution and acceptance note
+  appended.
+- **Decisions recorded** (owner message, 2026-11-22):
+  - D1: three role credentials (reviewer, activator, reader), all held
+    by the owner. Local generation only.
+  - D2: SOE-1-B accepted **in principle only**. The full RB-1..RB-3
+    wording goes into the P1 packet for express acceptance, and nothing
+    is marked accepted until then.
+  - D3: the owner is the primary recovery/export custodian, with
+    restricted local storage and two encrypted copies, one of them
+    offline. Completion must be shown with evidence before any gate
+    depends on it.
+  - D4: offline comparison policy adopted for G4. ADR 0031 and runbook
+    amendments are applied, and S1-S7 stay mandatory.
+  - D5: local tasks L1-L9 authorized. L10 and L11 are proposals only.
+  - D6: P1 (G2+G3) and P2 (G5) may each be a combined packet with a
+    stop on any failure. The G3 eight-hour wait still applies, and hold
+    release needs a separate live confirmation.
+  - D7: export artifacts plus SQLite Durable Object PITR as a
+    supplement, which is not a consistent cross-store backup.
+  - D8: G5 single-operator exception to be drafted, not accepted.
+  - D9: a stability criterion to propose (three meaningful runtime
+    runs), not authorized.
+  - D10: production single-operator exception to be drafted, not
+    accepted.
+  - D11: eight hours from approval to execution for optional-driver
+    activation.
+- **Still not authorized:** any remote step of P1-P4.

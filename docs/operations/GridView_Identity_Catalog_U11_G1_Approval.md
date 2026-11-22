@@ -123,3 +123,19 @@ to execution.
 
 No further authorization is needed for G1 beyond this amended timing and
 the mandatory execution conditions.
+
+---
+
+## Execution and acceptance record (2026-11-22)
+
+- **Executed:** 2026-11-22T11:00:46Z-11:01:01Z, once, in the approved
+  window, with the owner present. New staging version
+  `13c3a90c-4fd8-4794-9fd6-efaf4f950bb6`, deployment
+  `fdaf88d1-8581-4bfe-acc6-f024f259391b`, bundle `fb60cc64…85e3d8`.
+  Evidence and G1v: U11 report Addendum I.
+- **Accepted:** the product owner formally accepted G1 on 2026-11-22
+  (decision D0). Approval, amendment and execution evidence are preserved
+  unchanged above and in Addendum I.
+- **New staging baseline:** `13c3a90c`. Every later gate compares against
+  the G1v snapshot (`g1v-state.json`, G1v admin bodies and ETags), not
+  `bc9b9315`. This approval authorizes nothing further.
