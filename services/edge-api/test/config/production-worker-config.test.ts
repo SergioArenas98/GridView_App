@@ -37,6 +37,7 @@ import {
 import { unstable_readConfig } from 'wrangler';
 
 import rawConfig from '../../wrangler.toml?raw';
+import { STAGING_CRONS, withoutStaging } from './demonstration-environment';
 import worker, { type Env } from '../../src/index';
 import { MemoryCachePurgeAdapter } from '../../src/cache/purge';
 import { resolveRuntimeConfig } from '../../src/config/environment';
@@ -156,9 +157,9 @@ describe('the resolved production configuration', () => {
     // `crons` is set.
     expect(resolved('production').triggers).toEqual({ crons: [] });
     expect(rawConfig).toMatch(/^\[env\.production\.triggers\]\ncrons = \[\]$/m);
-    // No environment declares a schedule, the demonstration included since
-    // AU-3 passed.
-    expect(rawConfig).not.toMatch(/^\s*crons\s*=\s*\[\s*"/m);
+    // Only staging declares a schedule (AU-4 step 3); the demonstration has
+    // none since AU-3 passed.
+    expect(withoutStaging(rawConfig)).not.toMatch(/^\s*crons\s*=\s*\[\s*"/m);
   });
 
   it('persists the Worker lines, never the invocation logs or traces (ADR 0028 D8)', () => {
@@ -202,7 +203,7 @@ describe('the resolved production configuration', () => {
     expect(demonstration.triggers).toEqual({ crons: [] });
   });
 
-  it('leaves the staging configuration as gate AU-4 commits it, the mode its only variable change', () => {
+  it('leaves the staging configuration as gate AU-4 commits it: the mode its only variable change, and the hourly cron', () => {
     const staging = resolved('staging');
     expect(staging.vars).toEqual({
       ENVIRONMENT: 'staging',
@@ -215,7 +216,7 @@ describe('the resolved production configuration', () => {
     expect(staging.kv_namespaces).toEqual([
       { binding: 'GRIDVIEW_DATA', id: STAGING_KV_ID },
     ]);
-    expect(staging.triggers).toEqual({ crons: [] });
+    expect(staging.triggers).toEqual({ crons: STAGING_CRONS });
     expect(staging.observability).toEqual({
       enabled: true,
       head_sampling_rate: 1,

@@ -7,6 +7,7 @@ import { CutoverPreparationService } from '../../src/publication/cutover/service
 import { runtimeSnapshotValidator } from '../../src/validation/snapshot-validator';
 import { adminRequest, createHarness } from '../support/edge-harness';
 import {
+  STAGING_CRONS_LINE,
   demonstrationSection,
   withoutDemonstration,
 } from './demonstration-environment';
@@ -28,7 +29,7 @@ describe('wrangler staging configuration', () => {
     expect(Object.keys(jsoncConfig)).toHaveLength(0);
   });
 
-  it('declares the staging Worker, workers.dev endpoint, KV binding and an explicitly empty cron', () => {
+  it('declares the staging Worker, workers.dev endpoint, KV binding and the hourly cron', () => {
     expect(config).toMatch(
       /\[env\.staging\][\s\S]*name = "gridview-api-staging"/,
     );
@@ -39,7 +40,7 @@ describe('wrangler staging configuration', () => {
     expect(config).toMatch(
       /\[\[env\.staging\.kv_namespaces\]\][\s\S]*binding = "GRIDVIEW_DATA"[\s\S]*id = "1d0fb55486a745a1ad12e03d9f04942b"/,
     );
-    expect(config).toMatch(/\[env\.staging\.triggers\]\ncrons = \[\]\n/);
+    expect(config).toContain(`[env.staging.triggers]\n${STAGING_CRONS_LINE}\n`);
   });
 
   it('declares ADMIN_TOKEN as a required staging secret without committing its value', () => {
@@ -204,7 +205,7 @@ describe('season 2026 activation-phase configuration (ADR 0025 D12)', () => {
     });
   });
 
-  it('keeps both existing staging bindings, the secret and observability, adds only the ledger, and keeps an empty cron', () => {
+  it('keeps both existing staging bindings, the secret and observability, adds only the ledger, and carries the hourly cron', () => {
     expect(config).toMatch(
       /\[\[env\.staging\.durable_objects\.bindings\]\]\nname = "PROVIDER_RATE_LIMITER"\nclass_name = "ProviderRateLimiter"/,
     );
@@ -224,7 +225,7 @@ describe('season 2026 activation-phase configuration (ADR 0025 D12)', () => {
     expect(config).toMatch(
       /\[env\.staging\.secrets\]\nrequired = \["ADMIN_TOKEN"\]/,
     );
-    expect(config).toMatch(/\[env\.staging\.triggers\]\ncrons = \[\]\n/);
+    expect(config).toContain(`[env.staging.triggers]\n${STAGING_CRONS_LINE}\n`);
     expect(config).toMatch(
       /\[env\.staging\.observability\]\nenabled = true\nhead_sampling_rate = 1\n\n\[env\.staging\.observability\.logs\]\nenabled = true\npersist = true\ninvocation_logs = false/,
     );

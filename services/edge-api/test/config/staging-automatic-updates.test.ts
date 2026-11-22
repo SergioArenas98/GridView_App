@@ -1,12 +1,12 @@
 /**
  * Release gate AU-4 step 1 (`docs/release/automatic-updates.md` §8.3): the
  * committed `[env.staging]` selects the automatic path by itself, as
- * Wrangler resolves it, and still schedules nothing.
+ * Wrangler resolves it, and carries step 3's hourly cron.
  *
  * - The activation delta the AU-3 stage adds to committed staging
  *   (`AUTOMATIC_ACTIVATION_DELTA`) is now part of the committed
- *   configuration: `coordinated`, the ledger class and binding. The cron is
- *   not: it is step 3, its own change.
+ *   configuration: `coordinated`, the ledger class and binding, and the
+ *   cron. The cron is live only after step 3's own triggers deploy.
  * - Staging reads Jolpica from the network, never from a controlled source;
  *   only the demonstration Worker does.
  * - With the binding, a scheduled run of the committed variables reaches the
@@ -34,6 +34,7 @@ import {
   committedVars,
   later,
 } from '../e2e/automatic-updates/stage';
+import { STAGING_CRONS } from './demonstration-environment';
 
 const configPath = join(
   dirname(fileURLToPath(import.meta.url)),
@@ -64,7 +65,7 @@ afterEach(() => {
 });
 
 describe('the committed staging configuration (gate AU-4 step 1)', () => {
-  it('commits the activation delta but the cron', () => {
+  it('commits the activation delta, and the cron as AU-4 step 3', () => {
     const staging = resolved('staging');
     expect(committedVars('staging').PROVIDER_MODE).toBe(
       AUTOMATIC_ACTIVATION_DELTA.PROVIDER_MODE,
@@ -74,10 +75,9 @@ describe('the committed staging configuration (gate AU-4 step 1)', () => {
         (binding: { readonly name: string }) => binding.name,
       ),
     ).toContain(AUTOMATIC_ACTIVATION_DELTA.ledgerBinding);
-    expect(staging.triggers.crons).toEqual([]);
-    expect(staging.triggers.crons).not.toContain(
-      AUTOMATIC_ACTIVATION_DELTA.cron,
-    );
+    // The staging cron is the one the demonstration passed AU-3 with.
+    expect(staging.triggers.crons).toEqual([AUTOMATIC_ACTIVATION_DELTA.cron]);
+    expect(staging.triggers.crons).toEqual(STAGING_CRONS);
   });
 
   it('reads Jolpica from the network: only the demonstration Worker selects a controlled source', () => {

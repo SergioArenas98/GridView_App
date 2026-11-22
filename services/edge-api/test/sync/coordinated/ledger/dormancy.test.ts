@@ -17,9 +17,11 @@ import * as entryPoint from '../../../../src/index';
 import { ReconciliationLedger } from '../../../../src/sync/coordinated/ledger';
 import { resolveReconciliationLedger } from '../../../../src/sync/coordinated/ledger-port';
 import {
+  STAGING_CRONS_LINE,
   demonstrationSection,
   environmentSection,
   withoutAutomatic,
+  withoutStaging,
 } from '../../../config/demonstration-environment';
 
 const edgeApiRoot = join(
@@ -82,7 +84,7 @@ describe('the reconciliation ledger is exported, resolvable and bound only by th
     }
   });
 
-  it('keeps every committed provider mode but the demonstration Worker and staging off the coordinated path, and schedules nothing', () => {
+  it('keeps every committed provider mode but the demonstration Worker and staging off the coordinated path, and schedules staging alone', () => {
     const declared = declarations();
     // Staging: `mock`, then `none` from the season-batch ingest
     // configuration, then `coordinated` at gate AU-4. Production stays off.
@@ -98,11 +100,13 @@ describe('the reconciliation ledger is exported, resolvable and bound only by th
     expect(demonstrationSection(declared)).toContain(
       'PROVIDER_MODE = "coordinated"',
     );
-    // The staging cron was removed (an explicit empty list) by the same
-    // configuration; no environment schedules a run, the demonstration Worker
-    // included since AU-3 passed.
-    expect(declared).toContain('crons = []');
-    expect(declared).not.toMatch(/crons = \[\s*"/);
+    // Only staging schedules a run, hourly (AU-4 step 3). Production and the
+    // demonstration Worker (since AU-3 passed) keep an explicit empty list.
+    expect(environmentSection(declared, 'staging')).toContain(
+      STAGING_CRONS_LINE,
+    );
+    expect(withoutStaging(declared)).not.toMatch(/crons = \[\s*"/);
+    expect(environmentSection(declared, 'production')).toContain('crons = []');
     expect(demonstrationSection(declared)).toContain('crons = []');
   });
 
