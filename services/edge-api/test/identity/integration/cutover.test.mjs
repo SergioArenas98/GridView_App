@@ -121,6 +121,33 @@ it.each([1, 2, 3])(
   },
 );
 
+it('U11 R-4: runtime authority with the catalog binding removed refuses before any provider request and never falls back to bundled', async () => {
+  const outcomes = {};
+  for (const mode of ['bundled', 'runtime']) {
+    const h = await harness(mode);
+    h.server.results.set(1, 'A');
+    delete h.env.IDENTITY_CATALOG;
+    const active = h.activeVersion(),
+      result = await h.manual(tickAfter(1, 6));
+    outcomes[mode] = { requests: result.requests.length, body: result.body };
+    if (mode === 'runtime') {
+      expect(result.requests).toEqual([]);
+      expect(result.prepares).toBe(0);
+      expect(result.finalizes).toBe(0);
+      expect(h.activeVersion()).toBe(active);
+      expect(result.ledgerCalls.at(-1)).toBe('releaseLease');
+      expect(result.body.data).toMatchObject({
+        status: 'failed',
+        stage: 'identity',
+        failure: 'catalog-unavailable',
+      });
+    }
+  }
+  // Control: bundled authority never consults the catalog, so the same run
+  // proceeds to the provider. The refusal above is the binding, not the run.
+  expect(outcomes.bundled.requests).toBeGreaterThan(0);
+});
+
 it('U8 compare outage remains diagnostic and runtime outage fails before provider or publication admission', async () => {
   const outcomes = [];
   for (const mode of ['bundled', 'compare', 'runtime']) {
