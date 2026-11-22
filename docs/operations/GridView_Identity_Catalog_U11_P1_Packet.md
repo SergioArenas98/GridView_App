@@ -369,3 +369,38 @@ report addendum (local documentation commit).
 > or merge.
 >
 > Signed: ____________________ Date (UTC): ____________________
+
+---
+
+## Amendment A1: owner governance decision (2026-11-22, message received about 15:45Z)
+
+Recorded verbatim in substance from the product owner's written instruction.
+It **supersedes** for this rollout the internal eight-hour waiting periods
+(CC-4 as applied to P1 and to later same-day gates) and the proposed
+2026-11-23 window. Earlier approvals and records are not rewritten.
+
+- **P1 approved by the product owner** (written instruction; no separate
+  signature form):
+  - SOE-1-B accepted, with RB-1, RB-2, RB-3 and RB-4 each accepted as worded
+    in §2. The owner confirmed that wording contains no further material
+    risk or obligation.
+  - D12-A approved: the bootstrap lifecycle of §4, with revocation verified
+    immediately after the seed readback.
+  - D14 approved: `read-only` identity administration in R-3 and R-4.
+  - Artifacts as listed in §3: V3 `b6de09a8…`, V4 `f43640c2…`; V4 kept, its
+    bootstrap expiry 2026-11-23T13:00:00.000Z serving as the backstop.
+  - Operations as listed in §5, including all eight remote mutations, their
+    checks and stop conditions.
+- **Window:** 2026-11-22, from this amendment's commit, owner available for
+  supervision. No further internal waiting period.
+- **Also authorized today:** the real export, custody, isolated restore and
+  the three G4 comparisons. Implementation and isolated testing of G5
+  recovery, with no mutation of the staging ledger or published data.
+- **Still requiring the owner's live confirmation before execution:**
+  - the G5 runtime-strict cutover;
+  - the hold release;
+  - any production deployment, after production-specific recovery has been
+    verified.
+- **Unchanged:**
+  - safeguards: fail-closed behaviour, reconciliation and publication;
+  - stop rules: any failed check stops the affected sequence.
