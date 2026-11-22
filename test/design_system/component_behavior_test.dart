@@ -67,30 +67,6 @@ void main() {
     expect(selected, 1);
   });
 
-  testWidgets('GvBottomNav reports the tapped destination', (
-    WidgetTester tester,
-  ) async {
-    int index = 0;
-    await pumpComponent(
-      tester,
-      StatefulBuilder(
-        builder: (BuildContext context, StateSetter setState) {
-          return GvBottomNav(
-            selectedIndex: index,
-            onSelect: (int i) => setState(() => index = i),
-            items: const <GvBottomNavItem>[
-              GvBottomNavItem(icon: Icons.home_outlined, label: 'Home'),
-              GvBottomNavItem(icon: Icons.explore_outlined, label: 'Explore'),
-            ],
-          );
-        },
-      ),
-    );
-    await tester.tap(find.text('Explore'));
-    await tester.pump();
-    expect(index, 1);
-  });
-
   testWidgets('GvErrorState retry button invokes onRetry', (
     WidgetTester tester,
   ) async {
@@ -218,15 +194,25 @@ void main() {
           ),
         );
 
+    // The app's navigation is the Primer V2 bar (Step 55C.15). Explore is
+    // second here so the index assertions below read naturally.
     Future<void> pumpNav(WidgetTester tester, ValueChanged<int> sink) =>
         pumpComponent(
           tester,
-          GvBottomNav(
+          GvPrimerBottomNav(
             selectedIndex: 0,
             onSelect: sink,
-            items: const <GvBottomNavItem>[
-              GvBottomNavItem(icon: Icons.home_outlined, label: 'Home'),
-              GvBottomNavItem(icon: Icons.explore_outlined, label: 'Explore'),
+            items: const <GvPrimerNavItem>[
+              GvPrimerNavItem(icon: Icons.home_outlined, label: 'Home'),
+              GvPrimerNavItem(icon: Icons.explore_outlined, label: 'Explore'),
+              GvPrimerNavItem(
+                icon: Icons.calendar_month_outlined,
+                label: 'Calendar',
+              ),
+              GvPrimerNavItem(
+                glyph: GvPrimerGlyph.standings,
+                label: 'Standings',
+              ),
             ],
           ),
         );
@@ -435,29 +421,6 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(foregroundOf(tester, 'Constructors'), isNotNull);
-    });
-
-    testWidgets('a destination paints no focus ring until it is focused', (
-      WidgetTester tester,
-    ) async {
-      await pumpComponent(
-        tester,
-        GvBottomNav(
-          selectedIndex: 0,
-          onSelect: (_) {},
-          items: const <GvBottomNavItem>[
-            GvBottomNavItem(icon: Icons.home_outlined, label: 'Home'),
-            GvBottomNavItem(icon: Icons.explore_outlined, label: 'Explore'),
-          ],
-        ),
-      );
-
-      expect(foregroundOf(tester, 'Explore'), isNull);
-
-      Focus.of(tester.element(find.text('Explore'))).requestFocus();
-      await tester.pumpAndSettle();
-
-      expect(foregroundOf(tester, 'Explore'), isNotNull);
     });
   });
 }

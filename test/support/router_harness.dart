@@ -16,6 +16,7 @@ import 'package:gridview/core/preferences/preference_values.dart';
 import 'package:gridview/core/preferences/preferences_providers.dart';
 import 'package:gridview/core/preferences/preferences_repository.dart';
 import 'package:gridview/core/theme/gridview_theme.dart';
+import 'package:gridview/core/theme/gv_primer_system_overlay.dart';
 import 'package:gridview/core/time/device_time_zone.dart';
 import 'package:gridview/core/widgets/widgets.dart';
 import 'package:gridview/features/calendar/application/calendar_providers.dart';
@@ -165,7 +166,9 @@ class TestApp extends ConsumerWidget {
         if (loader != null) {
           content = MediaLoaderScope(loader: loader, child: content);
         }
-        return content;
+        // The application-level system-bar owner, as GridViewApp installs it
+        // (XS-35). It paints nothing, so no golden depends on it.
+        return GvPrimerSystemOverlay(child: content);
       },
     );
   }
@@ -193,6 +196,11 @@ Future<GoRouter> pumpApp(
   AppEnvironment environment = AppEnvironment.development,
   bool mockData = false,
   int? currentSeason = 2026,
+
+  /// Drives the resolved season over time, so a test can exercise a genuine
+  /// season transition through the real router and providers. Takes
+  /// precedence over [currentSeason] for the season stream only.
+  Stream<int?>? currentSeasonStream,
   ResourceSyncState? Function(String key)? syncMetadata,
 
   /// Full control of each metadata stream, so a test can hold a record
@@ -209,6 +217,11 @@ Future<GoRouter> pumpApp(
   /// real in-memory repository rather than stubbed, so a test exercises the same
   /// read path production does.
   AppPreferences preferences = AppPreferences.defaults,
+
+  /// Replaces the in-memory store behind the real preference repository, so
+  /// a test can make writes fail or hold them (Step 55C.13A). It is seeded
+  /// by the caller; [preferences] is ignored when it is given.
+  PreferenceStore? preferenceStore,
 
   /// Public external configuration. Defaults to nothing configured, so a test
   /// must opt in to a policy URL or contact address.
@@ -232,6 +245,10 @@ Future<GoRouter> pumpApp(
   /// rather than through a database, because these tests deliberately replace
   /// the data layer with fakes and never open Drift.
   List<MediaAttribution> mediaAttributions = const <MediaAttribution>[],
+
+  /// Replaces [mediaAttributions] with a stream, so a test can keep the read
+  /// unanswered (loading) or fail it.
+  Stream<List<MediaAttribution>>? mediaAttributionsStream,
 
   /// Replaces the data-source attribution record. By default the real bundled
   /// record is read, so screens show exactly what the app ships.
@@ -276,13 +293,15 @@ Future<GoRouter> pumpApp(
   final GoRouter router = buildGridViewRouter(initialLocation: initialLocation);
   final AppPreferencesRepository preferenceRepository =
       AppPreferencesRepository(
-        store: InMemoryPreferenceStore(
-          initial: <String, String>{
-            PreferenceKeys.language: preferences.language.wire,
-            PreferenceKeys.theme: preferences.theme.wire,
-            PreferenceKeys.timeDisplay: preferences.timeDisplay.wire,
-          },
-        ),
+        store:
+            preferenceStore ??
+            InMemoryPreferenceStore(
+              initial: <String, String>{
+                PreferenceKeys.language: preferences.language.wire,
+                PreferenceKeys.theme: preferences.theme.wire,
+                PreferenceKeys.timeDisplay: preferences.timeDisplay.wire,
+              },
+            ),
       );
   addTearDown(preferenceRepository.dispose);
   await tester.pumpWidget(
@@ -312,7 +331,9 @@ Future<GoRouter> pumpApp(
         ),
         appInfoReaderProvider.overrideWithValue(appInfoReader),
         mediaAttributionsProvider.overrideWith(
-          (Ref ref) => Stream<List<MediaAttribution>>.value(mediaAttributions),
+          (Ref ref) =>
+              mediaAttributionsStream ??
+              Stream<List<MediaAttribution>>.value(mediaAttributions),
         ),
         if (dataSourceAttributions != null)
           dataSourceAttributionsProvider.overrideWith(
@@ -334,7 +355,7 @@ Future<GoRouter> pumpApp(
           () async => currentSeason,
         ),
         currentSeasonProvider.overrideWith(
-          (Ref ref) => Stream<int?>.value(currentSeason),
+          (Ref ref) => currentSeasonStream ?? Stream<int?>.value(currentSeason),
         ),
         // The Calendar reads the stored season row only for its published
         // currentRound; with no row the shared rule simply has no floor.
@@ -414,7 +435,10 @@ Future<void> pumpStandalone(
 /// Taps a primary destination in the pill navigation by its label.
 Future<void> tapNav(WidgetTester tester, String label) async {
   await tester.tap(
-    find.descendant(of: find.byType(GvBottomNav), matching: find.text(label)),
+    find.descendant(
+      of: find.byType(GvPrimerBottomNav),
+      matching: find.text(label),
+    ),
   );
   await tester.pumpAndSettle();
 }

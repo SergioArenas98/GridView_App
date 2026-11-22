@@ -8,25 +8,33 @@ import '../../../core/network/data_source_config.dart';
 import '../../../core/observability/diagnostics_policy.dart';
 import '../../../core/observability/observability_activation.dart';
 import '../../../core/observability/observability_providers.dart';
-import '../../../core/theme/theme.dart';
 import '../../../l10n/app_localizations.dart';
 import '../../shared/application/fixture_data_identity_provider.dart';
 import '../../shared/application/providers.dart';
 import '../../shared/domain/fixture_data_identity.dart';
-import '../../shared/presentation/widgets/screen_scaffold.dart';
-import '../../shared/presentation/widgets/screen_sections.dart';
 import '../application/app_info.dart';
 import '../application/external_links.dart';
 import 'widgets/fixture_data_label.dart';
-import 'widgets/settings_rows.dart';
+import 'widgets/settings_app_bar.dart';
+import 'widgets/settings_external_link_row.dart';
+import 'widgets/settings_group.dart';
+import 'widgets/settings_information.dart';
+import 'widgets/settings_navigation_row.dart';
+import 'widgets/settings_snackbar.dart';
 
-/// Padding shared by the read-only Settings information screens.
-const EdgeInsets _screenPadding = EdgeInsets.fromLTRB(
-  GvLayout.screenPaddingHorizontal,
-  GvSpacing.md,
-  GvLayout.screenPaddingHorizontal,
-  GvSpacing.xxl,
-);
+/// The scrolling body every information screen shares: [children] stacked
+/// from 20px below the app bar, with the Settings end padding below.
+Widget _informationBody(double bottomPadding, List<Widget> children) =>
+    SingleChildScrollView(
+      padding: EdgeInsets.only(
+        top: settingsInformationTop,
+        bottom: bottomPadding,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: children,
+      ),
+    );
 
 /// What the application is reading and how it stays usable offline.
 ///
@@ -34,6 +42,9 @@ const EdgeInsets _screenPadding = EdgeInsets.fromLTRB(
 /// never a base URL, query parameter, ETag, request id, resource key, entity id,
 /// token or namespace. It also performs no refresh — opening Settings must not
 /// cause network work.
+///
+/// Primer V2 (Step 55C.13B, `settings/information/data*.html`,
+/// `light-rollout-b2/info-data-*`): four facts, then the explanation.
 class DataSettingsScreen extends ConsumerWidget {
   const DataSettingsScreen({super.key});
 
@@ -48,40 +59,43 @@ class DataSettingsScreen extends ConsumerWidget {
         .value;
     final int? season = ref.watch(currentSeasonProvider).value;
 
-    return GvScreenScaffold(
+    return SettingsPrimerScaffold(
       title: l10n.settingsDataAndUpdates,
-      body: ListView(
-        padding: _screenPadding,
-        children: <Widget>[
-          GvInfoCard(
-            children: <Widget>[
-              GvSettingsField(
-                label: l10n.settingsDataEnvironment,
-                value: environment.label,
-              ),
-              GvSettingsField(
-                label: l10n.settingsDataSource,
-                value: _dataSource(l10n, mode, usesMockData, fixtureData),
-              ),
-              GvSettingsField(
-                label: l10n.settingsDataApiVersion,
-                value: kGridViewApiVersion,
-              ),
-              GvSettingsField(
-                label: l10n.settingsDataCurrentSeason,
-                value:
-                    season?.toString() ??
-                    l10n.settingsDataCurrentSeasonUnresolved,
-              ),
-            ],
-          ),
-          const SizedBox(height: GvSpacing.lg),
-          Text(
-            _explanation(l10n, mode, usesMockData, fixtureData),
-            style: context.gvText.bodyM,
-          ),
-        ],
-      ),
+      body: (BuildContext context, double bottomPadding) =>
+          _informationBody(bottomPadding, <Widget>[
+            SettingsFactList(
+              facts: <SettingsFact>[
+                SettingsFact(
+                  label: l10n.settingsDataEnvironment,
+                  value: environment.label,
+                ),
+                SettingsFact(
+                  label: l10n.settingsDataSource,
+                  value: _dataSource(l10n, mode, usesMockData, fixtureData),
+                ),
+                SettingsFact(
+                  label: l10n.settingsDataApiVersion,
+                  value: kGridViewApiVersion,
+                  kind: SettingsFactKind.number,
+                ),
+                // An unresolved season is an answer about missing data, set
+                // quieter than a value; a season is never guessed.
+                SettingsFact(
+                  label: l10n.settingsDataCurrentSeason,
+                  value:
+                      season?.toString() ??
+                      l10n.settingsDataCurrentSeasonUnresolved,
+                  kind: season == null
+                      ? SettingsFactKind.pending
+                      : SettingsFactKind.number,
+                ),
+              ],
+            ),
+            SettingsProse(
+              _explanation(l10n, mode, usesMockData, fixtureData),
+              top: 24,
+            ),
+          ]),
     );
   }
 
@@ -132,6 +146,9 @@ class DataSettingsScreen extends ConsumerWidget {
 }
 
 /// The application's own identity, read from real package metadata.
+///
+/// Primer V2 (Step 55C.13B, `settings/information/about*.html`): the facts,
+/// then the independence statement.
 class AboutSettingsScreen extends ConsumerWidget {
   const AboutSettingsScreen({super.key});
 
@@ -140,38 +157,54 @@ class AboutSettingsScreen extends ConsumerWidget {
     final AppLocalizations l10n = AppLocalizations.of(context);
     final AppInfo info = ref.watch(appInfoProvider).value ?? AppInfo.unknown;
 
-    return GvScreenScaffold(
+    return SettingsPrimerScaffold(
       title: l10n.settingsAppInformation,
-      body: ListView(
-        padding: _screenPadding,
-        children: <Widget>[
-          GvInfoCard(
-            children: <Widget>[
-              GvSettingsField(
-                label: l10n.settingsAboutApplication,
-                value: info.appName,
-              ),
-              // Absent until the real metadata resolves: a version is reported,
-              // never guessed.
-              GvSettingsField(label: l10n.settingsVersion, value: info.version),
-              GvSettingsField(
-                label: l10n.settingsAboutBuild,
-                value: info.buildNumber,
-              ),
-            ],
-          ),
-          const SizedBox(height: GvSpacing.lg),
-          Text(l10n.settingsAboutUnofficial, style: context.gvText.bodyM),
-        ],
-      ),
+      body: (BuildContext context, double bottomPadding) =>
+          _informationBody(bottomPadding, <Widget>[
+            SettingsFactList(
+              facts: <SettingsFact>[
+                SettingsFact(
+                  label: l10n.settingsAboutApplication,
+                  value: info.appName,
+                ),
+                // Absent until the real metadata resolves: a version is
+                // reported, never guessed. An empty value is omitted.
+                SettingsFact(
+                  label: l10n.settingsVersion,
+                  value: info.version,
+                  kind: SettingsFactKind.number,
+                ),
+                SettingsFact(
+                  label: l10n.settingsAboutBuild,
+                  value: info.buildNumber,
+                  kind: SettingsFactKind.number,
+                ),
+              ],
+            ),
+            SettingsProse(l10n.settingsAboutUnofficial, top: 24),
+          ]),
     );
   }
 }
 
 /// What GridView actually does with data, stated from the services that are
 /// really enabled in this build rather than from a draft policy.
+///
+/// Primer V2 (Step 55C.13B, `settings/information/privacy*.html`, owner
+/// decision SF-16): the independence statement; the "Privacy" section with
+/// the three fixed build statements, the current-session line under a
+/// dashed rule and the diagnostics note; then the policy action or, outside
+/// production, the missing-policy explanation.
 class PrivacySettingsScreen extends ConsumerWidget {
   const PrivacySettingsScreen({super.key});
+
+  /// The current-session line, present only with something truthful to say.
+  static const Key sessionKey = ValueKey<String>('settings-privacy-session');
+
+  /// The non-production missing-policy explanation.
+  static const Key policyUnavailableKey = ValueKey<String>(
+    'settings-privacy-policy-unavailable',
+  );
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -188,16 +221,14 @@ class PrivacySettingsScreen extends ConsumerWidget {
       ref.watch(appEnvironmentProvider),
     );
 
-    return GvScreenScaffold(
+    return SettingsPrimerScaffold(
       title: l10n.settingsPrivacyAndLegal,
-      body: ListView(
-        padding: _screenPadding,
-        children: <Widget>[
-          Text(l10n.settingsAboutUnofficial, style: context.gvText.bodyM),
-          const SizedBox(height: GvSpacing.lg),
-          GvScreenSection(
-            title: l10n.settingsPrivacyAndLegal,
-            child: GvInfoCard(
+      body: (BuildContext context, double bottomPadding) =>
+          _informationBody(bottomPadding, <Widget>[
+            SettingsProse(l10n.settingsAboutUnofficial),
+            // "Privacy", not a repeat of the screen title (SF-16, DD SI-03).
+            SettingsGroup.information(
+              title: l10n.settingsPrivacy,
               children: <Widget>[
                 // Crash reporting and performance monitoring state the build's
                 // **policy**, not a live service reading.
@@ -210,13 +241,21 @@ class PrivacySettingsScreen extends ConsumerWidget {
                 // failed activation today proves nothing about it. Reporting
                 // "disabled" from a failed activation would therefore be a
                 // guess presented as a fact.
-                GvSettingsField(
-                  label: l10n.settingsPrivacyCrashReporting,
-                  value: _policyValue(l10n, diagnostics),
-                ),
-                GvSettingsField(
-                  label: l10n.settingsPrivacyPerformance,
-                  value: _policyValue(l10n, diagnostics),
+                SettingsFactList(
+                  facts: <SettingsFact>[
+                    SettingsFact(
+                      label: l10n.settingsPrivacyCrashReporting,
+                      value: _policyValue(l10n, diagnostics),
+                    ),
+                    SettingsFact(
+                      label: l10n.settingsPrivacyPerformance,
+                      value: _policyValue(l10n, diagnostics),
+                    ),
+                    SettingsFact(
+                      label: l10n.settingsPrivacyAdvertising,
+                      value: l10n.settingsPrivacyDisabled,
+                    ),
+                  ],
                 ),
                 // The one honest live claim: whether *this app's own* reporting
                 // could be confirmed during this session. Worded so it can
@@ -224,6 +263,10 @@ class PrivacySettingsScreen extends ConsumerWidget {
                 // omitted entirely when there is nothing to say — a build with
                 // no diagnostics policy, or one whose adapters were never even
                 // going to activate, has no session to report on.
+                //
+                // After Advertising, under the dashed rule and directly above
+                // the note that qualifies it (SF-16): a runtime reading, set
+                // apart from the fixed build statements.
                 //
                 // `ValueListenableBuilder` because activation resolves after
                 // the first frame: a value captured at composition time would
@@ -242,48 +285,51 @@ class PrivacySettingsScreen extends ConsumerWidget {
                           activation,
                         );
                         if (session == null) return const SizedBox.shrink();
-                        return GvSettingsField(
-                          label: l10n.settingsPrivacySessionReporting,
-                          value: session,
+                        return SettingsFactList(
+                          key: sessionKey,
+                          leadingRule: SettingsFactRule.dashed,
+                          facts: <SettingsFact>[
+                            SettingsFact(
+                              label: l10n.settingsPrivacySessionReporting,
+                              value: session,
+                            ),
+                          ],
                         );
                       },
                 ),
-                GvSettingsField(
-                  label: l10n.settingsPrivacyAdvertising,
-                  value: l10n.settingsPrivacyDisabled,
-                ),
+                // The honest part the status alone cannot carry: the
+                // diagnostic components ship in every build of the app, and
+                // what the policy controls is transmission, not presence.
+                SettingsProse.note(l10n.settingsPrivacyDiagnosticsNote),
               ],
             ),
-          ),
-          const SizedBox(height: GvSpacing.md),
-          // The honest part the status alone cannot carry: the diagnostic
-          // components ship in every build of the app, and what the policy
-          // controls is transmission, not presence.
-          Text(
-            l10n.settingsPrivacyDiagnosticsNote,
-            style: context.gvText.caption,
-          ),
-          if (policy != null) ...<Widget>[
-            const SizedBox(height: GvSpacing.lg),
-            GvSettingsRow(
-              key: const ValueKey<String>('settings-privacy-policy'),
-              title: l10n.settingsPrivacyPolicyOpen,
-              icon: Icons.open_in_new,
-              onTap: () => openExternalLink(context, ref, policy),
-            ),
-          ]
-          // With no configured policy, production shows nothing at all: the
-          // reader cannot act on it and a self-explaining absence reads as a
-          // fault. Outside production the status is useful to whoever builds.
-          else if (explainsAbsence) ...<Widget>[
-            const SizedBox(height: GvSpacing.lg),
-            Text(
-              l10n.settingsPrivacyPolicyUnavailable,
-              style: context.gvText.bodyM,
-            ),
-          ],
-        ],
-      ),
+            if (policy != null)
+              Padding(
+                padding: const EdgeInsets.only(top: 24),
+                child: SettingsExternalLinkRow(
+                  key: const ValueKey<String>('settings-privacy-policy'),
+                  title: l10n.settingsPrivacyPolicyOpen,
+                  divider: true,
+                  onActivate: () =>
+                      openSettingsExternalLink(context, ref, policy),
+                ),
+              )
+            // With no configured policy, production shows nothing at all: the
+            // reader cannot act on it and a self-explaining absence reads as a
+            // fault. Outside production the status is useful to whoever
+            // builds: a static row in the action's position, its wording
+            // unchanged (SF-13).
+            else if (explainsAbsence)
+              Padding(
+                padding: const EdgeInsets.only(top: 24),
+                child: SettingsNavigationRow(
+                  key: policyUnavailableKey,
+                  title: l10n.settingsPrivacyPolicyUnavailable,
+                  trailing: SettingsRowTrailing.none,
+                  divider: true,
+                ),
+              ),
+          ]),
     );
   }
 
@@ -305,8 +351,8 @@ class PrivacySettingsScreen extends ConsumerWidget {
     DiagnosticsPolicy policy,
     ObservabilityActivation activation,
   ) {
-    // With no diagnostics policy there is no session to qualify, and the two
-    // rows above already say everything true about the build.
+    // With no diagnostics policy there is no session to qualify, and the rows
+    // above already say everything true about the build.
     if (policy != DiagnosticsPolicy.production) return null;
 
     return switch (activation) {
@@ -319,18 +365,4 @@ class PrivacySettingsScreen extends ConsumerWidget {
         l10n.settingsPrivacySessionUnconfirmed,
     };
   }
-}
-
-/// Opens an allow-listed external destination, reporting failure without
-/// exposing the URL or any platform exception.
-Future<void> openExternalLink(
-  BuildContext context,
-  WidgetRef ref,
-  ExternalLink link,
-) async {
-  final AppLocalizations l10n = AppLocalizations.of(context);
-  final ScaffoldMessengerState messenger = ScaffoldMessenger.of(context);
-  final bool opened = await ref.read(externalLinkLauncherProvider).open(link);
-  if (opened) return;
-  messenger.showSnackBar(SnackBar(content: Text(l10n.settingsOpenFailed)));
 }

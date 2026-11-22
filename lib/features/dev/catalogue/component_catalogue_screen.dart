@@ -4,6 +4,7 @@ import '../../../app/environment/app_environment.dart';
 import '../../../core/theme/theme.dart';
 import '../../../core/widgets/widgets.dart';
 import '../../../l10n/app_localizations.dart';
+import 'primer_catalogue_section.dart';
 
 /// A development-only gallery of every shared design-system component and its
 /// states. It is never part of a production build: [open] refuses to navigate
@@ -26,7 +27,6 @@ class ComponentCatalogueScreen extends StatefulWidget {
 
 class _ComponentCatalogueScreenState extends State<ComponentCatalogueScreen> {
   int _segment = 0;
-  int _navIndex = 0;
 
   static const String _longEn =
       'A very long English label that should wrap or ellipsize cleanly without '
@@ -87,25 +87,6 @@ class _ComponentCatalogueScreenState extends State<ComponentCatalogueScreen> {
                 GvStatusChip(label: 'Completed', tone: GvStatusTone.success),
                 GvStatusChip(label: 'Postponed', tone: GvStatusTone.warning),
                 GvStatusChip(label: 'Scheduled'),
-              ],
-            ),
-          ),
-          _Section(
-            title: 'Bottom navigation',
-            child: GvBottomNav(
-              selectedIndex: _navIndex,
-              onSelect: (int i) => setState(() => _navIndex = i),
-              items: const <GvBottomNavItem>[
-                GvBottomNavItem(icon: Icons.home_outlined, label: 'Home'),
-                GvBottomNavItem(
-                  icon: Icons.calendar_month_outlined,
-                  label: 'Calendar',
-                ),
-                GvBottomNavItem(
-                  icon: Icons.emoji_events_outlined,
-                  label: 'Standings',
-                ),
-                GvBottomNavItem(icon: Icons.explore_outlined, label: 'Explore'),
               ],
             ),
           ),
@@ -323,6 +304,9 @@ class _ComponentCatalogueScreenState extends State<ComponentCatalogueScreen> {
               ),
             ),
           ),
+          // Last, so the lazily built list leaves every legacy section where
+          // it was. Primer V2 is previewed here only; no screen uses it.
+          const PrimerCatalogueSection(),
         ],
       ),
     );

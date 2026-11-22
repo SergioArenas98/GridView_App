@@ -102,3 +102,10 @@ test/**/failures/
 # Local AI context pack: a derived, non-canonical documentation snapshot for
 # external assistant projects. The tracked repository stays authoritative.
 /docs/ai_context/
+#
+# Local MCP server configuration and installed agent skills. Machine-specific;
+# .mcp.json references credentials through environment variables and must
+# stay local. Skill copies are third-party tooling, not project source.
+/.mcp.json
+/skills-lock.json
+/.claude/skills/

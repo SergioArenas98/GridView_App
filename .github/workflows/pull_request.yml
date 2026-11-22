@@ -154,6 +154,7 @@ jobs:
             test/design_system/golden_test.dart \
             test/screens/screen_golden_test.dart \
             test/screens/light_theme_golden_test.dart \
+            test/screens/global_ui_golden_test.dart \
             test/settings/settings_golden_test.dart \
             test/media/media_golden_test.dart \
             --update-goldens

@@ -1,18 +1,7 @@
 import '../../../core/api/errors/api_failure.dart';
-import '../../../core/widgets/widgets.dart';
 import '../../../l10n/app_localizations.dart';
 import '../domain/entities/enums.dart';
 import '../domain/entities/session.dart';
-
-/// Maps a domain [EventStatus] to a design-system status tone. Meaning is always
-/// reinforced by the localized label, never carried by colour alone.
-GvStatusTone toneForEventStatus(EventStatus status) => switch (status) {
-  EventStatus.completed => GvStatusTone.success,
-  EventStatus.inProgress => GvStatusTone.live,
-  EventStatus.upcoming || EventStatus.scheduled => GvStatusTone.info,
-  EventStatus.postponed || EventStatus.cancelled => GvStatusTone.warning,
-  EventStatus.unknown => GvStatusTone.neutral,
-};
 
 /// The localized label for an event status, or `null` when unknown (no chip).
 String? eventStatusLabel(AppLocalizations l10n, EventStatus status) =>
@@ -62,17 +51,6 @@ String finishStatusLabel(AppLocalizations l10n, FinishStatus status) =>
       FinishStatus.dnq => l10n.finishStatusDnq,
       FinishStatus.unknown => l10n.finishStatusUnknown,
     };
-
-/// The design-system tone for a finish status.
-GvStatusTone toneForFinishStatus(FinishStatus status) => switch (status) {
-  FinishStatus.finished => GvStatusTone.success,
-  FinishStatus.lapped => GvStatusTone.info,
-  FinishStatus.dnf ||
-  FinishStatus.dns ||
-  FinishStatus.dsq ||
-  FinishStatus.dnq => GvStatusTone.warning,
-  FinishStatus.unknown => GvStatusTone.neutral,
-};
 
 /// The localized label for a session status, or `null` when unknown.
 String? sessionStatusLabel(AppLocalizations l10n, SessionStatus status) =>

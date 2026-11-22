@@ -125,7 +125,11 @@ Future<void> _pump(
       : DataSourceMode.remote,
 );
 
-Finder get _notices => find.byType(GvOfflineNotice);
+/// Legacy screens use `GvOfflineNotice`; the Primer V2 Home (Step 55C.1) uses
+/// `GvPrimerNotice`. Either way exactly one notice must show.
+Finder get _notices => find.byWidgetPredicate(
+  (Widget w) => w is GvOfflineNotice || w is GvPrimerNotice,
+);
 
 void main() {
   test('the scenario keys match the canonical resource keys', () {
@@ -205,7 +209,7 @@ void main() {
           locale: locale,
         );
 
-        expect(find.byType(GvResultRow), findsWidgets);
+        expect(find.byType(GvPrimerResultRow), findsWidgets);
         expect(_notices, findsOneWidget);
         expect(find.text(screenText), findsOneWidget);
       });
@@ -233,7 +237,7 @@ void main() {
       // It sits above the weekend facts, not inside the result section.
       expect(
         tester.getTopLeft(_notices).dy,
-        lessThan(tester.getTopLeft(find.byType(GvResultRow).first).dy),
+        lessThan(tester.getTopLeft(find.byType(GvPrimerResultRow).first).dy),
       );
     });
 

@@ -1,8 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:gridview/app/environment/app_environment.dart';
+import 'package:gridview/features/explore/presentation/widgets/explore_header.dart';
+import 'package:gridview/features/home/presentation/widgets/home_header.dart';
+import 'package:gridview/features/settings/presentation/widgets/settings_app_bar.dart';
 import 'package:gridview/features/shared/presentation/widgets/environment_badge.dart';
+import 'package:gridview/features/shared/presentation/widgets/primer_detail_app_bar.dart';
+import 'package:gridview/features/standings/presentation/widgets/standings_header.dart';
 
+import '../support/primer_fonts.dart';
 import '../support/router_harness.dart';
 
 /// The STAGING/DEV badge must never cover a screen's title.
@@ -35,6 +41,10 @@ const List<Locale> _locales = <Locale>[Locale('en'), Locale('es')];
 
 const List<double> _textScales = <double>[1.0, 1.3, 2.0];
 
+/// The Primer V2 bottom navigation (Step 55C.15) fits its labels by their
+/// measured width, so the real Archivo metrics are loaded: with the test font
+/// every label is too wide and the bar would take its 2 × 2 layout at sizes
+/// where the app shows one row.
 Future<void> _pump(
   WidgetTester tester, {
   required String location,
@@ -42,17 +52,20 @@ Future<void> _pump(
   Size surfaceSize = const Size(360, 640),
   Locale locale = const Locale('en'),
   double textScale = 1.0,
-}) => pumpApp(
-  tester,
-  initialLocation: location,
-  environment: environment,
-  environmentBadge: true,
-  padding: _statusBar,
-  surfaceSize: surfaceSize,
-  locale: locale,
-  textScale: textScale,
-  disableAnimations: true,
-);
+}) async {
+  await loadArchivo(tester);
+  await pumpApp(
+    tester,
+    initialLocation: location,
+    environment: environment,
+    environmentBadge: true,
+    padding: _statusBar,
+    surfaceSize: surfaceSize,
+    locale: locale,
+    textScale: textScale,
+    disableAnimations: true,
+  );
+}
 
 void _expectBadgeClearOfAppBars(WidgetTester tester, String label) {
   final Rect badge = tester.getRect(find.byType(GvEnvironmentBadge));
@@ -61,6 +74,68 @@ void _expectBadgeClearOfAppBars(WidgetTester tester, String label) {
     greaterThanOrEqualTo(_statusBar.top),
     reason: '$label: the badge stays out of the status bar',
   );
+
+  // The Primer V2 Home (Step 55C.1) has no Material app bar: its header
+  // scrolls with the page. The same rules apply to it.
+  final Finder homeHeader = find.byType(HomeHeader);
+  if (homeHeader.evaluate().isNotEmpty) {
+    final Rect header = tester.getRect(homeHeader);
+    expect(
+      header.top,
+      greaterThanOrEqualTo(badge.bottom),
+      reason: '$label: the Home header starts below the badge',
+    );
+    expect(
+      header.top - badge.bottom,
+      lessThan(_statusBar.top),
+      reason: '$label: the status bar is not added to the header again',
+    );
+    final Rect title = tester.getRect(find.text('GridView'));
+    expect(
+      title.overlaps(badge),
+      isFalse,
+      reason: '$label: the GridView wordmark is not covered',
+    );
+    return;
+  }
+
+  // The Primer V2 Standings (Step 55C.5) and Explore (Step 55C.7) have their
+  // own pinned header instead of a Material app bar, as does the Primer V2
+  // Grand Prix detail (Step 55C.12, the shared Primer detail app bar) and the
+  // Primer V2 Settings screens (Steps 55C.13A and 55C.13B, the wrapping
+  // Settings app bar).
+  // The same rules apply.
+  final Finder standingsHeader = find.byWidgetPredicate(
+    (Widget w) =>
+        w is StandingsHeader ||
+        w is ExploreHeader ||
+        w is PrimerDetailAppBar ||
+        w is SettingsAppBar,
+  );
+  if (standingsHeader.evaluate().isNotEmpty) {
+    final Rect header = tester.getRect(standingsHeader);
+    expect(
+      header.top,
+      greaterThanOrEqualTo(badge.bottom),
+      reason: '$label: the pinned header starts below the badge',
+    );
+    expect(
+      header.top - badge.bottom,
+      lessThan(_statusBar.top),
+      reason: '$label: the status bar is not added to the header again',
+    );
+    for (final Element text
+        in find
+            .descendant(of: standingsHeader, matching: find.byType(Text))
+            .evaluate()) {
+      expect(
+        tester.getRect(find.byWidget(text.widget)).overlaps(badge),
+        isFalse,
+        reason: '$label: "${(text.widget as Text).data}" is not covered',
+      );
+    }
+    return;
+  }
 
   final Finder appBars = find.byType(AppBar);
   expect(appBars, findsWidgets, reason: '$label: an app bar is shown');
@@ -176,6 +251,42 @@ void main() {
         findsNothing,
       );
       expect(find.byType(GvEnvironmentBadge), findsNothing);
+      if (screen.value == '/') {
+        // Primer V2 Home: the page colour runs under the status bar and the
+        // scrolling header starts right below it.
+        expect(tester.getRect(find.byType(HomeHeader)).top, _statusBar.top);
+        return;
+      }
+      if (screen.value == '/standings') {
+        // Primer V2 Standings: the page colour runs under the status bar and
+        // the pinned header starts right below it.
+        expect(
+          tester.getRect(find.byType(StandingsHeader)).top,
+          _statusBar.top,
+        );
+        return;
+      }
+      if (screen.value == '/explore') {
+        // Primer V2 Explore (Step 55C.7): as Standings.
+        expect(tester.getRect(find.byType(ExploreHeader)).top, _statusBar.top);
+        return;
+      }
+      if (screen.value.startsWith('/calendar/')) {
+        // Primer V2 Grand Prix detail (Step 55C.12): as Standings, with the
+        // shared Primer detail app bar inside the safe area.
+        expect(
+          tester.getRect(find.byType(PrimerDetailAppBar)).top,
+          _statusBar.top,
+        );
+        return;
+      }
+      if (screen.value.startsWith('/settings')) {
+        // Primer V2 Settings (Step 55C.13A root, Step 55C.13B information
+        // screens): as Standings, with the Settings app bar inside the safe
+        // area.
+        expect(tester.getRect(find.byType(SettingsAppBar)).top, _statusBar.top);
+        return;
+      }
       // The app bar starts at the top and extends under the status bar,
       // exactly as it does with no overlay installed at all.
       final Rect bar = tester.getRect(find.byType(AppBar).first);

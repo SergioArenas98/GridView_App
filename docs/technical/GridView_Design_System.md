@@ -48,6 +48,7 @@ lib/core/theme/
 │   ├── gv_icon_sizes.dart, gv_motion.dart, gv_layout.dart, gv_typography.dart
 │   └── tokens.dart    (barrel)
 ├── gv_semantic_colors.dart   ThemeExtension for semantic colours (+ context.gvColors)
+├── gv_primer_*.dart          Primer V2 roles, not yet activated (+ context.gvPrimer)
 ├── gv_team_accent.dart       contrast-safe team-accent foreground helper
 ├── gridview_theme.dart       buildGridViewDarkTheme()
 └── theme.dart                (barrel)
@@ -88,6 +89,10 @@ licensed TTFs under `assets/fonts/`, declare them in `pubspec.yaml`, and set
 `GvFonts.heading = 'Sora'` / `GvFonts.body = 'Inter'`. Do not commit unverified
 font files. The legacy Formula 1 fonts must not be used.
 
+Primer V2 (Step 55B.1) bundles **Archivo** for Primer V2 components only; the
+legacy scale above still renders with the platform font. See
+[GridView_Primer_V2_Theme_Foundation.md](GridView_Primer_V2_Theme_Foundation.md) §6.
+
 ## 5. Theme
 
 `buildGridViewDarkTheme()` is a dark-first Material 3 theme built from the tokens:
@@ -124,6 +129,13 @@ a light theme was "intentionally deferred"; that was true of Phase 3A and is not
 true now.)
 Theme selection is a persisted user preference — see
 `GridView_Preferences_And_Settings.md` §3.
+
+**Primer V2 foundation (Step 55A).** Both builders also install the
+`GvPrimerRoles` extension (`context.gvPrimer`) with the frozen Primer V2 Dark
+and Light roles. It is not yet read by any widget, so the values above are
+still what renders; screens move onto it in later migration steps (XS-28).
+Mapping, deferred responsibilities and the Archivo font prerequisite:
+[GridView_Primer_V2_Theme_Foundation.md](GridView_Primer_V2_Theme_Foundation.md).
 
 Team colours are decorative and may fail contrast, so they are applied only as
 accents through `GvTeamAccent.foregroundOn(...)`, never as the sole carrier of
