@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   evaluateDrain,
+  freshness,
   notObservable,
 } from '../../scripts/identity/drain-check.mjs';
 
@@ -81,5 +82,34 @@ describe('U11 drain check', () => {
     const s = drained();
     s.cutover.admissionClosed = true;
     expect(failing(s)).toEqual(['sequencer-authoritative']);
+  });
+
+  it('never reads a missing lease, rounds or sync section as drained', () => {
+    for (const mutate of [
+      (s) => delete s.inspect.lease,
+      (s) => delete s.inspect.rounds,
+      (s) => delete s.sync.sync,
+    ]) {
+      const s = drained();
+      mutate(s);
+      expect(evaluateDrain(s, now).drained).toBe(false);
+    }
+  });
+
+  it('requires the three reads to be coherent and recent', () => {
+    const t = '2026-12-01T11:58:00.000Z';
+    expect(freshness([t, t, '2026-12-01T11:58:30.000Z'], now).ok).toBe(true);
+    expect(freshness([t, t, '2026-12-01T11:55:00.000Z'], now).ok).toBe(false);
+    expect(
+      freshness(
+        [
+          '2026-12-01T11:40:00.000Z',
+          '2026-12-01T11:40:00.000Z',
+          '2026-12-01T11:40:01.000Z',
+        ],
+        now,
+      ).ok,
+    ).toBe(false);
+    expect(freshness([t, t, 'not-a-time'], now).ok).toBe(false);
   });
 });

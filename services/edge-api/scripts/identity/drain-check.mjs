@@ -35,12 +35,13 @@ export function evaluateDrain({ cutover, sync, inspect }, now) {
     inspect.publicationDisposition === null,
     inspect.publicationDisposition,
   );
-  const lease = inspect.lease ?? null;
+  // A missing section is never read as "nothing there".
+  const lease = inspect.lease;
   add(
     'lease-released-or-expired',
     lease === null ||
-      lease.state === 'released' ||
-      (typeof lease.expiresAt === 'string' &&
+      lease?.state === 'released' ||
+      (typeof lease?.expiresAt === 'string' &&
         Date.parse(lease.expiresAt) <= now),
     lease,
   );
@@ -50,19 +51,25 @@ export function evaluateDrain({ cutover, sync, inspect }, now) {
       inspect.backlog.entries.length === 0,
     inspect.backlog?.entries?.length ?? null,
   );
-  const pending = (inspect.rounds ?? [])
+  const rounds = Array.isArray(inspect.rounds) ? inspect.rounds : null;
+  const pending = (rounds ?? [])
     .filter((r) => r.stagedCorrection != null || r.competingCorrection != null)
     .map((r) => r.round);
-  add('no-pending-corrections', pending.length === 0, pending);
-  const s = sync.sync ?? {};
-  const ended = [s.lastCompletedAt, s.lastFailedAt]
+  add(
+    'no-pending-corrections',
+    rounds !== null && pending.length === 0,
+    rounds === null ? 'rounds missing' : pending,
+  );
+  const s = sync.sync;
+  add('sync-status-present', s !== null && typeof s === 'object', null);
+  const ended = [s?.lastCompletedAt, s?.lastFailedAt]
     .filter((v) => typeof v === 'string')
     .map(Date.parse);
   add(
     'no-sync-in-progress',
-    typeof s.lastStartedAt !== 'string' ||
+    typeof s?.lastStartedAt !== 'string' ||
       (ended.length > 0 && Math.max(...ended) >= Date.parse(s.lastStartedAt)),
-    { lastStartedAt: s.lastStartedAt ?? null },
+    { lastStartedAt: s?.lastStartedAt ?? null },
   );
   add(
     'sequencer-authoritative',
@@ -78,6 +85,20 @@ export function evaluateDrain({ cutover, sync, inspect }, now) {
   };
 }
 
+export const maximumSpreadMs = 120000;
+export const maximumAgeMs = 600000;
+
+/** The three reads were taken together and recently enough to judge. */
+export function freshness(instants, now) {
+  const times = instants.map((t) => Date.parse(t));
+  const ok =
+    times.every(Number.isFinite) &&
+    Math.max(...times) - Math.min(...times) <= maximumSpreadMs &&
+    now - Math.max(...times) <= maximumAgeMs &&
+    now >= Math.max(...times);
+  return { name: 'reads-fresh-and-coherent', ok, detail: instants };
+}
+
 /** Body of the newest `<op>-*.txt` file in a G0 output directory. */
 export function readG0(directory, op) {
   const file = readdirSync(directory)
@@ -89,7 +110,9 @@ export function readG0(directory, op) {
     .replace(new RegExp('^' + String.fromCharCode(0xfeff)), '')
     .split(/\r?\n/);
   if (!/ HTTP 200$/.test(lines[0])) throw new Error(`${op} was not HTTP 200`);
-  return { file, data: JSON.parse(lines.slice(1).join('\n')).data };
+  const at = / start=(\S+) /.exec(lines[0])?.[1];
+  if (!at) throw new Error(`${op} read has no start instant`);
+  return { file, at, data: JSON.parse(lines.slice(1).join('\n')).data };
 }
 
 function main() {
@@ -112,10 +135,7 @@ function main() {
         readG0(g0, op),
       ]),
     );
-    result = {
-      at: new Date(now).toISOString(),
-      files: Object.values(reads).map((r) => r.file),
-      ...evaluateDrain(
+    const evaluated = evaluateDrain(
         {
           cutover: reads.CutoverStatus.data,
           sync: reads.SyncStatus.data,
@@ -123,6 +143,16 @@ function main() {
         },
         now,
       ),
+      fresh = freshness(
+        Object.values(reads).map((r) => r.at),
+        now,
+      );
+    result = {
+      at: new Date(now).toISOString(),
+      files: Object.values(reads).map((r) => r.file),
+      ...evaluated,
+      drained: evaluated.drained && fresh.ok,
+      checks: [...evaluated.checks, fresh],
     };
   } catch (error) {
     process.stdout.write(

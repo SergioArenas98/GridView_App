@@ -7,7 +7,8 @@
 // exported dossier's creator to hold `reviewer`. A seed by a credential
 // without `reviewer` therefore yields a catalog whose export can never be
 // verified offline, and an installation only accepts one seed. These tests
-// pin both behaviours so the G3 credential choice cannot regress silently.
+// pin the verification behaviour for both seeder choices, so the G3
+// credential choice cannot regress silently.
 import { createHash, randomBytes } from 'node:crypto';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import {
@@ -115,9 +116,8 @@ for (const variant of [
         approvedImportDossierId: 'sha256:' + '0'.repeat(64),
       });
       for (const c of [reader, reviewer])
-        expect([400, 403]).toContain(
-          (await h.raw('/seed', probe, c.token)).status,
-        );
+        // Role is checked before mode and body (routes.ts), so this is a role refusal.
+        expect((await h.raw('/seed', probe, c.token)).status).toBe(403);
     });
 
     it('completes seed, validate, activate and reader export', async () => {

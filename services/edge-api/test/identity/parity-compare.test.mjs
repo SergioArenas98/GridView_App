@@ -96,14 +96,14 @@ describe('U11 parity comparator', () => {
     );
   });
 
-  it('detects different request accounting', () => {
+  it('detects different capture input', () => {
     const b = tree({
       runtime: true,
       documents: docs,
       capture: { responses: [{ url: 'u2' }, { url: 'u1' }] },
     });
     expect(checks(compareTrees(input({ b1: b, b2: b })))).toContain(
-      'request-accounting',
+      'capture-input',
     );
   });
 
@@ -161,5 +161,36 @@ describe('U11 parity comparator', () => {
     expect(parseArguments(ok.slice(0, 8))).toBeNull();
     expect(parseArguments([...ok, '--a1', 'y'])).toBeNull();
     expect(parseArguments(['--out', 'x', ...ok.slice(2)])).toBeNull();
+  });
+
+  it('refuses empty, duplicate or missing inputs instead of passing vacuously', () => {
+    const empty = tree({ runtime: true, documents: [] });
+    expect(checks(compareTrees(input({ b1: empty, b2: empty })))).toContain(
+      'documents',
+    );
+    const dup = tree({ runtime: true, documents: [docs[0], docs[0]] });
+    expect(checks(compareTrees(input({ b1: dup, b2: dup })))).toContain(
+      'documents',
+    );
+    const noCapture = tree({
+      runtime: false,
+      documents: docs,
+      capture: { responses: [] },
+    });
+    expect(
+      checks(compareTrees(input({ a1: noCapture, a2: noCapture }))),
+    ).toContain('capture-input');
+    const r = compareTrees(input({ exportBytes: Buffer.from('{}') }));
+    expect(
+      r.findings.filter((f) => f.check === 'reference').length,
+    ).toBeGreaterThanOrEqual(4);
+  });
+
+  it('names a source difference outside the documents', () => {
+    const b = tree({ runtime: true, documents: docs });
+    b.artifact.source = { drivers: [{ id: 'driver-b' }] };
+    expect(checks(compareTrees(input({ b1: b, b2: b })))).toEqual(
+      expect.arrayContaining(['source', 'artifact-body']),
+    );
   });
 });

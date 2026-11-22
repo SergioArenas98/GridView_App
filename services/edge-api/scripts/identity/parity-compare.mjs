@@ -10,7 +10,7 @@
 // JSON verdict. Exit codes: 0 parity, 1 difference or invalid input, 2 usage.
 import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
 const usage =
@@ -107,16 +107,34 @@ export function compareTrees({ a1, a2, b1, b2, exportBytes }) {
   if (ga?.treeClean !== true || gb?.treeClean !== true)
     fail('code', 'a generator tree was not clean');
 
-  // Request accounting: the consumed recordings (the generator refuses any
-  // unrequested, repeated or unrecorded response) and classified rounds.
-  if (canonical(a1.manifest.capture) !== canonical(b1.manifest.capture))
-    fail('request-accounting', 'capture accounting differs');
+  // Capture input: both sides were generated from the same verified capture.
+  // This is input identity, not request accounting: the request sequence and
+  // limiter reservations are compared by the gated
+  // test/season-batch/u11-parity-accounting.test.ts.
+  if (
+    !Array.isArray(a1.manifest.capture?.responses) ||
+    a1.manifest.capture.responses.length === 0
+  )
+    fail('capture-input', 'side A records no capture responses');
+  else if (canonical(a1.manifest.capture) !== canonical(b1.manifest.capture))
+    fail(
+      'capture-input',
+      'the two sides were generated from different captures',
+    );
 
   // Every generated public document, by name, byte for byte (canonical).
-  const docs = (t) =>
-    new Map(t.artifact.documents.map((d) => [d.documentName, canonical(d)]));
-  const da = docs(a1),
-    db = docs(b1);
+  const docs = (label, t) => {
+    const list = Array.isArray(t.artifact.documents)
+      ? t.artifact.documents
+      : [];
+    const map = new Map(list.map((d) => [d.documentName, canonical(d)]));
+    if (list.length === 0) fail('documents', label + ' has no documents');
+    if (map.size !== list.length)
+      fail('documents', label + ' has duplicate document names');
+    return map;
+  };
+  const da = docs('A', a1),
+    db = docs('B', b1);
   const documentDiffs = [...new Set([...da.keys(), ...db.keys()])]
     .filter((n) => da.get(n) !== db.get(n))
     .sort();
@@ -152,8 +170,12 @@ export function compareTrees({ a1, a2, b1, b2, exportBytes }) {
     inventoryPolicy: 'strict-v1',
   };
   for (const [k, v] of Object.entries(expected))
-    if (ref[k] !== v) fail('reference', `identityCatalog.${k}`);
-  if (ref.datasetVersion !== a1.artifact.release?.contentVersion)
+    if (typeof v !== 'string' || v.length === 0 || ref[k] !== v)
+      fail('reference', `identityCatalog.${k}`);
+  if (
+    typeof ref.datasetVersion !== 'string' ||
+    ref.datasetVersion !== a1.artifact.release?.contentVersion
+  )
     fail('reference', 'identityCatalog.datasetVersion');
 
   return {
@@ -164,7 +186,7 @@ export function compareTrees({ a1, a2, b1, b2, exportBytes }) {
       revisionId: exported.revision?.revisionId,
       gitCommit: ga?.gitCommit ?? null,
       documentCount: a1.artifact.documents.length,
-      consumedResponses: a1.manifest.capture?.responses?.length ?? null,
+      captureResponses: a1.manifest.capture?.responses?.length ?? null,
       sideA: {
         artifactSha256: sha256(a1.artifactBytes),
         manifestSha256: sha256(a1.manifestBytes),
@@ -187,6 +209,19 @@ function main() {
   globalThis.fetch = () => {
     throw new Error('parity-compare never sends a request');
   };
+  for (const [x, y] of [
+    ['--a1', '--a2'],
+    ['--b1', '--b2'],
+  ])
+    if (resolve(parsed[x]) === resolve(parsed[y])) {
+      process.stdout.write(
+        JSON.stringify({
+          verdict: 'invalid-input',
+          reason: x + ' and ' + y + ' must be different runs',
+        }) + '\n',
+      );
+      process.exit(1);
+    }
   let result;
   try {
     result = compareTrees({
