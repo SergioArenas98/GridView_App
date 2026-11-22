@@ -1,0 +1,40 @@
+/* GridView — Primer V2 shared component: detail app bar (back action + one-line
+   title; Flutter's AppBar on the entity detail routes).
+
+   Moved verbatim. These two rules are byte-identical (after whitespace and
+   comment normalisation) in grand-prix-detail/gpd.css, driver-detail/dd.css,
+   team-detail/td.css and circuit-detail/cd.css (verified 2026-11-09). The
+   back button itself is the core `.icon-btn` (components/app-bar.css); the
+   markup is `<header class="dbar">` + `a.icon-btn.dbar__back` + `.dbar__title`.
+   Consumers: the Driver, Team and Circuit Detail pilots (2026-11-09) and the
+   Grand Prix Detail pilot (2026-11-10). The Settings pilot (2026-11-10) does
+   not load it: see "NOT here".
+
+   NOT here:
+   - Settings' modified bar (settings/settings.css: 21px, uncapped, wraps; the
+     environment-strip offset) and the information screens' S-2 title fit.
+     They are screen variants and stay local.
+   - Any title policy. The four detail bars ellipsize on one line (Flutter
+     parity). The proposed unified rule (wrap, narrow, last-resort scale:
+     DESIGN-SYSTEM-CONSOLIDATION §5.1, XS-07) needs device validation and is
+     not applied.
+   - The states galleries' `.spec__frame .dbar { position: static; }`
+     (development-only, each states.css). */
+
+.dbar {
+  position: sticky; top: 0; z-index: 6;
+  display: grid; grid-template-columns: 48px minmax(0, 1fr);
+  align-items: center; column-gap: 4px;
+  min-height: 56px;
+  padding: max(4px, env(safe-area-inset-top)) var(--gutter) 4px 6px;
+  background: var(--ground);
+  border-bottom: 1px solid var(--hair);
+}
+.dbar__title {
+  min-width: 0;
+  font-size: min(1.125rem, 26px);
+  font-weight: 800;
+  font-variation-settings: "wdth" 88;
+  line-height: 1.25;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}

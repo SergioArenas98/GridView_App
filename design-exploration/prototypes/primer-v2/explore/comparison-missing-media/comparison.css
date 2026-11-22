@@ -1,0 +1,90 @@
+/* GridView — Primer V2 Explore: missing-media comparison.
+   Loads after ../primer-core.css and ../explore.css (the approved baseline,
+   unchanged) and only overrides. No new colour, family, size step or weight:
+   every value below already exists in the baseline or the core.
+
+   Alternative A (.lib--nomedia): a collection with no media reference has no
+   image column. The identity column starts after a 16px accent lane that
+   holds the team-accent tick; the right-hand figure rail stays. The
+   reclaimed 46px goes to the
+   name: fewer wraps, and the name may relax from the condensed cut it needed
+   beside the slot (wdth 86 -> 94, both already used in Primer).
+
+   Alternative B (.lib--cue): A plus one quiet chevron per row, in its own
+   16px column after the figure, secondary colour (7.95:1 non-text): the
+   same chevron Standings and Calendar rows already carry. */
+
+/* ---------- Alternative A ---------- */
+/* A fixed 16px accent lane after the gutter, on every row. Without it the
+   12° team-accent tick sat 4px from the name and read as a "/" before it
+   (found in the first capture). Rows without a colour keep the empty lane,
+   so every name starts on the same line. Hairlines start at the names, as
+   the baseline's started at its text column. */
+.lib--nomedia { --lane: 16px; }
+.lib--nomedia .ent + .ent::before { left: calc(var(--gutter) + var(--lane)); }
+.lib--nomedia .ent__link {
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-areas: "body fig";
+  column-gap: 16px;
+  padding-left: calc(var(--gutter) + var(--lane));
+}
+.lib--nomedia .ent[style] .ent__link::before { left: var(--gutter); }   /* >= 8px from the name, measured */
+.lib--nomedia .ent--team .ent__link { grid-template-columns: minmax(0, 1fr); grid-template-areas: "body"; }
+.lib--nomedia .ent__name { font-variation-settings: "wdth" 94; }
+
+/* Narrow container / large text. Without a slot to share the first line
+   with, the figure takes its own line, set inline ("1 VER", "5.793 km"):
+   above the name for drivers (an entry-list number), after the details for
+   circuits (a fact about the place). Nothing is truncated or capped. */
+@container lib (max-width: 20em) {
+  .lib--nomedia .ent__link,
+  .lib--nomedia .ent--team .ent__link {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas: "fig" "body";
+    row-gap: 4px;
+  }
+  .lib--nomedia .ent--circuit .ent__link { grid-template-areas: "body" "fig"; row-gap: 8px; }
+  .lib--nomedia .ent--team .ent__link { grid-template-areas: "body"; }
+  .lib--nomedia .ent__fig { justify-self: start; flex-direction: row; align-items: baseline; column-gap: 8px; }
+  .lib--nomedia .ent__fig-cap { margin-top: 0; }
+  .lib--nomedia .ent__name { font-variation-settings: "wdth" 86; }
+}
+
+/* ---------- Alternative B: row-navigation cue ---------- */
+/* Identical to Standings' .st__go (and Calendar's .ev__go), so the cue is the
+   app's existing row-navigation grammar, not a new element. */
+.ent__go { grid-area: go; align-self: center; width: 16px; height: 16px; stroke-width: 2.25; color: var(--text-2); margin-right: -4px; }
+@media (hover: hover) { .ent__link:hover .ent__go { color: var(--text); } }
+.lib--cue .ent__link { grid-template-columns: minmax(0, 1fr) auto 16px; grid-template-areas: "body fig go"; }
+.lib--cue .ent--team .ent__link { grid-template-columns: minmax(0, 1fr) 16px; grid-template-areas: "body go"; }
+@container lib (max-width: 20em) {
+  .lib--cue .ent__link,
+  .lib--cue .ent--team .ent__link { grid-template-columns: minmax(0, 1fr) 16px; grid-template-areas: "fig go" "body go"; }
+  .lib--cue .ent--circuit .ent__link { grid-template-areas: "body go" "fig go"; }
+  .lib--cue .ent--team .ent__link { grid-template-areas: "body go"; }
+  .ent__go { align-self: start; margin-top: 4px; }     /* as .st__go at large text */
+}
+
+/* ---------- Media states, for a collection that has references ----------
+   The 48px column is reserved for every row (baseline geometry), decided
+   from the read model before anything loads, so no state change moves text.
+   Flutter keeps distinct keys for none / pending / failed but draws one
+   placeholder for all three; this proposal draws them differently. */
+.ent__media--none { background: none; border-color: transparent; }
+.ent__media--loading { background: var(--tray); border-color: transparent; }
+.ent__media--failed { /* the baseline placeholder: raised gradient + category icon */ }
+.ent__media--loaded {   /* geometry stand-in only: no image exists or is drawn */
+  background: linear-gradient(160deg, var(--text-2) 0%, var(--raised) 100%);   /* a tonal block, as an image would be */
+  border-color: var(--hair-strong);
+}
+
+/* ---------- Gallery annotations (development only) ---------- */
+.rule__t { margin-top: 14px; }
+.rule { margin-top: 4px; padding-left: 20px; list-style: decimal; color: var(--text-2); font-size: 0.875rem; line-height: 1.4; }
+.rule li { text-wrap: pretty; }
+.rule li + li { margin-top: 4px; }
+.state-btns { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+.btn--state { margin-top: 0; background: var(--tray); color: var(--text); border: 1px solid var(--hair-strong); }
+.btn--state[aria-pressed="true"] { background: var(--chalk); color: var(--on-chalk); }
+/* The baseline gallery's annotation link is 24px tall; 48px here. */
+.dev-head .dev-head__note a { display: inline-flex; align-items: center; min-height: 48px; }

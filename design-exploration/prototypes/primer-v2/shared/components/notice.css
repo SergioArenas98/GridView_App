@@ -1,0 +1,28 @@
+/* GridView — Primer V2 shared component: notice (stale / refresh-failed /
+   offline). Text carries the meaning; the icon only reinforces it.
+
+   This is the COMMON SUBSET of the copies found in the screen stylesheets, not
+   a choice between them. Verified declaration by declaration (2026-11-08):
+   - calendar.css: exactly these two rules.
+   - standings.css, explore.css, gpd.css, dd.css, td.css, cd.css: the same two
+     rules, plus `text-wrap: pretty` on .notice. Whether Calendar should gain
+     it (or the others drop it) is unresolved; a screen that has it keeps it in
+     its own stylesheet until then.
+   - settings/information/information.css: a reading-width variant (margin,
+     12px 14px padding, 15px / 1.45 text, max-width 36em, icon margin-top 1px).
+     Intentional for the reading screens (SI-01 to SI-04); stays screen-specific.
+     Its other declarations (flex, alignment, gap, radius, tray, border, icon
+     size and colour) equal these. Since 2026-11-10 the Settings information
+     pilot loads this file and keeps only the variant's own declarations as a
+     local extension (consolidation-pilot/settings/information/information.css).
+   The cause icon per notice (XS-22) is not decided here. */
+
+.notice {
+  display: flex; align-items: flex-start; gap: 10px;
+  padding: 10px 12px;
+  border-radius: var(--radius-sm);
+  background: var(--tray);
+  border: 1px solid var(--hair-strong);
+  font-size: 0.875rem; line-height: 1.35;
+}
+.notice .icon { width: 20px; height: 20px; color: var(--ember); margin-top: -1px; }

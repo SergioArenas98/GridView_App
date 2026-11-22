@@ -1,0 +1,78 @@
+/* VISUAL PROTOTYPE (Step 53D, Light rollout Batch 2): screen roles for
+   Circuit Detail, Grand Prix Detail and Settings on the approved B Motorsport
+   (LT-1). Loaded last, after ../light-foundations/light-roles.css,
+   light-b.css, light-bm.css, light-53b.css and ../light-rollout-b1/light-b1.css,
+   which are reused unchanged.
+
+   Colour only. Every declaration is a colour, a background colour, a shadow,
+   an outline colour or a custom property holding one. No size, offset,
+   order, markup, word or behaviour change (checks-b2.mjs compares every page
+   with its Dark reference). No new token and no new hue: values are existing
+   Light roles (--lt-*), existing Primer V2 tokens or an alpha of an existing
+   colour, the mechanism --hair already uses.
+
+   Most of these screens need nothing here: their colours come from the
+   shared tokens, which light-roles.css already maps. GP Detail keeps the
+   approved Graphite heading band (LT-1, light-bm.css) and the approved Light
+   results (LT-5, LT-11). No Graphite panel is added to Circuit Detail or
+   Settings (LT-3). */
+
+/* ---------- 1. Circuit Detail ----------
+   Related Grand Prix arrow disc. Dark: a Chalk disc with a Graphite glyph.
+   On the light page Chalk is no longer a contrasting fill (1.05:1), so it
+   takes the small-inverse-control role, as GP Detail's circuit disc
+   (.cx__disc), Driver's .disc and the Calendar next-event disc. */
+.rx__disc { background: var(--lt-inverse); color: var(--lt-on-inverse); }
+/* Row states: the role map's hover and pressed values (Dark: Chalk 3% and
+   the tray, which is lighter than the page in Light). */
+.rx:hover { background: var(--lt-hover); }
+.rx:active { background: var(--lt-pressed-soft); }
+
+/* ---------- 2. Settings ----------
+   2a. The provisional light preview (GvColorsLight, settings.css) is
+   superseded by Primer V2 Light. When the chosen theme is Light the script
+   sets :root[data-theme="light"]; the states gallery's frame 5 uses
+   .is-light-provisional. Both now resolve to the same B Motorsport roles as
+   every other Light page, instead of the provisional blue-grey palette. */
+:root[data-theme="light"], .is-light-provisional {
+  --ground: var(--lt-page);
+  --ground-low: var(--lt-nav-solid);
+  --tray: var(--lt-band);
+  --raised: var(--lt-raised);
+  --text: var(--lt-text);
+  --text-2: var(--lt-text-2);
+  --oxide: var(--lt-accent);   /* the Red Oxide token value, #A03E2B */
+  --ember: var(--lt-accent);
+  --hair: var(--lt-hair);
+  --hair-strong: var(--lt-hair-strong);
+}
+/* 2b. Selection mark. Dark: Ember mark with a Graphite check (7.44:1). In
+   Light the mark is Red Oxide (--ember maps to the oxide accent), and
+   Graphite on oxide is 2.80:1, so the check takes Chalk (5.43:1), as every
+   label on Red Oxide does (selected slab, Winner tag, round block). */
+:root, :root[data-theme="light"], .is-light-provisional { --on-mark: var(--chalk); }
+/* 2c. Snackbar. Dark: the inverse Chalk plane with a Graphite message. In
+   Light the inverse plane is Graphite (as the Standings leader row), with
+   Chalk text; its oxide 12-degree seam is decorative (LT-3, L6). The drop
+   shadow takes the Light alpha of the same shape. */
+:root, :root[data-theme="light"], .is-light-provisional {
+  --snack-bg: var(--lt-inverse);
+  --snack-fg: var(--lt-on-inverse);
+}
+.snack { box-shadow: 0 16px 32px -12px rgba(20, 21, 24, 0.45); }
+/* 2d. Gallery stand-in for a focused option (static class, not :focus). */
+.opt.is-focus { outline-color: var(--lt-focus); }
+
+/* ---------- 3. Circuit heading sheet ----------
+   The light band, as the Driver plate, Team banner (LT-13) and the role
+   map's .gp/.dp/.tb: the 4.5% white sheen has no effect on light. Two
+   background layers, as in Dark (only colours change). */
+.ch { background-image: none, none; }
+
+/* ---------- 4. GP team link focus (LT-17, approved for Light in Step 53E) ----------
+   The classification team link's ring is drawn 2px inside its 48px box
+   instead of 3px outside (base.css), so it no longer crosses the driver
+   name above it or the status chip below. Focus-only: target, padding,
+   label, order and rest state unchanged. Verified on the frozen Dark chain
+   in isolation (dark-tl); the Dark prototypes are not changed. */
+.cl__team:focus-visible { outline-offset: -2px; }

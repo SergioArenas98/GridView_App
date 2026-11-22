@@ -1,0 +1,89 @@
+/* EXPERIMENT (Step 53A), not an approved design: Primer V2 Light role map.
+   Loaded on the light pages after the pilots' own stylesheets and the frozen
+   Dark implementation overlays (../dark-state-boundaries/candidate.css and
+   refine-focus.css), then followed by ONE direction file (light-a.css or
+   light-b.css), which only sets the --lt-* values used here.
+
+   Colour only. No size, offset, outline width, shape, font, order, markup or
+   behaviour changes: every declaration below is a colour, a background, a
+   shadow, a border colour, an outline colour or a stroke colour.
+
+   Why a role map and not a token swap: the Dark tokens carry several roles
+   each. --chalk is both "label on Red Oxide" (selected slab, Winner tag,
+   round block) and "inverse surface" (championship band, leader row, Final
+   chip, round arrow disc). --ember is both "accent text on the page" and
+   "focus ring". In Light those roles take different values, so they are
+   separated here. ../../shared/ and the pilots are read, never written. */
+
+/* ---------- 1. Token layer: roles that keep one meaning ---------- */
+:root {
+  --ground: var(--lt-page);
+  --ground-low: var(--lt-nav-solid);
+  --tray: var(--lt-band);
+  --raised: var(--lt-raised);
+  --text: var(--lt-text);
+  --text-2: var(--lt-text-2);
+  --ember: var(--lt-accent);          /* accent text and icons on the light page */
+  --hair: var(--lt-hair);
+  --hair-strong: var(--lt-hair-strong);
+  /* Frozen Dark A1 role (candidate.css), light values */
+  --x-line-status: var(--lt-line-status);
+  --x-line-status-on-chalk: var(--lt-inverse-line-status);   /* the leader row is the inverse plane */
+  color-scheme: light;
+}
+
+/* ---------- 2. Focus: the ring contrasts with the surface it is drawn on ---------- */
+:focus-visible { outline-color: var(--lt-focus); }
+.hero:has(.hero__action:focus-visible) { outline-color: var(--lt-focus); }
+.seg__btn:focus-visible { outline-color: var(--lt-focus); }                  /* unselected: light tray */
+.seg__btn[aria-pressed="true"]:focus-visible { outline-color: var(--chalk); } /* selected: oxide slab (unchanged from Dark) */
+.st--leader .st__link:focus-visible { outline-color: var(--lt-focus); }      /* ring is outside the row, on the page */
+.champ :focus-visible { outline-color: var(--lt-inverse-accent); }          /* inside the inverse (graphite) band */
+.cl--winner .cl__hit:focus-visible { outline-color: var(--lt-focus); }       /* crosses the retained gradient cell: see report */
+
+/* ---------- 3. Status vocabulary ---------- */
+.chip--unknown { border-color: var(--lt-line-unknown); }   /* dashed, stronger than solid */
+.chip--alert { border-color: var(--lt-line-unknown); }     /* solid, as strong as dashed (as in Dark) */
+.chip--final { background: var(--lt-inverse); color: var(--lt-on-inverse); }   /* confirmed = filled inverse + check */
+.chip--live { background: var(--lt-live); }                /* not rendered on these pages */
+.st--leader .chip--provisional { color: var(--lt-on-inverse); }
+
+/* ---------- 4. Navigation and selection ---------- */
+.tabbar { background: var(--lt-nav); box-shadow: var(--lt-nav-shadow); }
+/* Dark draws the selected icon in --text (Chalk on the oxide slab). In Light
+   --text is graphite (2.80:1 on oxide), so the icon keeps Chalk while the
+   label below it takes graphite. */
+.tab.is-selected .tab__icon { color: var(--chalk); }
+
+/* ---------- 5. Inverse plane (graphite inside Light) ---------- */
+.champ {
+  background: linear-gradient(170deg, var(--lt-inverse-low) 0%, var(--lt-inverse) 100%);
+  color: var(--lt-on-inverse);
+  box-shadow: var(--lt-inverse-shadow);
+}
+.leader + .leader { border-top-color: var(--lt-inverse-hair); }
+.leader__label, .leader__unit, .leader__team { color: var(--lt-on-inverse-2); }
+.leader__link { color: var(--lt-inverse-accent); }
+
+.st--leader .st__link {
+  background: linear-gradient(170deg, var(--lt-inverse-low) 0%, var(--lt-inverse) 100%);
+  color: var(--lt-on-inverse);
+  box-shadow: var(--lt-inverse-shadow);
+}
+.st--leader .st__link:hover { background: var(--lt-inverse-low); }
+.st--leader .st__pos, .st__kicker { color: var(--lt-inverse-accent); }
+.st--leader .st__meta, .st__unit, .st--leader .st__go { color: var(--lt-on-inverse-2); }
+
+/* Small inverse controls: arrow discs and the primary button */
+.hero__arrow, .cx__disc { background: var(--lt-inverse); color: var(--lt-on-inverse); }
+.btn:not(.btn--state), .btn--state[aria-pressed="true"] { background: var(--lt-inverse); color: var(--lt-on-inverse); }
+
+/* ---------- 6. Surfaces and effects ---------- */
+.hero { background-image: none, none; background-color: var(--lt-card); box-shadow: var(--lt-card-shadow); }   /* two layers, as in Dark: only colours change */
+.hero__round::before { box-shadow: var(--lt-round-shadow); }   /* DK-6 gradient itself unchanged */
+.sessions { background-image: none; background-color: var(--lt-band); }
+.result__mark { -webkit-text-stroke-color: var(--lt-watermark); }
+.gp { background-image: none, none; background-color: var(--lt-band); }   /* the white 4.5% sheen has no effect on light */
+.gp__facts { background: var(--lt-facts); }
+.st__link:hover, .ent__link:hover, .cx:hover, .cl__hit:hover { background: var(--lt-hover); }
+.cl__hit:active { background: var(--lt-pressed-soft); }

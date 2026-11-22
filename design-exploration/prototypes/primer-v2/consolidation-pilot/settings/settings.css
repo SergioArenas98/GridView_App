@@ -1,0 +1,315 @@
+/* GridView — Primer V2: Settings (root + Language, Theme, Time display).
+   Loads after primer-core.css (byte-identical copy of the shared foundation)
+   and only adds to it. Conventions as the other screens: text in rem, layout
+   in px, nothing capped for text scaling.
+
+   Composition: a functional screen, not a sports-information screen.
+   No board, band, hero or large figure. Identity comes from:
+   - Archivo's width axis as hierarchy: section kickers at normal width,
+     current values slightly condensed and heavy, titles at normal width;
+   - the kicker with a trailing rule (Circuit Detail's sheet kicker), the
+     Developer section's rule dashed (Primer's "not confirmed" pattern);
+   - one selection mark: a 12° parallelogram (the livery cut, as on the
+     selected navigation slab). Outlined = not selected; Ember fill + check
+     = selected. The same filled mark, small, precedes each current value on
+     the root, so the root and the option screens read as one system.
+   Settings opens on the root navigator: back action only, no bottom
+   navigation. */
+
+/* CONSOLIDATION PILOT copy (2026-11-10) of ../../settings/settings.css,
+   loaded after ../../shared/tokens.css, base.css and components/app-bar.css
+   instead of primer-core.css. Every rule below is the approved rule,
+   unchanged, except one rule moved out (see the note where it stood). Kept
+   local on purpose, because no other screen has them or they differ:
+   - the Settings app bar (.chrome, .dbar, .dbar__title, environment strip):
+     a variant of the detail bar, NOT shared/components/detail-app-bar.css
+     (sticky + background + border sit on .chrome, not .dbar; the title is
+     the h1, 21px, uncapped, wraps; see DESIGN-SYSTEM-CONSOLIDATION and the
+     pilot report);
+   - .page (4px top, 40px + safe area bottom; detail-page.css has 0 / 32px);
+   - kicker, rows, selection mark, options, snackbar, annotations, gallery.
+   The information pilot (./information/) loads this file too. */
+
+/* [hidden] { display: none !important; }  moved to ../../shared/base.css (identical). */
+
+:root {
+  --on-mark: #141518;            /* check on the Ember mark: 7.44:1 */
+  --snack-bg: var(--chalk);
+  --snack-fg: var(--on-chalk);
+}
+
+/* ---------- Provisional light preview (NOT the Primer V2 light design) ----------
+   Roles mapped one-to-one from Flutter's GvColorsLight
+   (lib/core/theme/tokens/gv_colors_light.dart), so the Theme choice can be
+   shown working. Final Primer V2 light tokens are pending (backlog XS-01). */
+:root[data-theme="light"], .is-light-provisional {
+  --ground: #F1F4F9;             /* background */
+  --ground-low: #E5EAF2;         /* surfaceElevatedAlt */
+  --tray: #FFFFFF;               /* surfaceElevated */
+  --raised: #E5EAF2;             /* surfaceElevatedAlt */
+  --text: #0F131A;               /* textPrimary: 16.88:1 */
+  --text-2: #566070;             /* textMuted: 5.77:1 */
+  --oxide: #C62719;              /* accentPrimary */
+  --ember: #C62719;              /* accentPrimary as accent text: 5.14:1 */
+  --hair: #C7D0DE;               /* divider */
+  --hair-strong: #A9B4C4;
+  --on-mark: #FFFFFF;            /* onAccentPrimary: 5.67:1 */
+  --snack-bg: #0F131A;
+  --snack-fg: #F1F4F9;
+  color-scheme: light;
+}
+
+/* ---------- Chrome: environment strip + app bar ---------- */
+.chrome {
+  position: sticky; top: 0; z-index: 6;
+  background: var(--ground);
+  border-bottom: 1px solid var(--hair);
+}
+/* Detail app bar (as ../circuit-detail/cd.css, XS-09), with two changes:
+   the title is the page's h1, it wraps instead of truncating, and its size
+   is not capped, so 200% text reaches the title too. */
+.dbar {
+  display: grid; grid-template-columns: 48px minmax(0, 1fr);
+  align-items: center; column-gap: 4px;
+  min-height: 56px;
+  padding: max(4px, env(safe-area-inset-top)) var(--gutter) 4px 6px;
+}
+.dbar__title {
+  min-width: 0;
+  font-size: 1.3125rem;           /* 21: one step above the detail bar (18, capped at 26px); Settings has no hero, so the title carries the screen. Uncapped. */
+  font-weight: 800;
+  font-variation-settings: "wdth" 88;
+  line-height: 1.25;
+  overflow-wrap: break-word;
+  text-wrap: balance;
+}
+/* Non-production only. A strip of its own, so the app bar always starts
+   below it (Flutter EnvironmentBadgeOverlay): never on top of the title. */
+.envstrip {
+  display: flex; justify-content: center;
+  padding: max(6px, env(safe-area-inset-top)) var(--gutter) 2px;
+}
+.envstrip:not([hidden]) + .dbar { padding-top: 4px; }
+.envbadge {
+  padding: 2px 10px;
+  border: 1.5px dashed var(--text-2);
+  border-radius: 999px;
+  font-size: 0.8125rem; font-weight: 700; line-height: 1.3;
+  letter-spacing: 0.02em;
+}
+
+.page { padding: 4px 0 calc(40px + env(safe-area-inset-bottom)); }
+
+/* ---------- Sections ---------- */
+.sgroup { margin-top: 28px; }
+.sgroup:first-child { margin-top: 20px; }
+.kicker {
+  display: flex; align-items: center; gap: 12px;
+  padding: 0 var(--gutter);
+  margin-bottom: 6px;
+  color: var(--text-2);
+  font-size: 0.8125rem; font-weight: 700; line-height: 1.25;
+}
+.kicker::after { content: ""; flex: 1 1 24px; height: 1px; background: var(--hair); }
+.sgroup--dev .kicker::after { height: 0; background: none; border-top: 1.5px dashed var(--hair-strong); }
+
+/* Rows and options share the separator: a hairline inset to the gutter, so
+   hover and press can fill edge to edge without a card. */
+.srows > li + li > .srow,
+.opt + .opt {
+  background-image: linear-gradient(var(--hair), var(--hair));
+  background-size: calc(100% - 2 * var(--gutter)) 1px;
+  background-position: var(--gutter) 0;
+  background-repeat: no-repeat;
+}
+
+/* ---------- Settings row (one focus stop: title, value or description) ---------- */
+.srow {
+  display: grid; grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center; column-gap: 12px;
+  min-height: 60px;
+  padding: 12px var(--gutter);
+  color: var(--text);
+  transition: background-color 160ms ease-out;
+}
+/* Hover only where hover exists: a tapped row must not keep a fill that
+   reads as a second state. */
+@media (hover: hover) { a.srow:hover { background-color: var(--tray); } }
+a.srow:active { background-color: var(--raised); }
+.srow:focus-visible, .opt:focus-visible { outline-offset: -3px; border-radius: 6px; }
+.srow__text { min-width: 0; }
+.srow__title {
+  display: block;
+  font-size: 1.0625rem; font-weight: 600; line-height: 1.3;
+  overflow-wrap: break-word;
+}
+/* Preference rows lead with the current value: the name is the label, the
+   value is what the row says. */
+.srow__label {
+  display: block;
+  color: var(--text-2);
+  font-size: 0.875rem; font-weight: 600; line-height: 1.3;
+  overflow-wrap: break-word;
+}
+.srow__value {
+  display: flex; align-items: flex-start; gap: 9px;
+  margin-top: 2px;
+  font-size: 1.1875rem; font-weight: 750;
+  font-variation-settings: "wdth" 92;
+  line-height: 1.25;
+  overflow-wrap: break-word;
+}
+.srow__value > span:last-child { min-width: 0; }
+.srow__desc {
+  display: block;
+  margin-top: 3px;
+  color: var(--text-2);
+  font-size: 0.875rem; line-height: 1.4;
+  overflow-wrap: break-word;
+  text-wrap: pretty;
+}
+.srow__go { color: var(--text-2); }
+.srow__go--ext { width: 20px; height: 20px; margin-right: 2px; }
+/* Non-production status row: not interactive, so no chevron, no hover. */
+.srow--static .srow__title { color: var(--text-2); }
+
+/* Large text on a narrow screen: a long single word ("Predeterminado")
+   must not break mid-word. As the approved title rule (S-2), the width
+   axis narrows first; text is never scaled down or capped. The query is in
+   em of the list, so it reacts to text size as well as screen width. */
+.srows, .opts { container: rows / inline-size; }
+@container rows (max-width: 17em) {
+  .srow__value { font-variation-settings: "wdth" 76; gap: 7px; }
+  .srow__title, .opt__label { font-variation-settings: "wdth" 88; }
+}
+@container rows (max-width: 12.5em) {
+  .srow__value { font-variation-settings: "wdth" 66; letter-spacing: -0.01em; }
+  .srow__title { font-variation-settings: "wdth" 70; }
+  .opt__label { font-variation-settings: "wdth" 78; }
+}
+
+/* ---------- Selection mark (livery cut) ---------- */
+.mark {
+  position: relative; flex: none;
+  display: grid; place-items: center;
+  width: 26px; height: 20px;
+}
+.mark::before {
+  content: ""; position: absolute; inset: 0;
+  border: 2px solid var(--text-2);      /* 7.95:1 on graphite */
+  border-radius: 3px;
+  transform: skewX(var(--cut));
+}
+.mark__check {
+  position: relative; width: 16px; height: 16px;
+  fill: none; stroke: var(--on-mark); stroke-width: 3.25;
+  stroke-linecap: round; stroke-linejoin: round;
+  opacity: 0;
+}
+/* Small filled mark before a current value on the root. */
+.mark--sm { width: 10px; height: 14px; margin-top: calc((1.25em - 14px) / 2); }
+.mark--sm::before { border: 0; border-radius: 1.5px; background: var(--ember); }
+
+/* ---------- Option row (radio) ---------- */
+.page--choice { padding-top: 12px; }
+.opt {
+  display: grid; grid-template-columns: 26px minmax(0, 1fr);
+  align-items: start; column-gap: 16px;
+  min-height: 64px;
+  padding: 18px var(--gutter);
+  cursor: pointer;
+  transition: background-color 160ms ease-out;
+  -webkit-tap-highlight-color: transparent;
+}
+.opt .mark { margin-top: calc((1.3 * 1.0625rem - 20px) / 2); }
+@media (hover: hover) { .opt:hover { background-color: var(--tray); } }
+.opt:active, .opt.is-pressed { background-color: var(--raised); }
+.opt.is-focus { outline: 2px solid var(--ember); outline-offset: -3px; border-radius: 6px; }
+.opt__text { min-width: 0; }
+.opt__label {
+  display: block;
+  font-size: 1.0625rem; font-weight: 550; line-height: 1.3;
+  overflow-wrap: break-word;
+}
+.opt__desc {
+  display: block;
+  margin-top: 4px;
+  max-width: 34em;
+  color: var(--text-2);
+  font-size: 0.9375rem; line-height: 1.4;
+  overflow-wrap: break-word;
+  text-wrap: pretty;
+}
+/* Selected: fill + check + weight. Never colour alone. */
+.opt[aria-checked="true"] .mark::before { background: var(--ember); border-color: var(--ember); }
+.opt[aria-checked="true"] .mark__check { opacity: 1; }
+.opt[aria-checked="true"] .opt__label { font-weight: 800; }
+
+/* ---------- Snackbar (save failure) ----------
+   Always in the tree as the live region; empty and off-screen until shown. */
+.snack {
+  position: fixed; left: var(--gutter); right: var(--gutter);
+  bottom: calc(16px + env(safe-area-inset-bottom)); z-index: 20;
+  display: flex; align-items: stretch; gap: 12px;
+  padding: 14px 16px 14px 14px;
+  border-radius: var(--radius-sm);
+  background: var(--snack-bg); color: var(--snack-fg);
+  box-shadow: 0 16px 32px -12px rgba(0, 0, 0, 0.7);
+  transform: translateY(calc(100% + 32px)); opacity: 0;
+  transition: transform 260ms cubic-bezier(0.16, 1, 0.3, 1), opacity 200ms ease-out;
+  pointer-events: none;
+}
+.snack.is-shown { transform: none; opacity: 1; pointer-events: auto; }
+.snack::before {          /* 12° oxide seam: oxide is a surface on Chalk */
+  content: ""; flex: none; width: 4px; border-radius: 1px;
+  background: var(--oxide);
+  transform: skewX(var(--cut));
+}
+.snack__msg { font-size: 0.9375rem; font-weight: 600; line-height: 1.35; text-wrap: pretty; }
+
+/* ---------- Prototype annotations (never app copy) ---------- */
+.devnotes { padding: 24px var(--gutter) 0; display: grid; gap: 8px; }
+.devnotes:not(:has(.devnote:not([hidden]))) { display: none; }
+.devnote {
+  padding: 8px 10px;
+  border: 1.5px dashed var(--hair-strong);
+  border-radius: var(--radius-sm);
+  color: var(--text-2);
+  font-size: 0.8125rem; line-height: 1.4;
+}
+
+/* ---------- Development-only gallery ---------- */
+.gallery__main { padding: 24px var(--gutter) 48px; }
+.gallery__title { font-size: min(1.5rem, 34px); font-weight: 800; font-variation-settings: "wdth" 96; line-height: 1.15; text-wrap: balance; }
+.gallery__intro { margin-top: 8px; color: var(--text-2); max-width: 40em; overflow-wrap: anywhere; hyphens: auto; }
+.hub { margin-top: 24px; }
+.hub .kicker { padding: 0; }
+.hub__list { display: grid; }
+.hub__link {
+  display: flex; align-items: center;
+  min-height: 48px; padding: 6px 0;
+  color: var(--ember); font-weight: 650; line-height: 1.3; overflow-wrap: anywhere;
+  text-decoration: underline; text-underline-offset: 3px; text-decoration-thickness: 1px;
+}
+.frame { margin: 32px 0 0; }
+.frame__cap { font-size: 1.1875rem; font-weight: 700; line-height: 1.3; margin-bottom: 10px; overflow-wrap: anywhere; hyphens: auto; text-wrap: balance; }
+.frame__screen {
+  position: relative; overflow: hidden;
+  margin: 0 calc(-1 * var(--gutter));
+  background: var(--ground); color: var(--text);
+  padding: 8px 0;
+  border-top: 1px solid var(--hair-strong); border-bottom: 1px solid var(--hair-strong);
+}
+.frame__screen .chrome { position: static; }
+.frame__screen.frame--snack { padding-bottom: 96px; }
+.frame--snack .snack { position: absolute; }
+.frame__fade { height: 24px; }
+
+@media (prefers-reduced-motion: reduce) {
+  .snack { transition: none; }
+}
+
+/* Spoken separator between a row's title and its value or description:
+   inline (so the accessible name reads "Language, System default" without a
+   stray space) and clipped, so it is never seen. */
+.sep { clip-path: inset(50%); }

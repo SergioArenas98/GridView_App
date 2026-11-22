@@ -1,0 +1,56 @@
+/* EXPERIMENT (Step 49D.1), not an approved design: notice coexistence and the
+   Calendar first-open cue. Loaded after the approved stylesheets and only
+   adds to them; ../../shared/ and the approved screen stylesheets are read,
+   never written.
+
+   1. Detail screens: several notices inside one .page-notice block keep the
+      gap Calendar already uses between its status items (12px).
+   2. Calendar first-open cue (?cue=toast | toast-full | edge): a transient,
+      non-focusable overlay built from the existing notice look (tray,
+      hairline, radius, cloud-off icon in ember). It never takes layout space,
+      so it cannot move the race list. No new colour, icon or token. */
+
+/* 1. Stacked detail notices ------------------------------------------------ */
+.page-notice > .notice + .notice { margin-top: 12px; }
+
+/* 2. Calendar cue ------------------------------------------------------------ */
+.cue {
+  position: fixed; left: var(--gutter); right: var(--gutter); z-index: 9;
+  display: flex; align-items: flex-start; gap: 10px;
+  padding: 10px 12px;
+  border-radius: var(--radius-sm);
+  background: var(--tray);
+  border: 1px solid var(--hair-strong);
+  font-size: 0.875rem; line-height: 1.35;
+  text-wrap: pretty;
+  pointer-events: none;   /* never takes a tap meant for the row below */
+}
+.cue[hidden] { display: none; }
+.cue .icon { flex: none; width: 20px; height: 20px; color: var(--ember); margin-top: -1px; }
+/* Bottom placement: above the floating navigation (--nav-space from nav-inset.js). */
+.cue--toast, .cue--toast-full {
+  bottom: calc(var(--nav-space, calc(var(--nav-min) + env(safe-area-inset-bottom))) + 8px);
+}
+/* Top-edge placement: just below the pinned title and season rows. */
+.cue--edge { top: calc(var(--cal-pinned-h, 0px) + 8px); }
+/* The existing chevron, turned to point at the notice above the list. */
+.cue--edge .cue__dir { transform: rotate(-90deg); color: var(--text-2); }
+.cue__dir { display: none; }
+.cue--edge .cue__dir { display: block; }
+
+/* 3. Step 49D.2 option B: inline status line before the next race (in the
+      list flow, no overlay). The last-check caption's type (13px, text-2)
+      and the notice's cloud-off icon; aligned with the name column. */
+.ev-status {
+  display: flex; align-items: flex-start; gap: 8px;
+  padding: 10px var(--gutter) 6px calc(var(--gutter) + var(--num-col) + var(--col-gap));
+  color: var(--text-2);
+  font-size: 0.8125rem; line-height: 1.35;
+}
+.ev-status[hidden] { display: none; }
+.ev-status .icon { flex: none; width: 16px; height: 16px; color: var(--ember); margin-top: 1px; }
+
+@media (prefers-reduced-motion: no-preference) {
+  .cue:not([hidden]) { animation: cue-in 160ms ease-out; }
+  @keyframes cue-in { from { opacity: 0; } to { opacity: 1; } }
+}

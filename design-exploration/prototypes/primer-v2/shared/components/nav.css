@@ -1,0 +1,41 @@
+/* GridView — Primer V2 shared component: bottom navigation (adaptive
+   regular → condensed → stacked; mode chosen by ../nav-inset.js, which also
+   sets --nav-space). Moved verbatim from primer-core.css. The selected-label
+   fallback (wdth 62, weight 700) in standings.css / explore.css is not part of
+   this file: it is not applied to Home or Calendar (S-3, XS-08). */
+
+/* ---------- Bottom navigation ---------- */
+.tabbar {
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 10;
+  display: grid; grid-template-columns: repeat(4, 1fr);
+  min-height: calc(var(--nav-min) + env(safe-area-inset-bottom));
+  padding: 6px 4px env(safe-area-inset-bottom);
+  background: rgba(16, 17, 19, 0.96);
+  border-top: 1px solid var(--hair);
+  box-shadow: 0 -12px 24px -12px rgba(0, 0, 0, 0.6);
+}
+.tab {
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px;
+  min-height: 56px; min-width: 0; padding: 4px 2px;
+  color: var(--text-2);
+  font-size: 0.8125rem; font-weight: 600; line-height: 1.15; text-align: center;
+}
+.tab__icon { position: relative; z-index: 0; display: grid; place-items: center; width: 60px; height: 32px; flex: none; }
+.tab__label { display: block; max-width: 100%; white-space: nowrap; }
+.tab.is-selected { color: var(--text); font-weight: 800; }
+.tab.is-selected .tab__icon::before {
+  content: ""; position: absolute; inset: 0; z-index: -1;
+  background: var(--oxide);
+  border-radius: 4px;
+  transform: skewX(var(--cut));
+}
+.tab:hover:not(.is-selected) { color: var(--text); }
+
+/* Adaptive navigation (nav-inset.js picks the first mode where all labels fit).
+   regular → condensed (Archivo wdth 72) → stacked (2 × 2, hyphenation allowed). */
+.tabbar[data-fit="condensed"] .tab__label { font-variation-settings: "wdth" 72; }
+.tabbar[data-fit="stacked"] { grid-template-columns: repeat(2, 1fr); row-gap: 2px; padding-top: 4px; }
+.tabbar[data-fit="stacked"] .tab__label {
+  white-space: normal; hyphens: auto; overflow-wrap: normal;
+  font-variation-settings: "wdth" 72;
+}

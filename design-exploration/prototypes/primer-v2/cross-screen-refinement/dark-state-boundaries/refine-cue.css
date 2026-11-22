@@ -1,0 +1,19 @@
+/* EXPERIMENT (Step 51C.1), not an approved design. Loaded after
+   refine-focus.css on the "-refine-cue" pages only.
+
+   Option B: one minimal 12-degree selection cue. A 3px Chalk bar cut at the
+   Primer angle (var(--cut)), the same geometry as the Standings leader seam
+   and the team tick, set in the selected slab's leading padding. Chalk on
+   flat oxide is 5.43:1. It is absolutely positioned, so the selector's
+   height, widths, fit modes and targets are unchanged; it is not an arrow,
+   a chevron or an underline, and it carries no text. */
+
+.seg__btn[aria-pressed="true"]::after {
+  content: "";
+  position: absolute;
+  top: 13px; bottom: 13px; left: 12px;
+  width: 3px;
+  background: var(--chalk);
+  transform: skewX(var(--cut));
+  pointer-events: none;
+}

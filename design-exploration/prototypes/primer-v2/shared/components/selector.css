@@ -1,0 +1,54 @@
+/* GridView — Primer V2 shared component: segmented selector (Standings
+   championship, Explore category). Selection = Red Oxide slab cut at 12° +
+   Chalk bold label + aria-pressed; adaptive fit regular → condensed → stacked
+   is set by each screen's script (data-fit, data-measuring).
+
+   COMMON PART ONLY (added 2026-11-09, Explore pilot). Moved verbatim from
+   standings.css and explore.css, where these rules are identical, except for
+   two declarations that differ between the approved screens and therefore
+   stay in each screen's stylesheet (a local extension, loaded after this file):
+
+   | Screen    | .seg grid-template-columns   | .seg__btn padding |
+   |-----------|------------------------------|-------------------|
+   | Standings | repeat(2, minmax(0, 1fr))    | 8px 12px          |
+   | Explore   | repeat(3, minmax(0, 1fr))    | 8px 10px          |
+
+   The column count follows the number of options; whether the padding
+   difference is intended is not recorded (Explore pilot report). The slab's
+   uncatalogued gradient start #B04633 is kept as approved (XS-26 open). The
+   stacked mode's `grid-template-columns: 1fr` (specificity 0,2,0) still wins
+   over the screens' column count (0,1,0). */
+
+.seg {
+  position: relative;
+  display: grid;
+  padding: 3px;
+  border-radius: 12px;
+  background: var(--tray);
+  border: 1px solid var(--hair);
+  overflow: hidden;
+  isolation: isolate;
+}
+.seg__btn {
+  position: relative; z-index: 0;
+  min-height: 48px; min-width: 0;
+  border: 0; border-radius: 9px;
+  background: transparent;
+  color: var(--text-2);
+  font-size: 0.9375rem; font-weight: 600; line-height: 1.2;
+  cursor: pointer;
+}
+.seg__label { display: block; white-space: nowrap; }
+.seg__btn:hover { color: var(--text); }
+.seg__btn[aria-pressed="true"] { color: var(--chalk); font-weight: 800; }
+.seg__btn[aria-pressed="true"]::before {
+  content: ""; position: absolute; inset: 0 -4px; z-index: -1;
+  background: linear-gradient(165deg, #B04633 0%, var(--oxide) 55%, var(--oxide-deep) 100%);
+  border-radius: 6px;
+  transform: skewX(var(--cut));
+}
+.seg__btn:focus-visible { outline-offset: -3px; }
+.seg[data-measuring] .seg__btn { font-weight: 800; }
+.seg[data-fit="condensed"] .seg__label { font-variation-settings: "wdth" 72; }
+.seg[data-fit="stacked"] { grid-template-columns: 1fr; }
+.seg[data-fit="stacked"] .seg__label { white-space: normal; font-variation-settings: "wdth" 72; }

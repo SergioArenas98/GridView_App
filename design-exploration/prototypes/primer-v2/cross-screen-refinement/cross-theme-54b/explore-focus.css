@@ -1,0 +1,13 @@
+/* EXPERIMENT (Step 54B, XS-31), not an approved design. Loaded last on the
+   frozen Dark or Light chain (home-*-inset pages only); every approved sheet
+   is only read.
+
+   Home Explore links: the base ring (2px, offset 3px outside the link) is
+   clipped by .explore__strip { overflow: hidden }, so only the edges between
+   links stay visible. Candidate B draws the same ring, in the same
+   per-surface colour, inside the link instead. Width, colour, radius
+   (base.css 6px on focus), targets and layout are unchanged; only the
+   offset moves. The value is the smallest inset that keeps the whole ring
+   visible inside the strip's rounded corners and clear of the separators
+   (checks-54b.mjs --sweep). */
+.explore__strip a:focus-visible { outline-offset: var(--x-explore-focus-offset, -4px); }

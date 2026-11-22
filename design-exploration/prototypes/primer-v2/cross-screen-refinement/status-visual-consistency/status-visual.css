@@ -1,0 +1,9 @@
+/* EXPERIMENT (Step 49E), not an approved design. Loaded after the pilots'
+   own stylesheets and only adds to them; ../../shared/ and the pilot
+   stylesheets are read, never written.
+
+   1. The provisional dagger inside a chip, as Standings already renders it
+      (standings.css: `.chip--provisional .dagger { font-weight: 800; }`).
+   2. Stacked detail notices keep the 12px gap used in Step 49D. */
+.chip .dagger { font-weight: 800; }
+.page-notice > .notice + .notice { margin-top: 12px; }

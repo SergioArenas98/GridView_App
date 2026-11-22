@@ -1,0 +1,4 @@
+/* LT-14 option A (Step 53C.1, comparison only): completed Calendar row at
+   full opacity in Light. Completion is carried by the "Completed" /
+   "Finalizado" chip (word, check icon, solid status outline). */
+.ev--completed .ev__link { opacity: 1; }

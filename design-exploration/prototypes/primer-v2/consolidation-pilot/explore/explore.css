@@ -1,0 +1,206 @@
+/* GridView — Primer V2: Explore, CONSOLIDATION PILOT copy of
+   ../../explore/explore.css (the baseline stylesheet, which Alternative B
+   loads before comparison.css). Loads after the shared foundation
+   (../../shared/: tokens, base, app bar, chips, navigation, notice, selector,
+   empty state) and only adds to it. Differences from the approved file: the
+   [hidden] guard, the notice base rules, the common selector rules, `.empty`,
+   `.empty__msg` and `.btn` moved to ../../shared/ verbatim; `.notice`, `.seg`
+   and `.seg__btn` keep only their Explore-specific declarations (local
+   extensions). Everything else is unchanged.
+
+   Conventions as Home, Calendar and Standings: text in rem, layout in px, display figures capped.
+
+   Composition: a reference library. Every row is one entity, reading
+   left → right as image slot, identity, and an optional identity figure:
+   the driver's race number (with short code), the circuit's length (km).
+   Teams have no identity figure; their row leads with the line-up instead.
+   Figures sit on a right-hand rail, so the eye can run down numbers as on a
+   timing sheet. Hairlines start at the text column, leaving the image slots
+   as an open column (Calendar's inset logic, applied to media). */
+
+/* ---------- Copied from standings.css (candidates for the core) ----------
+   [hidden] guard: ../../shared/base.css. The pinned header stays here: it
+   matches standings.css plus Explore's [data-header="none"] mode, and header
+   budget / title fit are pending decisions (S-1, S-2, XS-06, XS-07). */
+.appbar--pinned {
+  position: sticky; top: 0; z-index: 6;
+  padding-bottom: 4px;
+  background: var(--ground);
+}
+.appbar--pinned .season { grid-column: 1 / -1; margin-top: -4px; }
+.appbar--pinned .appbar__brand { min-width: 0; }
+.appbar--pinned .wordmark { max-width: 100%; white-space: nowrap; }
+.appbar--pinned .wordmark[data-fit="w100"] { font-variation-settings: "wdth" 100; }
+.appbar--pinned .wordmark[data-fit="w84"] { font-variation-settings: "wdth" 84; }
+.appbar--pinned .wordmark[data-fit="w72"], .appbar--pinned .wordmark[data-fit="scaled"] { font-variation-settings: "wdth" 72; }
+.pinbar {
+  position: sticky; top: var(--appbar-h, 0px); z-index: 5;
+  padding: 8px var(--gutter) 12px;
+  background: var(--ground);
+  border-bottom: 1px solid var(--hair);
+}
+[data-header="scroll"] .appbar--pinned { position: static; }
+[data-header="scroll"] .pinbar { top: 0; }
+[data-header="none"] .appbar--pinned, [data-header="none"] .pinbar { position: static; }
+/* Notice: base rules in ../../shared/components/notice.css; local extension
+   as approved (not in Calendar; see the notice.css header). */
+.notice { text-wrap: pretty; }
+
+/* Segmented control: Standings' selector, with three segments. Common rules in
+   ../../shared/components/selector.css; Explore's geometry stays here. */
+.seg { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.seg__btn { padding: 8px 10px; }
+
+/* Selected bottom-navigation label fallback (Standings decision 3). */
+.tabbar[data-fit="condensed"] .tab.is-selected .tab__label,
+.tabbar[data-fit="stacked"] .tab.is-selected .tab__label { font-variation-settings: "wdth" 62; }
+.tabbar[data-fit="condensed"] .tab.is-selected,
+.tabbar[data-fit="stacked"] .tab.is-selected { font-weight: 700; }
+
+/* ---------- Collection status: Explore's own (no timestamp, no stale) ----------
+   Flutter: a thin progress line while refreshing; "Update failed" notice on a
+   failed refresh (it wins). Cached rows stay. */
+.status { margin-top: 10px; }
+.progress {
+  position: relative; overflow: hidden;
+  height: 2px; border-radius: 2px;
+  background: var(--hair);
+}
+.progress::after {
+  content: ""; position: absolute; top: 0; bottom: 0; left: 0; width: 40%;
+  background: var(--ember);
+  animation: progress 1.4s cubic-bezier(0.65, 0, 0.35, 1) infinite;
+}
+@keyframes progress { from { transform: translateX(-100%); } to { transform: translateX(250%); } }
+@media (prefers-reduced-motion: reduce) {
+  .progress::after { animation: none; left: 30%; }
+}
+
+/* ---------- Page ---------- */
+.lib-page {
+  padding: 4px 0 calc(var(--nav-space, calc(var(--nav-min) + env(safe-area-inset-bottom))) + 24px);
+}
+
+/* ---------- Entity rows ---------- */
+.lib {
+  container: lib / inline-size;
+  --slot: 48px;
+  --col-gap: 14px;
+}
+.ent { position: relative; }
+.ent + .ent::before {
+  content: "";
+  position: absolute; top: 0; height: 1px;
+  left: calc(var(--gutter) + var(--slot) + var(--col-gap));
+  right: var(--gutter);
+  background: var(--hair);
+}
+.ent__link {
+  position: relative;
+  display: grid;
+  grid-template-columns: var(--slot) minmax(0, 1fr) auto;
+  grid-template-areas: "media body fig";
+  column-gap: var(--col-gap);
+  align-items: start;
+  min-height: 76px;
+  padding: 14px var(--gutter) 15px;
+}
+.ent__link:hover { background: rgba(236, 234, 229, 0.03); }
+.ent__link:active { background: var(--tray); }
+.ent__link:focus-visible { outline-offset: -3px; border-radius: 4px; }
+
+/* Team accent (ED08 / ET06): decorative 12° livery tick in the gutter, only
+   when the read model supplies a valid colour. Never the only identity cue. */
+.ent[style] .ent__link::before {
+  content: "";
+  position: absolute; left: 6px; top: 18px; height: 40px; width: 3px;
+  background: var(--accent);
+  transform: skewX(var(--cut));
+}
+
+/* Image slot (ED09 / ET07 / EC07). Fixed square: absent, loading, rejected,
+   failed and undecodable images all render the same placeholder at the same
+   size, so nothing shifts when an image arrives. Decorative: the row text
+   already names the entity. No cleared F1 media exists, so every slot here is
+   the placeholder. */
+.ent__media {
+  grid-area: media;
+  width: var(--slot); height: var(--slot);
+  display: grid; place-items: center;
+  border-radius: 12px;
+  background: linear-gradient(160deg, var(--raised) 0%, var(--tray) 100%);
+  border: 1px solid var(--hair);
+  color: var(--text-2);
+  overflow: hidden;
+}
+.ent__media img { width: 100%; height: 100%; object-fit: cover; }
+.ent__media .icon { width: 22px; height: 22px; stroke-width: 1.5; }
+
+.ent__body { grid-area: body; min-width: 0; display: flex; flex-direction: column; align-items: flex-start; }
+.ent__name {
+  font-size: 1.0625rem;             /* 17 */
+  font-weight: 750;
+  font-variation-settings: "wdth" 86;
+  line-height: 1.2;
+  letter-spacing: -0.005em;
+  overflow-wrap: break-word; hyphens: auto;
+  max-width: 100%;
+}
+.ent__sub { margin-top: 2px; color: var(--text-2); font-size: 0.875rem; line-height: 1.35; overflow-wrap: break-word; }
+/* Labelled data line: existing field labels make Flutter's bare numbers
+   ("2 · 402.5") readable. Each label+value pair never breaks internally. */
+.ent__data {
+  display: flex; flex-wrap: wrap; column-gap: 14px; row-gap: 2px;
+  margin-top: 6px;
+  font-size: 0.8125rem; line-height: 1.35;
+}
+/* Label and value stay together when they fit and wrap apart when they do
+   not ("Unidad de potencia / Mercedes" at 200%); the value never breaks. */
+.datum { display: inline-flex; flex-wrap: wrap; column-gap: 4px; max-width: 100%; }
+.nowrap, .datum__value { white-space: nowrap; }
+.datum__label { color: var(--text-2); font-weight: 600; }
+.datum__value { font-weight: 700; font-variant-numeric: tabular-nums lining-nums; }
+/* Team line-up summary (ET05): short codes as one tracked line. */
+.ent__codes { margin-top: 3px; font-size: 0.8125rem; font-weight: 700; letter-spacing: 0.06em; color: var(--text); }
+
+/* Identity figure rail. */
+.ent__fig { grid-area: fig; display: flex; flex-direction: column; align-items: flex-end; text-align: right; }
+.ent__fig-num {
+  font-size: min(1.75rem, 32px);    /* 28 */
+  font-weight: 800;
+  font-variation-settings: "wdth" 118;
+  font-variant-numeric: tabular-nums lining-nums;
+  letter-spacing: -0.03em;
+  line-height: 1;
+  white-space: nowrap;
+}
+.ent__fig-cap { margin-top: 4px; color: var(--text-2); font-size: 0.8125rem; font-weight: 700; letter-spacing: 0.04em; }
+.ent--circuit .ent__fig-num { font-size: min(1.5rem, 30px); font-variation-settings: "wdth" 106; }
+
+/* Teams: no identity figure, so the name gets the full width. */
+.ent--team .ent__link { grid-template-columns: var(--slot) minmax(0, 1fr); grid-template-areas: "media body"; }
+
+/* Narrow container / large text: slot and figure share the first line, the
+   text takes the full width under them. */
+@container lib (max-width: 20em) {
+  .ent__link,
+  .ent--team .ent__link {
+    grid-template-columns: var(--slot) minmax(0, 1fr);
+    grid-template-areas: "media fig" "body body";
+    row-gap: 10px;
+  }
+  .ent__fig { justify-self: end; }
+  .ent + .ent::before { left: var(--gutter); }
+}
+
+/* ---------- Empty, error, loading ---------- */
+/* .empty, .empty__msg and .btn: ../../shared/components/empty-state.css.
+   The list-screen icon and title sizes stay here (detail screens differ). */
+.empty .icon { width: 32px; height: 32px; color: var(--text-2); margin-bottom: 4px; }
+.empty__title { font-size: min(1.25rem, 30px); font-weight: 750; font-variation-settings: "wdth" 96; line-height: 1.2; text-wrap: balance; }
+.skeleton { display: flex; flex-direction: column; gap: 4px; padding: 8px var(--gutter); }
+.skeleton__row { display: grid; grid-template-columns: 48px 1fr; gap: 14px; align-items: center; height: 76px; }
+.skeleton__slot { width: 48px; height: 48px; border-radius: 12px; background: var(--tray); }
+.skeleton__lines { display: flex; flex-direction: column; gap: 8px; }
+.skeleton__line { height: 12px; border-radius: 6px; background: var(--tray); }
+.skeleton__line:last-child { width: 60%; }

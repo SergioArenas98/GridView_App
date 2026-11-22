@@ -1,0 +1,12 @@
+/* TEAM-LINK RING (Step 53D comparison; LT-17 approved for Light in Step 53E,
+   now also in light-b2.css 4; this file drives the light-tl and dark-tl
+   comparison variants). The
+   classification team link's ring is drawn 3px outside the 48px link
+   (base.css), so its top edge crosses the driver name's descenders just
+   above (Dark and Light alike: geometry, not colour). Candidate: draw it 2px
+   inside the link's own box, as the row overlay (-3px) and the circuit
+   link already do. The label starts 13px inside the box, so the ring stays
+   clear of both texts. Focus-only: target, padding, label and order
+   unchanged; nothing changes at rest. Would apply to both themes (XS-31);
+   the Dark prototypes are not changed. */
+.cl__team:focus-visible { outline-offset: -2px; }

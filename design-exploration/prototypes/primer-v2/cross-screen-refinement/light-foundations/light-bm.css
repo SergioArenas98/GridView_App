@@ -1,0 +1,47 @@
+/* EXPERIMENT (Step 53A.1), not an approved palette: "B Motorsport".
+   Loaded after light-roles.css and light-b.css on three pages only (Home,
+   GP results, Standings). Same palette, same roles, same geometry: it only
+   moves existing Graphite surfaces into two editorial places where B was
+   flat. No new colour: every value is an existing Primer V2 Dark value
+   (ground, tray, Chalk, text-2, Ember, the Dark alphas). Red Oxide fills
+   are NOT extended: flat oxide stays reserved for selection and the DK-2
+   components, so a red surface never reads as a selected state.
+
+   1. Home Grand Prix hero: the action row becomes a Graphite strip (a
+      timing-strip base under the white card), Chalk label, Chalk arrow disc
+      (the Dark treatment). The card stays white; the oxide round block
+      stays the only red.
+   2. GP Detail identity band: becomes the page's Graphite editorial plane,
+      with the frozen Dark values scoped to the band (as Dark draws it).
+      The classification rail stays light: a Graphite rail would put every
+      row's focus ring on graphite and light at once (the LT-5 problem on
+      every row).
+   3. Standings leader card: unchanged (already the Graphite plane). */
+
+/* 1. Home hero action strip */
+.hero__action {
+  background-color: var(--lt-inverse);
+  color: var(--lt-on-inverse);
+  border-top-color: var(--lt-inverse);
+}
+.hero__arrow { background: var(--lt-on-inverse); color: var(--lt-inverse); }
+
+/* 2. GP identity band: Dark roles scoped to the band */
+.gp {
+  --text: #ECEAE5;
+  --text-2: #A9ABB1;
+  --tray: #1F2125;
+  --raised: #2A2D32;
+  --ember: #F08A6C;
+  --hair: rgba(236, 234, 229, 0.12);
+  --hair-strong: rgba(236, 234, 229, 0.22);
+  --x-line-status: rgba(236, 234, 229, 0.45);   /* DK-1 line.status */
+  --lt-line-unknown: rgba(236, 234, 229, 0.6);  /* line.unknown, dashed (not in this fixture's band) */
+  --lt-inverse: #ECEAE5;                        /* filled chips take the contrasting fill, as in Dark */
+  --lt-on-inverse: #141518;
+  --lt-focus: #F08A6C;                          /* focus on graphite (no focusable element in the band today) */
+  color: var(--text);
+  background-image: linear-gradient(168deg, rgba(255, 255, 255, 0.045) 0%, rgba(255, 255, 255, 0) 46%), none;
+  background-color: #1F2125;
+}
+.gp__facts { background: rgba(0, 0, 0, 0.16); }
