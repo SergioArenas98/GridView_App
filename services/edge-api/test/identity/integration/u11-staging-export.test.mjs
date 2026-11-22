@@ -5,6 +5,8 @@
 //   GRIDVIEW_U11_REHEARSAL_OUT=<new file>  Write a LOCAL rehearsal export bound
 //     to the staging installation UUID (bootstrap seed, activator validation
 //     and activation, reader export). Never a staging artifact.
+//     With GRIDVIEW_U11_SEED_FILE=<reviewed seed request file>, the seed step
+//     submits that exact U5 review file instead of the harness dossier.
 //   GRIDVIEW_U11_EXPORT=<file> GRIDVIEW_U11_RESULT=<new file>
 //     Isolated restore check (S3): verify the export offline for the staging
 //     installation, confirm exact R0 content, reconstruct R0 in a NEW local
@@ -24,8 +26,12 @@ const stagingInstallation = 'c45d60b8-a723-4b6e-8530-750592af2b94';
 // Exact R0 catalog content hash (identity runbook, "R0 catalog is").
 const r0CatalogHash =
   'sha256:8a2a62d8412fdfd71cfd5138b4f87682f33a690d21c3d5eec46153bfbda39851';
-const { GRIDVIEW_U11_REHEARSAL_OUT, GRIDVIEW_U11_EXPORT, GRIDVIEW_U11_RESULT } =
-  process.env;
+const {
+  GRIDVIEW_U11_REHEARSAL_OUT,
+  GRIDVIEW_U11_SEED_FILE,
+  GRIDVIEW_U11_EXPORT,
+  GRIDVIEW_U11_RESULT,
+} = process.env;
 const hosts = [];
 afterEach(async () => {
   for (const h of hosts.splice(0)) await h.stop();
@@ -46,7 +52,7 @@ function credential(credentialId, roles) {
   };
 }
 
-async function installation(index, installationId) {
+async function installation(index, installationId, seedRequest = null) {
   const reader = credential('local-read', ['reader']);
   const activator = credential('local-activate', ['reader', 'activator']);
   const bootstrap = credential('local-bootstrap', [
@@ -64,13 +70,18 @@ async function installation(index, installationId) {
     },
   });
   hosts.push(h);
-  const s = await h.seed();
-  const id = s.proposal.proposedRevisionId;
   const call = async (path, body, token) => {
     const r = await h.raw(path, body, token);
     expect(r.status, JSON.stringify(r.value).slice(0, 400)).toBe(200);
     return r.value.data;
   };
+  const s = seedRequest
+    ? {
+        head: await h.admin('/health'),
+        proposal: await call('/seed', seedRequest, bootstrap.token),
+      }
+    : await h.seed();
+  const id = s.proposal.proposedRevisionId;
   const report = await call(
     '/revisions/' + id + '/validate',
     h.request(s.head, {
@@ -95,7 +106,12 @@ describe.skipIf(!GRIDVIEW_U11_REHEARSAL_OUT)(
   () => {
     it('writes a local export bound to the staging installation UUID', async () => {
       guardNetwork();
-      const exported = await installation(0, stagingInstallation);
+      const seedRequest = GRIDVIEW_U11_SEED_FILE
+        ? JSON.parse(await readFile(GRIDVIEW_U11_SEED_FILE, 'utf8'))
+        : null;
+      const exported = await installation(0, stagingInstallation, seedRequest);
+      if (seedRequest)
+        expect(exported.evidence.map((e) => e.synthetic)).toEqual([false]);
       await verifyCatalogFile(
         new TextEncoder().encode(JSON.stringify(exported)),
         {
