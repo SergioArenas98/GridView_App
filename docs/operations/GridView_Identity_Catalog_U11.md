@@ -1465,15 +1465,15 @@ folder holds no credential or e-mail address (scanned).
 | Item                  | Value                                                                                  |
 | --------------------- | -------------------------------------------------------------------------------------- |
 | Result                | **G1 deployed and verified; no deviation in scope; no recovery card used**             |
-| Worker                | `gridview-api-staging`, account `786e24f1…e6bf`                                         |
-| Replaced version      | `bc9b9315-c228-42cc-b406-9892ad601034` (#24)                                            |
-| **New version**       | **`13c3a90c-4fd8-4794-9fd6-efaf4f950bb6`** (#25, 100%, `triggered_by: upload`)          |
+| Worker                | `gridview-api-staging`, account `786e24f1…e6bf`                                        |
+| Replaced version      | `bc9b9315-c228-42cc-b406-9892ad601034` (#24)                                           |
+| **New version**       | **`13c3a90c-4fd8-4794-9fd6-efaf4f950bb6`** (#25, 100%, `triggered_by: upload`)         |
 | **New deployment**    | **`fdaf88d1-8581-4bfe-acc6-f024f259391b`**, created 2026-11-22T11:00:57Z               |
 | Command               | `npx wrangler deploy --env staging --outdir <evidence>/deploy`, once, exit 0, no retry |
-| Executed              | 11:00:46Z-11:01:01Z, from `$TEMP/gv-u11-rc/services/edge-api`                           |
+| Executed              | 11:00:46Z-11:01:01Z, from `$TEMP/gv-u11-rc/services/edge-api`                          |
 | Owner presence        | Explicitly confirmed in-session after the window opened, before the command            |
-| Reconciliation output | `Created: IdentityCatalog`; no `Deleted`, no `Renamed`                                  |
-| New DO namespace      | `541e9043dfeb4e46aa9362fd198bae5a` (`gridview-api-staging_IdentityCatalog`, sqlite)     |
+| Reconciliation output | `Created: IdentityCatalog`; no `Deleted`, no `Renamed`                                 |
+| New DO namespace      | `541e9043dfeb4e46aa9362fd198bae5a` (`gridview-api-staging_IdentityCatalog`, sqlite)    |
 
 Rollback note (accepted in the approval): ordinary Cloudflare rollback to
 `bc9b9315` or any earlier version is now unavailable. Recovery is
@@ -1525,21 +1525,21 @@ upload (within 30 minutes). Both runs passed.
 
 ### I5. G1v results (11:01Z)
 
-| Check                   | Result                                                                                                                                                                                   |
-| ----------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Active version          | `13c3a90c` at 100%, the latest uploaded                                                                                                                                                  |
-| Exports                 | Four, all sqlite: the three previous ones unchanged, plus `IdentityCatalog`                                                                                                              |
-| Bindings (by name)      | 14 → 19; 0 removed; 0 changed. Added: `IDENTITY_CATALOG` (DO), `IDENTITY_CATALOG_MODE=bundled`, `IDENTITY_DISCOVERY_MODE=off`, `IDENTITY_ADMIN_MODE=off`, `IDENTITY_INSTALLATION_ID=c45d60b8-…` |
-| Inventory               | No inventory-mode variable (strict)                                                                                                                                                      |
-| DO namespaces           | The eight existing ones unchanged (IDs, classes, scripts); one new `IdentityCatalog` namespace                                                                                           |
-| Unchanged               | Secret names, script settings, compatibility date `2026-07-01`, handlers `fetch`/`scheduled`                                                                                             |
-| KV                      | 3,982 keys, digest unchanged; no mutation                                                                                                                                                |
-| Schedules               | `[]` on staging, E2E and production                                                                                                                                                      |
-| E2E / production        | Unchanged                                                                                                                                                                                |
-| Admin GETs              | 3x HTTP 200; bodies identical to the baseline (`requestId` excluded): no sync, publication, hold, block or lease change                                                                   |
-| Public ETags            | 14/14 identical                                                                                                                                                                          |
-| Catalog inactive        | Bundled authority, discovery off, admin off (binding values). Identity admin routes deliberately not probed. No seed, validation or activation                                            |
-| Forward recovery        | R-1 bundle equals the deployed bundle; R-2 builds with all four exports and keeps data. Both remain valid against `13c3a90c`                                                              |
+| Check              | Result                                                                                                                                                                                          |
+| ------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Active version     | `13c3a90c` at 100%, the latest uploaded                                                                                                                                                         |
+| Exports            | Four, all sqlite: the three previous ones unchanged, plus `IdentityCatalog`                                                                                                                     |
+| Bindings (by name) | 14 → 19; 0 removed; 0 changed. Added: `IDENTITY_CATALOG` (DO), `IDENTITY_CATALOG_MODE=bundled`, `IDENTITY_DISCOVERY_MODE=off`, `IDENTITY_ADMIN_MODE=off`, `IDENTITY_INSTALLATION_ID=c45d60b8-…` |
+| Inventory          | No inventory-mode variable (strict)                                                                                                                                                             |
+| DO namespaces      | The eight existing ones unchanged (IDs, classes, scripts); one new `IdentityCatalog` namespace                                                                                                  |
+| Unchanged          | Secret names, script settings, compatibility date `2026-07-01`, handlers `fetch`/`scheduled`                                                                                                    |
+| KV                 | 3,982 keys, digest unchanged; no mutation                                                                                                                                                       |
+| Schedules          | `[]` on staging, E2E and production                                                                                                                                                             |
+| E2E / production   | Unchanged                                                                                                                                                                                       |
+| Admin GETs         | 3x HTTP 200; bodies identical to the baseline (`requestId` excluded): no sync, publication, hold, block or lease change                                                                         |
+| Public ETags       | 14/14 identical                                                                                                                                                                                 |
+| Catalog inactive   | Bundled authority, discovery off, admin off (binding values). Identity admin routes deliberately not probed. No seed, validation or activation                                                  |
+| Forward recovery   | R-1 bundle equals the deployed bundle; R-2 builds with all four exports and keeps data. Both remain valid against `13c3a90c`                                                                    |
 
 ### I6. Deviations and incidents
 
@@ -1560,7 +1560,7 @@ I3. No retry, no recovery deployment, no other remote write.
   - an approved, signed G2 packet;
   - authorization of the G2 configuration commit and credential
     provisioning.
-  SOE-1 still covers Tier A only. Nothing for G2-G5 was executed.
+    SOE-1 still covers Tier A only. Nothing for G2-G5 was executed.
 
 ---
 
