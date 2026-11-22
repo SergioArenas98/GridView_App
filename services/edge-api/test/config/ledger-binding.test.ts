@@ -233,7 +233,16 @@ const noneDeployments: readonly [string, () => Partial<Env>][] = [
   ['production', () => committedVars('production')],
   [
     "staging's fallback to manual batches",
-    () => ({ ...committedVars('staging'), PROVIDER_MODE: 'none' }),
+    // No catalog is bound here, so the optional-driver inventory (U11 P3,
+    // which requires one) is left out; the ledger behaviour is unchanged.
+    () => ({
+      ...Object.fromEntries(
+        Object.entries(committedVars('staging')).filter(
+          ([name]) => name !== 'IDENTITY_INVENTORY_MODE',
+        ),
+      ),
+      PROVIDER_MODE: 'none',
+    }),
   ],
 ];
 

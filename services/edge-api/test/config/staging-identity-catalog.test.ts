@@ -5,8 +5,9 @@
  *
  * The committed staging declaration is a proposal awaiting the owner's
  * deployment approval. These assertions pin what that proposal may contain:
- * one fresh installation UUID, runtime/off/read-only modes, no inventory-mode
- * variable (absent = strict), the reviewer credentials secret required by
+ * one fresh installation UUID, runtime/off/read-only modes, the
+ * optional-driver inventory policy (U11 P3, staging only), the reviewer
+ * credentials secret required by
  * name but never committed, one named SQLite
  * export and Worker-local binding, and nothing at all in production, the
  * demonstration Worker or development.
@@ -20,6 +21,7 @@ import {
   resolveIdentityCatalogMode,
   resolveOperationalInventoryMode,
 } from '../../src/config/environment';
+import { identityConfiguration } from '../../src/identity/catalog/run-context';
 
 const configPath = join(
   dirname(fileURLToPath(import.meta.url)),
@@ -52,11 +54,12 @@ describe('the proposed staging identity catalog (identity U11)', () => {
       IDENTITY_CATALOG_MODE: 'runtime',
       IDENTITY_DISCOVERY_MODE: 'off',
       IDENTITY_ADMIN_MODE: 'read-only',
+      IDENTITY_INVENTORY_MODE: 'optional-drivers',
     });
     expect(vars.IDENTITY_INSTALLATION_ID).toMatch(uuidV4);
   });
 
-  it('resolves to runtime authority and strict inventory at runtime', () => {
+  it('resolves to runtime authority and the optional-driver inventory at runtime', () => {
     const vars = resolved('staging').vars as Record<string, string | undefined>;
     const catalogMode = resolveIdentityCatalogMode(vars.IDENTITY_CATALOG_MODE);
     expect(catalogMode).toBe('runtime');
@@ -65,7 +68,28 @@ describe('the proposed staging identity catalog (identity U11)', () => {
         vars.IDENTITY_INVENTORY_MODE,
         catalogMode,
       ),
-    ).toBe('strict');
+    ).toBe('optional-drivers');
+  });
+
+  it('admits the optional inventory only with the deployed catalog binding; without one it is a configuration error', () => {
+    const vars = resolved('staging').vars as Record<string, string>;
+    const namespace = { idFromName: () => ({}), get: () => ({}) };
+    expect(
+      identityConfiguration({ ...vars, IDENTITY_CATALOG: namespace } as never)
+        .inventoryMode,
+    ).toBe('optional-drivers');
+    // Consequence for recovery builds (R-3/R-4) and any fallback that unbinds
+    // the catalog or leaves runtime: they must drop the variable too.
+    expect(() => identityConfiguration(vars as never)).toThrow(
+      /requires a catalog binding/,
+    );
+    expect(() =>
+      identityConfiguration({
+        ...vars,
+        IDENTITY_CATALOG_MODE: 'bundled',
+        IDENTITY_CATALOG: namespace,
+      } as never),
+    ).toThrow(/requires IDENTITY_CATALOG_MODE=runtime/);
   });
 
   it('requires the reviewer credentials secret by name, commits no value and no legacy-v1 compatibility gate', () => {

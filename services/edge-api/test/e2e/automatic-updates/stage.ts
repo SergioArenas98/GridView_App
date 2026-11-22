@@ -87,6 +87,7 @@ export const DEMONSTRATION_DELTA = Object.freeze({
   IDENTITY_CATALOG_MODE: undefined,
   IDENTITY_DISCOVERY_MODE: undefined,
   IDENTITY_ADMIN_MODE: undefined,
+  IDENTITY_INVENTORY_MODE: undefined,
   SEASON_PUBLICATION_CUTOVER_CONTROL: 'genesis:2026',
   CONTROLLED_PROVIDER_SOURCE: 'kv',
   SEASON_BATCH_INGEST: '',
@@ -364,6 +365,9 @@ export class AutomaticUpdateStage {
       ...(options.committedAuthority
         ? {}
         : { IDENTITY_CATALOG_MODE: 'bundled' }),
+      // The stage binds no catalog, and the optional-driver inventory (U11
+      // P3) requires one, so the stage keeps the strict policy.
+      IDENTITY_INVENTORY_MODE: undefined,
       ...(demonstration ? DEMONSTRATION_DELTA : {}),
       PROVIDER_MODE: AUTOMATIC_ACTIVATION_DELTA.PROVIDER_MODE,
       ADMIN_TOKEN: 'never-used-by-the-gate',

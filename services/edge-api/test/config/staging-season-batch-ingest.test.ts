@@ -138,11 +138,12 @@ describe('the resolved configuration', () => {
       SEASON_PUBLICATION_AUTHORITY: 'sequencer',
       SEASON_BATCH_INGEST: '2026',
       // Identity U11: staging installation, runtime authority with read-only
-      // administration (G5; inventory mode absent = strict).
+      // administration (G5) and optional-driver inventory (P3).
       IDENTITY_INSTALLATION_ID: 'c45d60b8-a723-4b6e-8530-750592af2b94',
       IDENTITY_CATALOG_MODE: 'runtime',
       IDENTITY_DISCOVERY_MODE: 'off',
       IDENTITY_ADMIN_MODE: 'read-only',
+      IDENTITY_INVENTORY_MODE: 'optional-drivers',
     });
     // Assigned only in staging and production (W1), never in development.
     expect(rawConfig.match(/^\s*SEASON_BATCH_INGEST\s*=/gm)).toHaveLength(2);
@@ -274,8 +275,15 @@ function workerEnv(
   context: SequencedContext,
   logger = new CapturingLogger(),
 ): Env {
+  // These cases bind no catalog. Committed staging selects the optional-driver
+  // inventory (U11 P3), which requires a catalog binding and is otherwise a
+  // configuration error (pinned in staging-identity-catalog.test.ts); without
+  // a binding the cases below keep exercising the strict policy unchanged.
+  const unbound = Object.fromEntries(
+    Object.entries(vars).filter(([name]) => name !== 'IDENTITY_INVENTORY_MODE'),
+  ) as Partial<Env>;
   return {
-    ...vars,
+    ...unbound,
     ADMIN_TOKEN,
     // Disposable fixture only; these cases issue no upstream requests.
     JOLPICA_PROXY_TOKEN: 'offline-proxy-test-token',

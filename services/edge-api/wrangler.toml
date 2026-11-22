@@ -175,9 +175,15 @@ SEASON_BATCH_INGEST = "2026"
 # In `read-only` the shared ADMIN_TOKEN reaches only the U2 discovery-health
 # compatibility read, never catalog routes. With no valid credentials secret
 # the catalog routes answer 503 `CATALOG_UNAVAILABLE`.
-# The inventory-mode variable is deliberately absent, which resolves to
-# `strict`; no committed configuration may name it (inventory-policy
-# acceptance 37), so the optional-driver policy cannot be selected here.
+# Inventory `optional-drivers` (U11 P3, staging only; owner decision
+# 2026-11-22 after catalog R1): a season driver whose exact Jolpica key the
+# catalog leaves unmapped no longer ends the participants resource; it is
+# accounted for as optional inventory. Race classifications and driver
+# standings still require every driver to resolve, so an unmapped driver there
+# still blocks that resource and its publication. Runtime authority is a
+# precondition (`resolveOperationalInventoryMode`). Staging is the only
+# committed environment allowed to name it (inventory-policy acceptance 37);
+# production, E2E and development stay strict.
 #
 # The installation ID is a fresh random UUID v4 proposed on 2026-11-17 for
 # staging alone, never derived from `ENVIRONMENT` (E2E shares that value) and
@@ -187,6 +193,7 @@ IDENTITY_INSTALLATION_ID = "c45d60b8-a723-4b6e-8530-750592af2b94"
 IDENTITY_CATALOG_MODE = "runtime"
 IDENTITY_DISCOVERY_MODE = "off"
 IDENTITY_ADMIN_MODE = "read-only"
+IDENTITY_INVENTORY_MODE = "optional-drivers"
 
 # Bindings are not inherited by named environments, so each one redeclares it.
 [[env.staging.durable_objects.bindings]]

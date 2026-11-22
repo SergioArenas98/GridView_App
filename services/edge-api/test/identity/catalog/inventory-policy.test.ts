@@ -9,6 +9,7 @@
 
 import { readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
+import { unstable_readConfig } from 'wrangler';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -270,17 +271,34 @@ describe('U10 policy vocabulary', () => {
   });
 });
 
-describe('U10 committed environments never select the optional policy (acceptance 37)', () => {
-  it('no wrangler configuration or committed env file sets IDENTITY_INVENTORY_MODE', () => {
-    const root = join(__dirname, '..', '..', '..');
+describe('committed environments select the optional policy only in staging (acceptance 37, U11 P3)', () => {
+  const root = join(__dirname, '..', '..', '..');
+  const assignment = /^\s*IDENTITY_INVENTORY_MODE\s*=/m;
+  it('no other wrangler configuration or committed env file sets IDENTITY_INVENTORY_MODE', () => {
     const configs = readdirSync(root).filter(
-      (name) => /^wrangler.*\.toml$/.test(name) || /^\.dev\.vars/.test(name),
+      (name) =>
+        (/^wrangler.*\.toml$/.test(name) || /^\.dev\.vars/.test(name)) &&
+        name !== 'wrangler.toml',
     );
     expect(configs.length).toBeGreaterThan(0);
     for (const name of configs) {
       const text = readFileSync(join(root, name), 'utf8');
-      expect(text, name).not.toContain('IDENTITY_INVENTORY_MODE');
+      expect(text, name).not.toMatch(assignment);
       expect(text, name).not.toContain('optional-drivers');
     }
+  });
+  it('wrangler.toml assigns it exactly once, inside [env.staging.vars] only', () => {
+    const text = readFileSync(join(root, 'wrangler.toml'), 'utf8');
+    expect(text.match(/^\s*IDENTITY_INVENTORY_MODE\s*=/gm)).toHaveLength(1);
+    const read = (env?: string) =>
+      (
+        unstable_readConfig(
+          { config: join(root, 'wrangler.toml'), env },
+          { hideWarnings: true },
+        ).vars as Record<string, unknown>
+      ).IDENTITY_INVENTORY_MODE;
+    expect(read('staging')).toBe('optional-drivers');
+    for (const env of [undefined, 'production', 'e2e'])
+      expect(read(env), env ?? 'development').toBeUndefined();
   });
 });
