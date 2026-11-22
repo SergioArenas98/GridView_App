@@ -141,3 +141,113 @@ for (const variant of [
       assertNoExternalNetwork();
     });
   });
+
+// D12-A lifecycle: the bootstrap credential is removed from the credentials
+// secret immediately after the seed (a restart with the 3-entry value models
+// the staging secret put). Validation, activation, export, offline
+// verification and pinning must not depend on the revoked credential.
+describe.sequential('U11 G3 D12-A: bootstrap revoked after the seed', () => {
+  const reader = credential('stg-po-read-1', ['reader']);
+  const reviewer = credential('stg-po-review-1', ['reader', 'reviewer']);
+  const activator = credential('stg-po-activate-1', ['reader', 'activator']);
+  const bootstrap = credential('stg-po-bootstrap-1', [
+    'reader',
+    'reviewer',
+    'activator',
+  ]);
+  const base = [reader, reviewer, activator].map((c) => c.entry);
+  let h, seeded, exported;
+
+  beforeAll(async () => {
+    guardNetwork();
+    h = await localInstallation(0, {
+      person: bootstrap,
+      bindings: {
+        IDENTITY_REVIEWER_CREDENTIALS: JSON.stringify([
+          ...base,
+          bootstrap.entry,
+        ]),
+      },
+    });
+  }, 30000);
+  afterAll(async () => {
+    await h?.stop();
+  });
+
+  it('seeds with the bootstrap credential, then revokes it', async () => {
+    seeded = await h.seed();
+    expect(seeded.proposal.status).toBe('proposed');
+    // V4 readback before revocation, as the reader credential.
+    const receipt = await h.raw(
+      '/operations/' + seeded.request.operationId + '?family=seed',
+      undefined,
+      reader.token,
+    );
+    expect(receipt.status, JSON.stringify(receipt.value)).toBe(200);
+    expect(receipt.value.data.state).toBe('committed');
+    const proposal = await h.raw(
+      '/revisions/' + seeded.proposal.proposedRevisionId,
+      undefined,
+      reader.token,
+    );
+    expect(proposal.status).toBe(200);
+    await h.stop();
+    await h.start({ IDENTITY_REVIEWER_CREDENTIALS: JSON.stringify(base) });
+    expect((await h.raw('/health', undefined, bootstrap.token)).status).toBe(
+      401,
+    );
+    expect((await h.raw('/health', undefined, activator.token)).status).toBe(
+      200,
+    );
+  }, 60000);
+
+  it('keeps the seeded proposal and refuses any write by the revoked credential', async () => {
+    const id = seeded.proposal.proposedRevisionId;
+    const r = await h.raw('/revisions/' + id, undefined, reader.token);
+    expect(r.status).toBe(200);
+    const attempt = await h.raw(
+      '/revisions/' + id + '/validate',
+      h.request(seeded.head, {
+        catalogHash: seeded.proposal.catalogHash,
+        expectedValidatorVersion: catalogValidatorVersion,
+      }),
+      bootstrap.token,
+    );
+    expect(attempt.status).toBe(401);
+  });
+
+  it('validates, activates and exports with the ordinary credentials', async () => {
+    const id = seeded.proposal.proposedRevisionId;
+    const validated = await h.raw(
+      '/revisions/' + id + '/validate',
+      h.request(seeded.head, {
+        catalogHash: seeded.proposal.catalogHash,
+        expectedValidatorVersion: catalogValidatorVersion,
+      }),
+      activator.token,
+    );
+    expect(validated.status, JSON.stringify(validated.value)).toBe(200);
+    const activated = await h.raw(
+      '/revisions/' + id + '/activate',
+      h.request(seeded.head, {
+        catalogHash: seeded.proposal.catalogHash,
+        validationReportHash: validated.value.data.reportHash,
+      }),
+      activator.token,
+    );
+    expect(activated.status, JSON.stringify(activated.value)).toBe(200);
+    const r = await h.raw(
+      '/revisions/' + id + '/export',
+      undefined,
+      reader.token,
+    );
+    expect(r.status).toBe(200);
+    exported = r.value.data;
+  }, 60000);
+
+  it('the export still verifies offline and the revision pins', async () => {
+    expect((await verify(h, exported)).reference).toBeTruthy();
+    expect(await h.pin()).toBeTruthy();
+    assertNoExternalNetwork();
+  });
+});

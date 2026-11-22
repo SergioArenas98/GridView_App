@@ -23,9 +23,17 @@
 - **After runtime-only facts are published,** R-1 and R-2 are no longer
   operational recovery. Recovery is R-3 or R-4 only, regenerated from the
   G5 commit by `make-recovery-configs.mjs`.
-- **Admin mode.** R-3 and R-4 inherit `IDENTITY_ADMIN_MODE` from their
-  source commit (`review` today). If recovery should not accept identity
-  writes, P2 regenerates them with `read-only`. Owner choice in P2.
+- **Admin mode (D14, decided 2026-11-22).** Identity admin is `read-only`
+  in R-3, R-4 and the G5 config:
+  - built as `wrangler.r3-runtime-strict.admin-read-only.toml` and
+    `wrangler.r4-runtime-unbound.admin-read-only.toml` from `faa9113`;
+  - normalized bundle `fb60cc64…`, four exports each.
+  - G5 verification is unaffected: hold, drain, S6/S7 runs and Inspect use
+    the operational `ADMIN_TOKEN` routes, and catalog status, inspection
+    and export are GETs.
+  - What is lost: the in-place catalog admission pause (an activator
+    write). Containment during G5 is R-4.
+  - Re-enabling `review` is a separate, controlled decision.
 
 ## 2. Backup and restore (D7)
 
@@ -71,6 +79,49 @@
 
 **Residual risk:** no remote restore of Durable Object state has been
 tested, for any store.
+
+### 2.3 D13 assessment (2026-11-22): **G5 BLOCKED**
+
+The owner prefers exports, per-store backup and reconstruction to PITR,
+provided every required store has a complete, safe and tested recovery
+path. Today only the catalog does, so G5 is blocked.
+
+| Store                                                                                            | Recoverable by export or reconstruction?                                                                                               | Tested                                                    | Status                                                                                          |
+| ------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
+| IdentityCatalog content (revisions, decisions, evidence, lineage)                                | Yes: verified U5 export, then reconstruction in a new installation (S3)                                                                | Locally (S3 rehearsal); repeated on the real export in P1 | **Adequate** for R0                                                                             |
+| Catalog operation receipts and run pins                                                          | **No**: receipts and pins do not carry over to a reconstructed installation (U8 restore test)                                          | n/a                                                       | **Not recoverable**: recorded loss; acceptable only if no in-flight operation exists at failure |
+| ReconciliationLedger (observations, classification, settlement, leases, publication disposition) | **No**: no export or import facility; rebuilding by re-observation would restart confirmations and could not reproduce settled history | No                                                        | **BLOCKER B-G5-1**                                                                              |
+| SeasonPublicationSequencer (cutover authority, active and previous versions, fingerprints)       | **Partly**: ADR 0025 activation and republication procedures exist; restoring sequencer state itself is not possible                   | Not drilled for this purpose                              | **BLOCKER B-G5-2**                                                                              |
+| KV public snapshots                                                                              | **Partly**: republication from sequencer authority (ADR 0025); key-name digest recorded at every gate; no KV backup feature            | No drill evidence in U11                                  | **BLOCKER B-G5-3**                                                                              |
+| Admin audit evidence                                                                             | Catalog part: through the export lineage. Operational logs: Cloudflare persisted logs only                                             | Catalog part: S3                                          | **Partial**: recorded limitation                                                                |
+
+**Smallest adequate fix (proposal; needs code review, its own approval and
+an isolated drill):**
+
+1. **PITR instrumentation** for the IdentityCatalog, ReconciliationLedger
+   and SeasonPublicationSequencer classes:
+   - an operator-authenticated `GET bookmark` (`getCurrentBookmark`), so
+     the bookmark of every gate is recorded;
+   - a `POST restore` (`onNextSessionRestoreBookmark` plus `ctx.abort()`),
+     refused unless a hold is applied and the request names the exact
+     expected bookmark;
+   - every call recorded.
+
+   PITR is the only mechanism Cloudflare supports for these SQLite objects,
+   and it is not available locally.
+
+2. **Drill on an isolated Cloudflare Worker** (a new script name and new
+   namespaces, never staging): capture a bookmark, mutate, restore, verify,
+   and undo through the returned bookmark. Needs separate approval for that
+   Worker.
+3. **A KV snapshot artifact:**
+   - a GET-only key-and-value export with a digest per key, taken at each
+     gate;
+   - a republication drill from sequencer authority on the same isolated
+     Worker.
+
+Until 1-3 are done and accepted, G5 stays blocked. P1 is not affected: G3
+creates only catalog state, which the export path covers.
 
 ## 3. G5 single-operator exception (D8), draft for review; not accepted
 
@@ -184,8 +235,9 @@ more than SOE-1:
 
 ## 7. Decisions these proposals add
 
-- **D13:** implement PITR bookmark tooling (code change and deploy) before
-  G5, or rely only on export plus reconstruction (§2.2).
-- **D14:** admin mode inside R-3 and R-4: `review` or `read-only`.
+- **D13 (decided 2026-11-22, conditional):** G5 is blocked by
+  B-G5-1..3 (§2.3). Decide whether to authorize the smallest adequate fix
+  (§2.3, items 1-3).
+- **D14:** decided: `read-only` (§1).
 - Review and accept or amend: SOE-G5 (§3), the stability criterion (§4) and
   SOE-P (§6).

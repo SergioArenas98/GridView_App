@@ -1,278 +1,368 @@
 # GridView identity catalog - U11 P1 packet: G2 + G3 (+ local G4) on staging
 
-- Status: **UNSIGNED. Nothing in this packet is authorized until the product
-  owner signs §9 and that signature is committed.**
-- Prepared: 2026-11-22, after G1 acceptance (D0). Staging baseline:
+- Status: **UNSIGNED. Nothing in this packet is authorized, and the
+  eight-hour interval has not started, until the product owner signs §9 and
+  that signature is committed.**
+- Prepared: 2026-11-22, after G1 acceptance (D0). Revised the same day for
+  owner decisions D12-A, D13, D14 and P1-e. Staging baseline:
   `gridview-api-staging` version `13c3a90c-4fd8-4794-9fd6-efaf4f950bb6`.
-- Scope: one combined packet for sequential operations (owner decision D6).
-  Each operation has its own scope, prerequisites, checks, stop conditions
-  and durable receipt. **A failure stops every later operation.**
+- Scope: one combined packet for sequential operations (D6). Each operation
+  has its own scope, prerequisites, checks, stop conditions and durable
+  receipt. **A failure stops every later operation.**
 - Not in scope: G5, runtime cutover, hold or release, synchronization,
   provider or proxy requests, publication, optional-driver inventory,
   production, E2E, push or merge.
 
-## 1. Owner decisions this packet needs
+## 1. Owner decisions recorded (2026-11-22) and still to sign
 
-| ID   | Decision                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       | Recommendation |
-| ---- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------- |
-| P1-a | Accept **SOE-1-B exactly as worded in §2**, including RB-1..RB-4 individually. Not accepted until you sign                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     | Accept         |
-| P1-b | **D12, seed credential.** A seed records its import dossier as created by the seeding credential. The offline verifier, used by G4, the S3 restore check and every future runtime batch, accepts only dossiers created by a credential holding `reviewer`. An installation accepts one seed only, so this choice is permanent. **D12-A:** seed with the single-use `stg-po-bootstrap-1` (`reader`+`reviewer`+`activator`, expiry 2026-11-30T00:00:00.000Z), then validate and activate with `stg-po-activate-1`. **D12-B:** a reviewed code change to the verifier first (not prepared; delays P1). **D12-C:** seed with the activator: rejected, because G4 and runtime batches could never verify the export | D12-A          |
-| P1-c | Approve the artifacts in §3 by hash                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            | Approve        |
-| P1-d | Approve the window in §9: it must start at least 8 h after the signature commit (CC-4 for G3), and end before 2026-11-29T23:00:00Z (bootstrap expiry, with margin)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             | Your choice    |
-| P1-e | Acknowledge the two G4 implementation notes in §6                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              | Acknowledge    |
+- **D12-A, selected.** A dedicated temporary bootstrap credential performs
+  the R0 seed only. Validation and activation use the ordinary activator
+  credential. The bootstrap is revoked immediately after the seed and its
+  readback, before validation (§4).
+- **D13.** Exports, per-store backup and reconstruction are preferred over
+  PITR, with conditions. Assessment: G5 is **blocked** until the ledger,
+  sequencer and KV have a tested recovery method
+  (`GridView_Identity_Catalog_U11_Recovery_G5_Production_Proposals.md` §2).
+  This does not block P1.
+- **D14.** Identity admin is `read-only` in R-3, R-4 and the G5 config.
+  Re-enabling `review` is a separate decision. Not used in P1.
+- **P1-e, acknowledged as limitations of the offline method only.**
+  Discovery counts do not apply offline. Publication eligibility is compared
+  at generator level. Neither waives S1-S7, runtime binding checks,
+  reconciliation safeguards, fail-closed validation or live publication
+  safety before G5.
+- **To sign (§9):** SOE-1-B with RB-1..RB-4 individually (§2); artifacts by
+  hash (§3); operations (§5); window (§6).
 
-## 2. SOE-1-B (staging Tier B extension): text for express acceptance
+## 2. SOE-1-B (staging Tier B extension): exact text for express acceptance
 
 > **SOE-1-B (staging only).** For `gridview-api-staging` and installation
 > `c45d60b8-a723-4b6e-8530-750592af2b94`, the product owner, as the sole
-> operator, may carry out G2, G3 and G4 holding the reviewer, activator and
-> recovery/export custodian roles, without separately identified backup
-> reviewer, activator or custodian.
+> operator, may carry out G2, G3 and the local G4 comparisons holding the
+> reviewer, activator and recovery/export custodian roles, without
+> separately identified backup reviewer, activator or custodian.
 >
-> **Remaining unmet, recorded, not waived:** X2 (backup reviewer), X3 (backup
-> activator), X4 (backup custodian, for G3 exports), X8 (named primary/backup
-> credential assignment), together with SOE-1's X1, X6, X9 and X10.
+> **Remaining unmet, recorded, not waived:** X2 (backup reviewer), X3
+> (backup activator), X4 (backup custodian, for G3 exports), X8 (named
+> primary/backup credential assignment), and SOE-1's X1, X6, X9 and X10.
 >
-> **Residual risks, each accepted separately:**
+> **RB-1, single reviewer and activator.**
 >
-> - **RB-1:** one person reviews evidence and activates the catalog. No
+> - Risk: one person reviews the R0 evidence and activates the catalog. No
 >   second person checks a review before activation.
-> - **RB-2:** the export custodian and the operator are the same person. The
->   only independence is the offline encrypted copy on removable media,
->   whose passphrase only the owner holds.
-> - **RB-3:** a lost activator credential blocks activation and admission
->   control until a new one is generated and provisioned. That is a
->   separately approved secret change and a new Worker version.
-> - **RB-4 (if D12-A):** one command (the R0 seed) carries a reviewer
->   attestation and an activator action under a single bootstrap
->   credential. Limits: single use, expiry 2026-11-30, and validation and
->   activation still need the separate activator credential, with their own
->   operation IDs and receipts.
+> - Consequence: a wrong mapping in R0 would become the active catalog
+>   unchallenged. It cannot be removed, only corrected by a later reviewed
+>   revision.
+> - Mitigations:
+>   - R0 is the byte-identical regeneration of the reviewed corpus at
+>     `027da5d`, with tamper and provenance checks;
+>     `catalogHash` must equal `sha256:8a2a62d8…39851`;
+>   - validation and activation use the activator credential with their own
+>     operation IDs and receipts;
+>   - authority stays `bundled`, so no runtime resolution uses the catalog
+>     before G5;
+>   - G4 parity must show zero differences against bundled before G5.
 >
-> **Mitigations (all in force):** separate credentials and operation IDs per
-> role (CC-10); exact `--check` then `--preview` before every write; no
-> automatic retry; durable receipts checked through `operation inspect`;
-> bundled authority stays in force throughout (runtime not selected);
-> before/after S5 non-interference snapshots; owner present for every remote
-> step; CC-1..CC-11; the eight-hour separation for G3.
+> **RB-2, custodian is the operator.**
+>
+> - Risk: the export custodian and the operator are the same person.
+> - Consequence: no independent party holds the recovery copy. If the
+>   owner's workstation and offline media were both lost, the catalog could
+>   be rebuilt from R0 only. Later revisions would be lost (none exist in
+>   P1).
+> - Mitigations:
+>   - a restricted ACL folder (owner and protected inheritance enforced),
+>     plus a DPAPI copy;
+>   - an offline GnuPG AES-256 copy on removable media whose passphrase only
+>     the owner holds, evidenced before G4 acceptance;
+>   - the S3 restore check on the same export.
+>
+> **RB-3, lost activator credential.**
+>
+> - Risk: the activator token is lost (DPAPI profile loss or deletion).
+> - Consequence: activation and admission control are blocked until a new
+>   credential is generated and provisioned. That is a separately approved
+>   secret change, which creates a new Worker version. Public behaviour is
+>   unaffected.
+> - Mitigations: the token store is restricted to the owner's account;
+>   rotation creates a new credential ID (U5 procedure); a reader-only
+>   credential keeps inspection possible.
+>
+> **RB-4, temporary bootstrap credential (D12-A).**
+>
+> - Risk: one credential holds reviewer and activator authority together,
+>   so the seed command carries a reviewer attestation and an activator
+>   action under one token. While it is live, that token could also perform
+>   other reviewer or activator writes.
+> - It is **not technically single-use.** Only one seed is enforced, because
+>   a seed is accepted only by an empty catalog. Its other authority is
+>   limited by time instead:
+>   - it is added to the secret only immediately before the seed (M4a);
+>   - it is removed immediately after the seed and its readback (M4r);
+>   - its `expiresAt`, 2026-11-23T13:00:00.000Z (the window end), is the
+>     backstop if removal failed.
+> - Consequence:
+>   - its credential ID stays permanently in the seed dossier's `createdBy`
+>     (the verifier needs that reviewer role);
+>   - every secret change creates a new Worker version (two for its
+>     lifecycle);
+>   - if revocation could not be confirmed, P1 stops after the seed: the
+>     proposal stays inactive and authority stays `bundled`.
+> - Mitigations:
+>   - its live window is a few minutes, in review mode, owner present;
+>   - its only planned use is the exact seed file `afba0282…`;
+>   - revocation is verified (bootstrap → 401, others → 200) before any
+>     validation;
+>   - pinned locally by the test "U11 G3 D12-A: bootstrap revoked after the
+>     seed".
+>
+> **Controls in force:**
+>
+> - CC-1..CC-11, including CC-10 (separate credentials and operation IDs);
+> - `--check` then `--preview` before every write;
+> - no automatic retry; receipts checked through `operation inspect`;
+> - before/after S5 snapshots; owner present for every remote step;
+> - the eight-hour separation for G3.
 >
 > **Scope and expiry:** G2, G3 and the local G4 comparisons only. Never G5,
-> runtime cutover, optional-driver inventory, E2E or production. Expires with
-> SOE-1 (at the latest 2027-02-28), or earlier if a second operator is named,
-> the owner withdraws it, or G5 approval is requested.
+> runtime cutover, optional-driver inventory, E2E or production. Expires
+> with SOE-1 (at the latest 2027-02-28), or earlier if a second operator is
+> named, the owner withdraws it, or G5 approval is requested.
 
-## 3. Exact artifacts (verified 2026-11-22)
+## 3. Exact artifacts
 
-| Artifact                                                     | Identity                                                                                                                                                                                                                                                                                                       |
-| ------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| G2a config commit (admin `read-only`, third required secret) | `2ad242728765a2d6e5e0b35abc0c9fa8b1a23d4c`                                                                                                                                                                                                                                                                     |
-| G2b config commit (admin `review`)                           | `faa91136f81d665bbd782c31d869a608ba302c1a`                                                                                                                                                                                                                                                                     |
-| Bundle of both (dry-run from a clean checkout)               | `fb60cc641359c34026de6b32b5a3e0701c55dbf8c94c276059f174e34485e3d8` (= G1, unchanged)                                                                                                                                                                                                                           |
-| Deployment checkout                                          | `%TEMP%\gv-u11-p1` (detached, clean, Wrangler 4.112.0)                                                                                                                                                                                                                                                         |
-| Credentials secret value, D12-A (4 entries)                  | SHA-256 `ce0ae8e89f6e38c9fb90e911e75709a5cc666d2491e7280881d5427379065aed`, 934 bytes                                                                                                                                                                                                                          |
-| Credentials secret value, without bootstrap (3 entries)      | SHA-256 `b6de09a83b14051568a53b64379e96c12fc93f63dfe05ca4edc3073584a55ddb`, 687 bytes                                                                                                                                                                                                                          |
-| Credential entries                                           | `stg-po-read-1` [reader], `stg-po-review-1` [reader, reviewer], `stg-po-activate-1` [reader, activator], expiry 2027-02-28T00:00:00.000Z; D12-A adds `stg-po-bootstrap-1` [reader, reviewer, activator], expiry 2026-11-30T00:00:00.000Z. Principal `product-owner`. Digests only; tokens DPAPI-stored locally |
-| Seed review file v2                                          | SHA-256 `afba02823433104796c881fb5e37c9fab26b70d61a0a946963100b86e22b93e3`, 614,481 bytes; operation `a1cac7b4-0474-44bb-8880-ee72edd63f6f`                                                                                                                                                                    |
-| `seedArtifactHash` / `approvedImportDossierId`               | `sha256:60a968019d46b95f53acaf0eb85fe2ad3d3576bed03ffcfd48c78ebf48d2072e` / `sha256:e5669182663c43969e991561a2affd4a7263d35a1b966d9224635e8828963c76`                                                                                                                                                          |
-| Seed content                                                 | R0 `seed.json` `6abc3830…edab7`; catalog `sha256:8a2a62d8…39851`; projection `sha256:ab953da8…c746`; dataset `2026.10.07.1`; dossier non-synthetic, citing the 94 mappings, 101 evidence identities and the dataset version inside the seed's own sources                                                      |
-| Recovery before G5                                           | R-1 (`6a60954`, bundled/off/off), R-2 (containment); both unchanged and valid while authority is bundled                                                                                                                                                                                                       |
-| Recovery after G5 (prepared, not used in P1)                 | R-3 runtime-strict and R-4 runtime-unbound, derived from `faa9113`; normalized bundle `fb60cc64…`; four exports each                                                                                                                                                                                           |
+| Artifact                                                                                                                                                                     | Identity                                                                                                                                              |
+| ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
+| G2a config commit (admin `read-only`, third required secret)                                                                                                                 | `2ad242728765a2d6e5e0b35abc0c9fa8b1a23d4c`                                                                                                            |
+| G2b config commit (admin `review`)                                                                                                                                           | `faa91136f81d665bbd782c31d869a608ba302c1a`                                                                                                            |
+| Bundle of both (dry-run from the clean checkout)                                                                                                                             | `fb60cc641359c34026de6b32b5a3e0701c55dbf8c94c276059f174e34485e3d8` (= G1)                                                                             |
+| Deployment checkout                                                                                                                                                          | `%TEMP%\gv-u11-p1`, clean, Wrangler 4.112.0                                                                                                           |
+| Credentials value **V3** (M1, M4r): `stg-po-read-1` [reader], `stg-po-review-1` [reader, reviewer], `stg-po-activate-1` [reader, activator], expiry 2027-02-28T00:00:00.000Z | SHA-256 `b6de09a83b14051568a53b64379e96c12fc93f63dfe05ca4edc3073584a55ddb`, 687 bytes                                                                 |
+| Credentials value **V4** (M4a): V3 plus `stg-po-bootstrap-1` [reader, reviewer, activator], expiry 2026-11-23T13:00:00.000Z                                                  | SHA-256 `f43640c2e77f3523450690a46f6a62678e294f0e18a74adbeb5fdbc345ca0c6b`, 934 bytes                                                                 |
+| Seed review file v2                                                                                                                                                          | SHA-256 `afba02823433104796c881fb5e37c9fab26b70d61a0a946963100b86e22b93e3`, 614,481 bytes; operation `a1cac7b4-0474-44bb-8880-ee72edd63f6f`           |
+| `seedArtifactHash` / `approvedImportDossierId`                                                                                                                               | `sha256:60a968019d46b95f53acaf0eb85fe2ad3d3576bed03ffcfd48c78ebf48d2072e` / `sha256:e5669182663c43969e991561a2affd4a7263d35a1b966d9224635e8828963c76` |
+| Seed content                                                                                                                                                                 | R0 `seed.json` `6abc3830…edab7`; catalog `sha256:8a2a62d8…39851`; projection `sha256:ab953da8…c746`; dataset `2026.10.07.1`; non-synthetic dossier    |
+| Recovery during P1                                                                                                                                                           | R-1 (`6a60954`, bundled/off/off) and R-2 (containment), unchanged                                                                                     |
 
-Supersession note: seed review file v1 (`69591ff1…`) is kept but superseded.
-Its dossier text claimed an approval that did not yet exist.
+All values are principal `product-owner`, digests only. Tokens stay
+DPAPI-stored locally. Superseded and kept: seed file v1 `69591ff1…` (its
+dossier claimed an approval that did not yet exist), and V4 with the
+2026-11-30 expiry (`ce0ae8e8…`).
 
-## 4. Local evidence already passed
+## 4. D12-A bootstrap lifecycle and revocation
 
-- **Rehearsal of this exact seed file**, in an isolated local Worker bound to
-  `c45d60b8-…`:
-  1. bootstrap seed, activator validation and activation, reader export;
-  2. offline verification passed;
-  3. S3 restore: exact R0 catalog, identical snapshot in a new
-     installation;
-  4. parity: 0 findings on all three captures, both sides deterministic;
-  5. accounting: identical request sequences (22/23/23), Jolpica
-     reservations and summaries;
-  6. reference equals the verified export.
-- **Credentials:** each stored token authenticates, through the Worker's
-  own `authenticate()`, to exactly its credential. The bootstrap token is
-  refused by the 3-entry value, and an unknown token is refused.
-- **Tools:** the secret-put safeguards passed in validate-only mode (hash,
-  contract, no BOM, channel self-test). A wrong approved hash aborts before
-  any API call. A5 refusal passed locally. The custody script passed:
-  restricted ACL, owner, protected inheritance, DPAPI round trip, no
-  overwrite. The GnuPG offline round trip passed (AES-256 with integrity
-  protection; tampered file and wrong passphrase refused).
-- **Code:** targeted tests passed, independent review (no CRITICAL or HIGH;
-  MEDIUM items fixed), and the acceptance suite (§8).
+1. **Absent during G2.** M1 puts V3, so the bootstrap does not exist on
+   staging while the admin configs change.
+2. **Add (M4a, remote mutation).** Immediately before the seed, in review
+   mode: `put-identity-credentials.ps1 -ValueFile V4 -ExpectedSha256
+f43640c2…`. The same verified BOM-safe classic `secret put` as E8
+   creates one new Worker version (`triggered_by: secret`). Verify:
+   - bootstrap `/health` → 200;
+   - script etag, exports and bindings unchanged.
+3. **Use (M4).** Exactly one seed with file `afba0282…`.
+4. **Readback before revocation (V4).** As reader, both rehearsed:
+   - `operation inspect a1cac7b4-… --family seed` → `committed`;
+   - `revision inspect <proposal>`: `catalogHash` = R0, status
+     `proposed`, matching the seed response's exact-seed parity.
+
+   The dossier's provenance (non-synthetic, creator holding `reviewer`,
+   resolved references) is verified offline on the export in S3 (E7).
+
+5. **Revoke (M4r, remote mutation).** `put-identity-credentials.ps1
+-ValueFile V3 -ExpectedSha256 b6de09a8…`, again one new Worker version.
+   This **replaces the whole value**, so the bootstrap entry no longer
+   exists server-side. Every request with its token fails authentication
+   (401), as rehearsed.
+6. **Verify revocation (V4r), before any validation:**
+   - bootstrap `/health` → 401;
+   - reader and activator `/health` → 200;
+   - the proposal is still readable;
+   - exactly one new version; code, exports and bindings unchanged.
+7. **Failure handling.** If M4r reports no success, is uncertain or V4r
+   fails:
+   - stop; read versions and secret names; do not run M5;
+   - one further M4r attempt with V3 only on the owner's live decision;
+   - if revocation still cannot be confirmed, P1 ends at the seed: the
+     proposal stays inactive, authority stays `bundled`, and the bootstrap
+     dies at 13:00:00Z;
+   - validation resumes in a later window only after revocation is
+     verified.
+8. **Local cleanup after V4r:** the DPAPI bootstrap file is deleted and its
+   deletion recorded. Its digest stays in V4 as evidence.
 
 ## 5. Sequence (owner present for every remote step; one attempt each)
 
 Evidence folder: `~/.gridview/evidence/identity-u11-p1-<date>/`. Tools are
-in `~/.gridview/evidence/identity-u11-p1-prep-2026-11-22/` (`ops`,
-`credentials`, `seed`, `custody`). Comparators 03-06 come from the G1
-folder. Any deviation stops the sequence and is reported. Nothing is
-cleared, repaired or retried automatically.
+in `identity-u11-p1-prep-2026-11-22/{ops,credentials,seed,custody}`. The
+wrapper is invoked as `& identity-as.ps1 -As … -CliArgs @(…)`. Any deviation
+stops the sequence and is reported. Nothing is cleared, repaired or retried
+automatically.
 
-**P1-0 Preflight (within 30 min before M1; all read-only)**
+**Remote mutations, in order (8):**
 
-1. Time inside the window. Owner confirms presence. Signature commit
-   ≥ 8 h old.
+1. M1, secret V3;
+2. M2, deploy G2a;
+3. M3, deploy G2b;
+4. M4a, secret V4;
+5. M4, seed;
+6. M4r, secret V3;
+7. M5, validate;
+8. M6, activate.
+
+Plus GET-only reads and one GET export.
+
+**P1-0 Preflight (≤ 30 min before M1, read-only)**
+
+1. Time inside the window. Owner present. Signature commit ≥ 8 h old.
 2. `gv-u11-p1` at `2ad2427`, clean. Wrangler 4.112.0. Account `786e24f1…`.
 3. `staging-state.mjs` vs `g1v-state.json`: 0 differing fields.
-4. G0 GETs vs `g1v-g0`: 200, bodies identical (requestId excluded).
-5. 14 public ETags identical.
-6. `verify-identity-credentials.ps1` on the approved value: `failures=0`.
-7. The value file and seed file hashes equal §3. CLI `seed --check`
-   passes.
-8. Probe A1 (no token): 404, because admin is still `off`.
+4. G0 GETs vs `g1v-g0`: identical (requestId excluded).
+5. 14 ETags identical.
+6. `verify-identity-credentials.ps1` on V3 and V4: `failures=0`.
+7. Value file hashes and seed file hash = §3. CLI `seed --check` passes.
+8. Probe A1 → 404 (admin `off`).
 
-**M1 Credentials secret.** `put-identity-credentials.ps1 -ValueFile <D12
-value> -ExpectedSha256 <§3 hash>` from an empty directory.
+**M1, secret V3.** Expect `Success! Uploaded secret
+IDENTITY_REVIEWER_CREDENTIALS`.
 
-- Expect: `Success! Uploaded secret IDENTITY_REVIEWER_CREDENTIALS`.
-- V1: exactly one new version (`triggered_by: secret`); script etag, main
-  module, exports, bindings, vars, KV, schedules, E2E and production
-  unchanged; secret names = the three. G0 and ETags unchanged. A1 still 404.
-- Stop if: no success line, "Creating new Worker", or any other change.
+- V1: one new version (`secret`); etag, main module, exports, bindings,
+  vars, KV, schedules, E2E and production unchanged; secret names = 3. G0
+  and ETags unchanged. A1 → 404.
 
-**M2 Deploy G2a.** From `gv-u11-p1` at `2ad2427`:
-`npx wrangler deploy --env staging --outdir <ev>/g2a`.
+**M2, deploy G2a.** `npx wrangler deploy --env staging --outdir <ev>/g2a`.
 
-- Expect: no "Created", "Deleted" or "Renamed". `index.js` =
-  `fb60cc64…`.
-- V2: only `IDENTITY_ADMIN_MODE` changed (to `read-only`). G0 and ETags
-  unchanged.
+- Expect: no Created, Deleted or Renamed; `index.js` = `fb60cc64…`.
+- V2: only the admin mode changed (to `read-only`). G0 and ETags unchanged.
 - **A1:** no token → 401.
-- **A2:** `identity-as -As read status` → 200, installation `c45d60b8-…`,
-  no active revision, sequence 0.
-- **A3:** probe, activator POST `{}` to `/seed` → 403
-  `IDENTITY_WRITES_DISABLED`.
-- **A4:** probe, shared `ADMIN_TOKEN` on an identity route → refused.
-- **A5:** wrong installation in the CLI → refused locally.
-- **A7:** the G0 operational GETs → 200, unchanged.
+- **A2:** reader `status` → 200, `c45d60b8-…`, no active revision,
+  sequence 0.
+- **A3:** activator POST `{}` to `/seed` → 403 `IDENTITY_WRITES_DISABLED`.
+- **A4:** `ADMIN_TOKEN` on an identity route → refused.
+- **A5:** wrong installation → refused locally.
+- **A7:** G0 GETs → 200, unchanged.
 
-**M3 Deploy G2b.** `git checkout --detach faa9113` in `gv-u11-p1` (clean),
-then the same deploy command.
+**M3, deploy G2b.** `git checkout --detach faa9113` (clean), then the same
+command.
 
-- V3: only the admin mode changed (to `review`). G0 and ETags unchanged.
-- **A6:** probe, reviewer POST `{}` to `/seed` → 403 `ROLE_REQUIRED`.
+- V3: only the admin mode changed (to `review`).
+- **A6:** reviewer POST `{}` to `/seed` → 403 `ROLE_REQUIRED`.
 - **A2:** repeated.
 
-**M4 Seed.**
+**M4a → M4 → V4 → M4r → V4r.** As in §4. The seed runs `--check`, then
+`--preview`, then `--confirm-reviewed-operation` as `-As bootstrap`. Expect:
 
-1. `identity-as -As bootstrap` (D12-A) with `seed --file
-staging-r0-reviewed-seed.v2.json --check`, then `--preview`. The owner
-   reviews the delta and parity.
-2. Then the same command with `--confirm-reviewed-operation`, once.
-3. Expect: proposal `status: proposed`, `catalogHash` =
-   `sha256:8a2a62d8…39851`, `parity.exactSeed: true`.
-4. Receipt: `operation inspect a1cac7b4-… --family seed`.
-5. Lost response: `operation inspect` first. Only the identical file may be
-   resubmitted, with `--retry-same-operation`.
+- `status: proposed`;
+- `catalogHash` = `sha256:8a2a62d8…39851`;
+- `parity.exactSeed: true`.
 
-**M5 Validate.**
+A lost response means `operation inspect` first. Only the identical file may
+be resubmitted, with `--retry-same-operation`.
 
-1. `build-g3-followups.mjs validate <proposal> <catalogHash>`. It refuses
-   any hash other than R0.
-2. `--check`, `--preview`, then execute as `-As activate`.
-3. Record `reportHash`; check the receipt.
+**M5, validate (activator).** `build-g3-followups.mjs validate <proposal>
+<catalogHash>`; it refuses a non-R0 hash. Then `--check`, `--preview`,
+execute. Record `reportHash` and check the receipt.
 
-**M6 Activate.**
+**M6, activate (activator).** `build-g3-followups.mjs activate <proposal>
+<catalogHash> <reportHash>`. Then `--check`, `--preview`, execute, check
+the receipt.
 
-1. `build-g3-followups.mjs activate <proposal> <catalogHash>
-<reportHash>`.
-2. `--check`, `--preview`, then execute as `-As activate`.
-3. Check the receipt.
+**V6, readback (reader).**
 
-**V6 Readback (as `-As read`).**
+- Active revision = the proposal, sequence 1. Catalog `8a2a62d8…`,
+  projection `ab953da8…`, dataset `2026.10.07.1`.
+- 94 mappings, 101 evidence records, 7 unresolved acknowledgements.
+- **Nothing published:** G0 and 14 ETags identical. KV digest unchanged.
+  Schedules `[]`.
 
-- `status`: active revision = the proposal, sequence 1.
-- `revision inspect`: catalog `8a2a62d8…`, projection `ab953da8…`, dataset
-  `2026.10.07.1`; 94 mappings, 101 evidence records, 7 unresolved
-  acknowledgements.
-- **Nothing published:** G0 bodies and 14 ETags identical. KV digest
-  unchanged. Schedules `[]`.
+**E7, export and custody.**
 
-**E7 Export and custody (local custody steps; the export is a GET).**
-
-1. `identity-as -As read export --revision <active> --out <ev>/export/staging-r0-export.json`.
-2. S3: `GRIDVIEW_U11_EXPORT=… GRIDVIEW_U11_RESULT=… npx vitest run
-test/identity/integration/u11-staging-export.test.mjs`. Expect `pass`,
-   exact R0, identical snapshot, creators include `reviewer`.
+1. Reader export to `<ev>/export/staging-r0-export.json`.
+2. S3: the gated `u11-staging-export.test.mjs` → `pass`, exact R0,
+   identical snapshot, creators include `reviewer`.
 3. `custody-store.ps1` into `%USERPROFILE%\.gridview\custody\identity-staging`.
-4. Offline copy, run by the owner personally: `gpg --symmetric
---cipher-algo AES256 --s2k-mode 3 --s2k-digest-algo SHA512 --s2k-count
-65011712 --output staging-r0-export.json.gpg staging-r0-export.json`.
-   Then decrypt-verify the SHA-256, copy it to removable media, and record
-   the media label, date and hash. Pending until shown with evidence;
-   required before G4 acceptance.
+4. Offline copy by the owner personally: `gpg --symmetric --cipher-algo
+AES256 --s2k-mode 3 --s2k-digest-algo SHA512 --s2k-count 65011712`.
+   Decrypt-verify, copy to removable media, and record the media label,
+   date and hash. Pending until evidenced; required before G4 acceptance.
 
-**G4 Local comparisons (no remote effect).**
+**G4, local only.**
 
-1. For each capture (2026-10-07, 2026-10-13, 2026-10-19), from the clean
-   RC checkout `gv-u11-rc` (deployed code `6a60954`): side A twice
-   (`IDENTITY_CATALOG_MODE` unset), side B twice with the verified
-   export.
-2. Then `parity-compare.mjs` and the gated
-   `u11-parity-accounting.test.ts`.
-3. Required: verdict `parity`, 0 findings, and 3/3 accounting.
+1. For each capture, from the clean RC checkout `6a60954`: side A twice
+   (`IDENTITY_CATALOG_MODE` unset), side B twice with the verified export.
+2. Then `parity-compare.mjs` and the gated `u11-parity-accounting.test.ts`.
+3. Required: `parity`, 0 findings, 3/3 accounting.
 
-**V-final.** `staging-state.mjs`, G0, ETags. Operation log and `SHA256SUMS`
-manifest. U11 report addendum (local documentation commit only).
+**V-final.** State snapshot, G0 and ETags; `SHA256SUMS` manifest; U11
+report addendum (local documentation commit).
 
-## 6. G4 implementation notes (P1-e)
+**Stop conditions:**
 
-- **Discovery counts** (policy §3.3) do not apply offline. The generator has
-  no discovery path, and staging discovery is `off`.
-- **Publication eligibility** is compared at generator level: capture
-  eligibility, the participation guard and identical summaries. Admission
-  into a ledger is not re-run offline. It stays covered by the U8/U10
-  suites and by S5-S7.
+- any differing or ambiguous result → stop, record, report;
+- M1, M4a or M4r uncertain → read versions and secret names first;
+- M2 or M3 unexpected → recovery cards C1-C8; R-1 only on a live decision;
+  exports never removed;
+- seed committed but a later step fails → the proposal stays inactive;
+  abandoning it needs a separate decision; never reseed;
+- any publication or ETag change → stop; G0 reads only; no purge or
+  republish.
 
-## 7. Stop conditions and recovery (no automatic action)
+## 6. Proposed window
 
-- **Any check differs or is ambiguous:** stop, record, report.
-- **M1 uncertain:** read versions and secret names first; no second put.
-- **M2 or M3 unexpected:** recovery cards C1-C8 apply. R-1 (admin `off`) is
-  a forward deploy needing your live decision. Exports are never removed.
-- **M4 committed but M5 or M6 fails:** stop. The proposal stays inactive;
-  abandoning it needs a separate decision. A non-empty installation is
-  never reseeded.
-- **Activation is permanent catalog history.** Authority stays `bundled`,
-  so public behaviour does not change.
-- **Publication or an ETag change at any point:** stop. G0 reads only. No
-  purge or republish.
+- **Monday 2026-11-23, 10:00-13:00 UTC**, owner-supervised.
+- **Earliest permissible start:** the later of 10:00:00Z and the signature
+  commit plus 8 h. A 10:00Z start needs the signature committed by
+  **2026-11-23T02:00:00Z**. If it is committed later, the start moves to
+  commit + 8 h.
+- **Hard end 13:00:00Z** (the bootstrap backstop expiry). The seed (M4) must
+  complete before 12:45Z, otherwise M4a is not started. Validation and
+  activation may finish before 13:00Z. Otherwise they wait for a newly
+  approved window, with the proposal inactive and authority bundled.
+- A different window means V4 is rebuilt with a new expiry (a new hash) and
+  this packet is amended before signature.
 
-## 8. Code acceptance
+## 7. Evidence and code acceptance
 
-**PASSED.** Clean checkout of `40221552c303fbd7ebc4a255bb963fa41a41ad95`
-(the final code commit), `npm test -- --maxWorkers=1 --testTimeout=30000`:
+- **Rehearsal of the exact seed file** in an isolated local Worker bound to
+  `c45d60b8-…`:
+  - seed by bootstrap, validation and activation by activator, reader
+    export;
+  - offline verification passed; S3: exact R0, identical snapshot;
+  - parity 0 findings on 3/3 captures, both sides deterministic;
+  - accounting identical (22/23/23 requests).
+- **Revocation lifecycle**, pinned locally: bootstrap removed after the
+  seed → 401 on reads and writes; validate, activate, export, offline
+  verification and pin pass with the ordinary credentials.
+- **Credentials:** V3 and V4 verified through the Worker's own
+  `authenticate()`, with gated exit codes.
+- **Tools:** all secret-put safeguards pass in validate-only mode.
+- **Acceptance:** clean `40221552c303fbd7ebc4a255bb963fa41a41ad95`,
+  `npm test -- --maxWorkers=1 --testTimeout=30000`:
+  - **6,415 passed, 11 skipped, 0 failed, exit 0**; log `2b929740…`;
+  - reconciliation: 6,386 + 29 new tests;
+  - an earlier run under load with default parallelism failed with 42
+    timeouts (log `c9d2c47d…`); kept, not counted.
+- **After acceptance,** only the revocation rehearsal test was added
+  (`role-split.test.mjs`, 12/12, targeted). No production or tooling code
+  changed.
+- **Independent review:** no CRITICAL or HIGH. The 7 MEDIUM items are
+  fixed. LOW items open, and accepted as operational:
+  - the DPAPI copy is decryptable by any process running as the owner;
+  - orphan files if generation fails mid-run (recoverable through
+    BuildValue);
+  - the CLI `--preview` prints the whole 600 KB seed request.
 
-- **6,415 passed, 11 skipped, 0 failed, exit 0**: 318 files passed, 5
-  skipped (323); 700 s; 2026-11-22 11:49:45Z-12:01:26Z.
-- Log SHA-256
-  `2b929740710489ebbbb2bd997480acd364c28b9fd76662263f05cb888e217139`.
-- **Reconciliation:**
-  - passed: 6,386 (RC acceptance) + 29 new tests (parity 12, drain 8,
-    role-split 8, R-4 1) = 6,415;
-  - skipped: 6 existing opt-in + 5 gated U11 operator tests = 11.
-
-An earlier run with default parallelism, under concurrent load, had 49
-failures: 42 timeouts at 5000 ms and one Miniflare ECONNRESET. It is kept as
-evidence (log SHA-256 prefix `c9d2c47d8ceea7f2`) and not counted.
-
-## 9. Signature (owner)
+## 8. Signature (owner)
 
 > I, the GridView product owner, approve P1 as described above:
 >
-> - [ ] P1-a: I accept SOE-1-B and each of RB-1, RB-2, RB-3 and RB-4
->       individually.
-> - [ ] P1-b: seed credential option: D12-A / D12-B / D12-C (circle one).
-> - [ ] P1-c: artifacts by hash, §3, credentials value: 4-entry `ce0ae8e8…`
->       / 3-entry `b6de09a8…`.
-> - [ ] P1-d: window: `____-__-__ __:__` to `__:__` UTC (≥ 8 h after this
->       commit; before 2026-11-29T23:00Z).
-> - [ ] P1-e: G4 notes acknowledged.
+> - [ ] SOE-1-B accepted, and RB-1 ☐, RB-2 ☐, RB-3 ☐ and RB-4 ☐ each
+>       accepted individually (§2).
+> - [ ] Artifacts by hash (§3): V3 `b6de09a8…`, V4 `f43640c2…`, seed
+>       `afba0282…`, G2a `2ad2427`, G2b `faa9113`, bundle `fb60cc64…`.
+> - [ ] The D12-A lifecycle and revocation (§4) and the sequence of eight
+>       remote mutations (§5).
+> - [ ] Window: 2026-11-23, 10:00-13:00 UTC, starting no earlier than this
+>       signature commit plus 8 h (§6).
 >
 > Not approved by this signature: G5, hold or release, runtime cutover,
 > synchronization, publication, optional inventory, production, E2E, push
