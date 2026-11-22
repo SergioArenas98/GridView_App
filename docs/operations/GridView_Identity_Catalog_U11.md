@@ -1447,3 +1447,117 @@ Packet: `GridView_Identity_Catalog_U11_G1_Readiness.md` (`f04146c`).
   - the G5 checklist and optional-inventory and production dependencies.
     Nothing accepted or executed.
 - **G1 readiness:** no new finding changes it.
+
+---
+
+## Addendum I - 2026-11-22: G1 executed and verified (G1v)
+
+Live session supervised by the product owner. Approval `c9022a4` plus
+amendment `254f40f`; window 11:00-12:00 UTC. Exactly one remote mutation:
+the approved deploy. Sanitized operation log, scripts, raw outputs and
+`SHA256SUMS` are in the private evidence folder
+`identity-u11-g1-2026-11-22` (42 files; manifest SHA-256
+`35d065f803e4ed70cd06414642ac0b2739821c335f4cfea9f23ac015a7283989`). The
+folder holds no credential or e-mail address (scanned).
+
+### I1. Outcome
+
+| Item                  | Value                                                                                  |
+| --------------------- | -------------------------------------------------------------------------------------- |
+| Result                | **G1 deployed and verified; no deviation in scope; no recovery card used**             |
+| Worker                | `gridview-api-staging`, account `786e24f1…e6bf`                                         |
+| Replaced version      | `bc9b9315-c228-42cc-b406-9892ad601034` (#24)                                            |
+| **New version**       | **`13c3a90c-4fd8-4794-9fd6-efaf4f950bb6`** (#25, 100%, `triggered_by: upload`)          |
+| **New deployment**    | **`fdaf88d1-8581-4bfe-acc6-f024f259391b`**, created 2026-11-22T11:00:57Z               |
+| Command               | `npx wrangler deploy --env staging --outdir <evidence>/deploy`, once, exit 0, no retry |
+| Executed              | 11:00:46Z-11:01:01Z, from `$TEMP/gv-u11-rc/services/edge-api`                           |
+| Owner presence        | Explicitly confirmed in-session after the window opened, before the command            |
+| Reconciliation output | `Created: IdentityCatalog`; no `Deleted`, no `Renamed`                                  |
+| New DO namespace      | `541e9043dfeb4e46aa9362fd198bae5a` (`gridview-api-staging_IdentityCatalog`, sqlite)     |
+
+Rollback note (accepted in the approval): ordinary Cloudflare rollback to
+`bc9b9315` or any earlier version is now unavailable. Recovery is
+forward-only through R-1 or R-2.
+
+### I2. Preparation (A1-A7, from 10:22Z)
+
+- Approval and amendment verified: commits at 19:32:53Z and 19:48:25Z;
+  both eight-hour separations elapsed; scope unchanged.
+- Release-candidate checkout at `6a609543…`, 0 changes; only the ignored
+  `.wrangler/` cache; no `.dev.vars`. Wrangler 4.112.0; account verified.
+- R-1 dry-run `fb60cc64…85e3d8` (match). R-2 dry-run `c4714402…7953`
+  (match), byte-identical to R-1 after path-label normalization (0 diff
+  lines). Both export all four DO classes. R-2 has three DO bindings (no
+  `IDENTITY_CATALOG`), as designed.
+- Cards C1-C8 reviewed. The three preflight scripts were read and are
+  GET-only.
+
+### I3. NSW-1 preflight (G0)
+
+Run at 10:30Z, then refreshed at 10:50:14Z-10:50:33Z, so it was valid at
+upload (within 30 minutes). Both runs passed.
+
+- `staging-state.mjs` vs the readiness baseline: **0 differing fields**.
+  Covered: active `bc9b9315`; main module `7415b82d…`; three exports; 14
+  bindings; two secret names; settings; namespaces; KV 3,982 keys with
+  digest `59624265…`; schedules `[]` x3; E2E `6b52bc02`; production
+  `62bf40e9`.
+- Admin GETs (standard token): CutoverStatus, SyncStatus and Inspect all
+  return HTTP 200, with bodies identical except the per-request
+  `requestId`. Findings:
+  - no operator hold, no durable block;
+  - no publication disposition or due time, no last operator action;
+  - lease `released`, backlog 0;
+  - rounds 1-17 published, 18-19 unsettled and unpublished, 20 absent;
+  - last sync 2026-10-13.
+- Public endpoints: 14/14 status and ETag identical.
+- Comparator note: the first raw ETag and admin-body comparisons flagged
+  per-request fields only (`requestId`; on `/v1/status`, `generatedAt` and
+  `snapshotAgeSeconds`). Normalizing comparators that remove only those
+  fields were added to the evidence and used for every later check.
+
+### I4. Artifact verification
+
+- Deploy output `index.js` = `fb60cc64…85e3d8`, byte-identical to the
+  same-day R-1 rebuild.
+- Remote main module of `13c3a90c`: SHA-256 `fb60cc64…85e3d8`, 1,701,933
+  bytes, single part, entrypoint `index.js`.
+
+### I5. G1v results (11:01Z)
+
+| Check                   | Result                                                                                                                                                                                   |
+| ----------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Active version          | `13c3a90c` at 100%, the latest uploaded                                                                                                                                                  |
+| Exports                 | Four, all sqlite: the three previous ones unchanged, plus `IdentityCatalog`                                                                                                              |
+| Bindings (by name)      | 14 → 19; 0 removed; 0 changed. Added: `IDENTITY_CATALOG` (DO), `IDENTITY_CATALOG_MODE=bundled`, `IDENTITY_DISCOVERY_MODE=off`, `IDENTITY_ADMIN_MODE=off`, `IDENTITY_INSTALLATION_ID=c45d60b8-…` |
+| Inventory               | No inventory-mode variable (strict)                                                                                                                                                      |
+| DO namespaces           | The eight existing ones unchanged (IDs, classes, scripts); one new `IdentityCatalog` namespace                                                                                           |
+| Unchanged               | Secret names, script settings, compatibility date `2026-07-01`, handlers `fetch`/`scheduled`                                                                                             |
+| KV                      | 3,982 keys, digest unchanged; no mutation                                                                                                                                                |
+| Schedules               | `[]` on staging, E2E and production                                                                                                                                                      |
+| E2E / production        | Unchanged                                                                                                                                                                                |
+| Admin GETs              | 3x HTTP 200; bodies identical to the baseline (`requestId` excluded): no sync, publication, hold, block or lease change                                                                   |
+| Public ETags            | 14/14 identical                                                                                                                                                                          |
+| Catalog inactive        | Bundled authority, discovery off, admin off (binding values). Identity admin routes deliberately not probed. No seed, validation or activation                                            |
+| Forward recovery        | R-1 bundle equals the deployed bundle; R-2 builds with all four exports and keeps data. Both remain valid against `13c3a90c`                                                              |
+
+### I6. Deviations and incidents
+
+None affecting scope or remote state. Only the comparator refinement in
+I3. No retry, no recovery deployment, no other remote write.
+
+### I7. Acceptance and next gate
+
+- **G1 meets every condition of the signed approval and can be formally
+  accepted by the owner.** It stays pending owner acceptance. This report
+  records the evidence; it does not accept.
+- **New staging baseline:** `13c3a90c`, with deployed code `fb60cc64…`.
+  Every later gate compares against the G1v snapshot, not `bc9b9315`.
+- **G2 is NOT ready to execute.** Per G2-G5 preparation §6 it still needs:
+  - formal G1 acceptance;
+  - acceptance of the role proposal (§1.1) and of the SOE-1 Tier B
+    extension (§1.2);
+  - an approved, signed G2 packet;
+  - authorization of the G2 configuration commit and credential
+    provisioning.
+  SOE-1 still covers Tier A only. Nothing for G2-G5 was executed.
