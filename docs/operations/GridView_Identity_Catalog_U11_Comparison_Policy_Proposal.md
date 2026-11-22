@@ -1,9 +1,17 @@
 # Proposed amendment - offline catalog-parity comparisons for U11 staging
 
 - Date: 2026-11-17
-- Status: **PROPOSED. Not accepted.** Nothing below changes ADR 0031, the
-  identity design or the runbook until the product owner accepts it. Until
-  then the accepted text stands, and the staging comparison gate is **unmet**.
+- Status: **ACCEPTED by the product owner on 2026-11-22 (U11 decision D4)**,
+  as the staging G4 method. Applied to ADR 0031 (amendment under D6) and to
+  runbook §7. The original status line read "PROPOSED. Not accepted."
+- Implementation notes (2026-11-22), set out for the owner in the P1 packet
+  §6:
+  - **Discovery counts (§3.3)** do not apply offline: the season-batch
+    generator has no discovery path, and staging discovery is `off`.
+  - **Publication eligibility** is compared at generator level: capture
+    eligibility, the participation guard and identical summaries.
+    Admission into a ledger is not re-run offline; it stays covered by the
+    U8/U10 suites and by S5-S7.
 - Affects: [ADR 0031](../adr/0031-identity-review-authority-and-catalog-cutover.md)
   D6; [design](../technical/GridView_Identity_Management_Design.md) §11.3
   step 5; [runbook](GridView_Identity_Catalog_Runbook.md) §7;

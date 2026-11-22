@@ -1597,3 +1597,42 @@ I3. No retry, no recovery deployment, no other remote write.
   - D11: eight hours from approval to execution for optional-driver
     activation.
 - **Still not authorized:** any remote step of P1-P4.
+
+---
+
+## Addendum K - 2026-11-22: P1 local preparation complete (no remote change)
+
+Under owner decisions D0-D11. Nothing remote was changed. Staging stays on
+`13c3a90c`.
+
+- **Local commits** (not pushed):
+  - `3f7b1c8`: G1 acceptance and decisions;
+  - `09e774b`: tooling and tests;
+  - `2ad2427`: G2a config;
+  - `faa9113`: G2b config;
+  - `bc4b4af`: exact-seed rehearsal mode;
+  - `4022155`: review fixes;
+  - this docs commit: the D4 amendments to ADR 0031 and runbook §7, the S6
+    to R-4 correction, the P1 packet and the recovery/G5/production
+    proposals.
+- **Finding D12 (blocks P1 until decided).** A seed by a credential without
+  `reviewer` produces an export the offline verifier refuses. That blocks G4,
+  the S3 restore check and future runtime batches, permanently. It is
+  reproduced and pinned in `role-split.test.mjs`. Recommended: a single-use
+  bootstrap seed credential (P1 packet §1).
+- **Finding PITR.** Durable Object PITR is reachable only from inside each
+  class. No GridView class implements it. It needs code before it can serve
+  as a recovery supplement (D13).
+- **Evidence:** `~/.gridview/evidence/identity-u11-p1-prep-2026-11-22/`.
+  - Credentials: three role credentials plus the D12 bootstrap candidate,
+    DPAPI-stored, verified through the Worker's own `authenticate()`.
+  - Seed review file v2 `afba0282…`.
+  - Full rehearsal of that exact file: export, S3, parity 0 findings on
+    3/3 captures, accounting 3/3.
+  - Custody and GnuPG rehearsals.
+  - R-3 and R-4 at normalized `fb60cc64…`.
+- **Acceptance:** 6,415 passed / 11 skipped / 0 failed on clean `4022155`.
+  Independent review: no CRITICAL or HIGH; MEDIUM items fixed.
+- **Next:** the owner signs P1 (`GridView_Identity_Catalog_U11_P1_Packet.md`
+  §9), then the 8-hour wait, then the supervised session. P2-P4 remain
+  separate.

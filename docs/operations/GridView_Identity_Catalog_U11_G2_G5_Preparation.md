@@ -273,7 +273,11 @@ All required; each is **[S]** or **[A]** today.
    decision made (B4).
 3. Three accepted parity comparisons (G4) and the policy decision.
 4. S1-S5 passed (comparison policy §4). S6, the fail-closed drill with
-   binding removal (R-2) under hold and drain, passed.
+   binding removal under hold and drain, passed. **Corrected 2026-11-22:** the
+   drill uses R-4 (runtime authority, catalog binding removed). R-2 keeps
+   `bundled`, which never consults the catalog, so it cannot show the
+   fail-closed refusal, and after runtime cutover no bundled config is a
+   valid recovery.
 5. Pin behaviour on the real Worker: a fresh run pins before provider
    construction; two-second attempts with one identical retry; latency
    within budget (S7 on the first runtime run).

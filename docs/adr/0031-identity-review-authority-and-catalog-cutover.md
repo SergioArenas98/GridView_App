@@ -5,6 +5,7 @@
 - Authorization: U0 documentation only. U1-U11 and every deployment require separate approval.
 - Product-owner decisions: PO-3, PO-5, PO-6, PO-7 and PO-8.
 - Staging exception: SOE-1, accepted 2026-11-21, Tier A only (note under D6). The D6 requirements are unchanged.
+- Amendment (U11 comparison method): accepted by the product owner on 2026-11-22 (U11 decision D4). See the amendment under D6.
 - Supplements: [ADR 0009](0009-protected-staging-administration-token.md), [ADR 0020](0020-provider-source-observation-and-reconciliation.md), [ADR 0025](0025-season-publication-authority-and-rollback-republication.md) and [ADR 0028](0028-automatic-end-to-end-season-updates.md).
 - Design: [Identity Management Design](../technical/GridView_Identity_Management_Design.md), sections 6-7, 9 and 11.
 
@@ -213,6 +214,31 @@ and mid-run-activation cases; zero unexplained differences/drops/overflows;
 runtime-strict cutover with U6/U7 compatibility, hold/drain and rollback-capable
 artifact; then separately gate optional-driver mode after U9/U10.
 Existing holds/blocks are never automatically cleared.
+
+**Amendment (U11 comparison method; accepted 2026-11-22, decision D4).** For
+an environment whose reconciliation ledger is authoritative (staging,
+production), the "three controlled complete compare runs" above are satisfied
+by **three independent offline catalog-parity comparisons**, plus the
+mandatory environment-specific checks S1-S7
+([comparison policy](../operations/GridView_Identity_Catalog_U11_Comparison_Policy_Proposal.md)
+§3-§4). No controlled, recorded or synthetic provider observation may be
+written into that environment's authoritative reconciliation ledger to
+satisfy a comparison count. Environments with an isolated, disposable ledger
+(local, E2E or an isolated staging-class Worker) may still run coordinated
+compare runs on a controlled source. Their results are labelled with that
+environment and are never reported as staging evidence. Runtime-strict
+cutover still requires every other D6 gate. This amendment changes how
+comparison evidence is collected. It does not change acceptance criteria,
+deadlines, guards or the zero-unexplained-difference rule.
+
+Reason: on staging a "controlled" complete compare run is a real coordinated
+synchronization. Under a hold it still commits observations to the real
+ledger, and an identical replay counts as a confirmation that can settle a
+round, because the ledger cannot tell a replay from a provider response. The
+only provider path is the live proxy. Replay-based staging runs would
+therefore either send live traffic or shape the next real publication with
+replayed data. The text above it is kept unchanged as the requirement for
+isolated ledgers and as historical context.
 
 U11 is separately authorized staging rollout and production-readiness assessment
 only. It must record actual deployed state under that future authorization.

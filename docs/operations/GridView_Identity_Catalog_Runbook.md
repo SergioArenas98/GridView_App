@@ -247,6 +247,19 @@ outdated/incomplete/corrupt/unsupported recovery material means stop.
 
 ## 7. Compare gate, holds and runtime-strict selection
 
+**Authoritative ledgers (staging, production); ADR 0031 amendment, accepted
+2026-11-22.** Comparison evidence for staging consists of (a) three
+independent offline catalog-parity comparisons against a verified U5 export
+of the staging catalog, and (b) the staging operational checks S1-S7. Never
+write a controlled, replayed or synthetic observation into the staging
+reconciliation ledger: an operator hold prevents publication, not ledger
+confirmations. Coordinated compare runs on a controlled source are allowed
+only on an isolated Worker with its own ledger, and are labelled as that
+environment's evidence. Tooling: `scripts/identity/parity-compare.mjs` and
+the gated `test/season-batch/u11-parity-accounting.test.ts`.
+
+**Isolated ledgers only (local, E2E, isolated Worker); unchanged original
+text, kept as the requirement there and as history for staging:**
 Require at least three complete controlled runs per intended deployment,
 with identical recorded provider inputs and fixed clocks. Compare exact request
 counts/order and limiter attempts; all resource families/profiles/metadata;
