@@ -11,7 +11,7 @@
       "entity": "driver",
       "providerField": "driverId",
       "providerValue": "rafael_camara",
-      "evidence": "docs/operations/2026-11-12-jolpica-mapping-investigation.md - operator-reported staging mapping failure, 2026-11-12; exact driverId only, no captured name or approved canonical identity."
+      "evidence": "GridView_Identity_Catalog_U11.md Addendum O - staging catalog R1 (revision 8723d5ec-f779-4ac4-ae11-8b0cc8a41d54, activated 2026-11-22T21:14:12Z) reviewed dossier sha256:67ef0399ed707d5ef4a17d3117f34b4978332fa127e0939a2c2b4c07beef8a62: Jolpica F1 (CC BY-NC-SA 4.0) driverId rafael_camara observed 2026-11-22 (season drivers, driver standings, 2026 rounds 20 and 21 race results: Rafael Camara, Haas, #51); official F1 driver page and 2026 Sao Paulo race result; owner-approved display name Rafael Câmara."
     },
     {
       "source": "jolpica",
@@ -807,14 +807,6 @@
     }
   ],
   "acknowledgedUnmapped": [
-    {
-      "source": "jolpica",
-      "entity": "driver",
-      "providerField": "driverId",
-      "providerValue": "rafael_camara",
-      "reason": "no-canonical-gridview-identity",
-      "detail": "Reported by the staging operator on 2026-11-12. No canonical GridView identity or approved full-name evidence exists in this worktree. Requires identity curation before mapping; the affected resource must remain unavailable. See docs/operations/2026-11-12-jolpica-mapping-investigation.md."
-    },
     {
       "source": "jolpica",
       "entity": "driver",
