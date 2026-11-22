@@ -9,7 +9,8 @@
 // `restore` writes, and refuses: the snapshot's own source namespace, every
 // namespace committed in wrangler.toml (staging, production, E2E), and a
 // target not repeated in --confirm-target. Restoring a committed namespace
-// therefore needs a reviewed change to this tool, never a flag.
+// therefore needs a reviewed change to this tool, never a flag. Any other
+// target must carry the title prefix "gridview-recovery-drill".
 // The Cloudflare OAuth token comes from `wrangler auth token` in memory and is
 // never printed or written. Values are stored as text with per-key SHA-256.
 import { execFileSync } from 'node:child_process';
@@ -59,12 +60,37 @@ export function compareEntries(expected, actual) {
   return { missing, changed, extra };
 }
 
-export function restoreRefusal({ snapshot, target, confirm, protectedIds }) {
+/** Only namespaces titled for recovery drills may be restored into. */
+export const restorableTitlePrefix = 'gridview-recovery-drill';
+
+export function restoreRefusal({
+  snapshot,
+  target,
+  confirm,
+  protectedIds,
+  targetTitle,
+}) {
   if (!idPattern.test(target ?? '')) return 'invalid-target';
   if (confirm !== target) return 'target-not-confirmed';
   if (target === snapshot.namespaceId) return 'target-is-snapshot-source';
   if (protectedIds.includes(target)) return 'target-is-committed-namespace';
+  // Allowlist, not only a denylist: an uncommitted namespace holding real
+  // data is refused unless its Cloudflare title marks it as a drill target.
+  if (
+    typeof targetTitle !== 'string' ||
+    !targetTitle.startsWith(restorableTitlePrefix)
+  )
+    return 'target-not-a-drill-namespace';
   return null;
+}
+
+/** Refuses values that did not survive text decoding (binary content). */
+export function assertLosslessText(value) {
+  if (typeof value !== 'string' || value.includes('\uFFFD'))
+    throw new Error(
+      'value is not lossless UTF-8 text; a binary-safe snapshot is required',
+    );
+  return value;
 }
 
 function token() {
@@ -119,7 +145,9 @@ async function readAll(auth, namespace) {
       const v = j.result.values[k.name];
       if (v === undefined || v === null)
         throw new Error('value missing for a listed key');
-      const value = typeof v === 'object' && 'value' in v ? v.value : v;
+      const value = assertLosslessText(
+        typeof v === 'object' && 'value' in v ? v.value : v,
+      );
       const metadata =
         typeof v === 'object' && 'metadata' in v
           ? (v.metadata ?? null)
@@ -179,9 +207,11 @@ async function main() {
   if (snapshotDigest(snapshot.entries) !== snapshot.digest)
     throw new Error('snapshot digest mismatch');
   if (mode === 'restore') {
+    const info = await api(auth, 'GET', `/${namespace}`);
     const refusal = restoreRefusal({
       snapshot,
       target: namespace,
+      targetTitle: info.result?.title,
       confirm: argument(argv, '--confirm-target'),
       protectedIds: protectedNamespaces(
         readFileSync(join(here, '..', '..', 'wrangler.toml'), 'utf8'),

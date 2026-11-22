@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import {
+  assertLosslessText,
   compareEntries,
   entryDigest,
   protectedNamespaces,
@@ -37,7 +38,13 @@ describe('KV snapshot tool', () => {
     const protectedIds = protectedNamespaces(toml);
     const drill = 'a1dfe9f1d35549829c160743bfecbabf';
     expect(
-      restoreRefusal({ snapshot, target: drill, confirm: drill, protectedIds }),
+      restoreRefusal({
+        snapshot,
+        target: drill,
+        confirm: drill,
+        protectedIds,
+        targetTitle: 'gridview-recovery-drill-data',
+      }),
     ).toBeNull();
     expect(
       restoreRefusal({
@@ -45,6 +52,7 @@ describe('KV snapshot tool', () => {
         target: drill,
         confirm: undefined,
         protectedIds,
+        targetTitle: 'gridview-recovery-drill-data',
       }),
     ).toBe('target-not-confirmed');
     expect(
@@ -53,6 +61,7 @@ describe('KV snapshot tool', () => {
         target: snapshot.namespaceId,
         confirm: snapshot.namespaceId,
         protectedIds,
+        targetTitle: 'gridview-recovery-drill-data',
       }),
     ).toBe('target-is-snapshot-source');
     for (const id of protectedIds)
@@ -65,7 +74,13 @@ describe('KV snapshot tool', () => {
         }),
       ).toBe('target-is-committed-namespace');
     expect(
-      restoreRefusal({ snapshot, target: 'x', confirm: 'x', protectedIds }),
+      restoreRefusal({
+        snapshot,
+        target: 'x',
+        confirm: 'x',
+        protectedIds,
+        targetTitle: 'gridview-recovery-drill-data',
+      }),
     ).toBe('invalid-target');
   });
 
@@ -94,5 +109,33 @@ describe('KV snapshot tool', () => {
       changed: [],
       extra: [],
     });
+  });
+
+  it('parses every namespace id line in wrangler.toml', () => {
+    const all = toml.match(/^\s*(?:preview_)?id\s*=\s*"[0-9a-f]{32}"/gm) ?? [];
+    expect(protectedNamespaces(toml)).toHaveLength(all.length);
+  });
+
+  it('refuses an uncommitted target that is not titled as a drill namespace', () => {
+    const args = {
+      snapshot: { namespaceId: '1d0fb55486a745a1ad12e03d9f04942b' },
+      target: 'a1dfe9f1d35549829c160743bfecbabf',
+      confirm: 'a1dfe9f1d35549829c160743bfecbabf',
+      protectedIds: protectedNamespaces(toml),
+    };
+    expect(restoreRefusal({ ...args, targetTitle: 'production-data' })).toBe(
+      'target-not-a-drill-namespace',
+    );
+    expect(restoreRefusal({ ...args, targetTitle: undefined })).toBe(
+      'target-not-a-drill-namespace',
+    );
+    expect(
+      restoreRefusal({ ...args, targetTitle: 'gridview-recovery-drill-data' }),
+    ).toBeNull();
+  });
+
+  it('refuses values that lost bytes in text decoding', () => {
+    expect(assertLosslessText('{"a":1}')).toBe('{"a":1}');
+    expect(() => assertLosslessText('bad \uFFFD byte')).toThrow(/lossless/);
   });
 });
