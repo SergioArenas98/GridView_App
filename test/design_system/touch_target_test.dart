@@ -73,29 +73,6 @@ void main() {
     }
   });
 
-  testWidgets('GvBottomNav destinations are at least 48 tall', (
-    WidgetTester tester,
-  ) async {
-    await pumpComponent(
-      tester,
-      GvBottomNav(
-        selectedIndex: 0,
-        onSelect: (_) {},
-        items: const <GvBottomNavItem>[
-          GvBottomNavItem(icon: Icons.home_outlined, label: 'Home'),
-          GvBottomNavItem(icon: Icons.explore_outlined, label: 'Explore'),
-        ],
-      ),
-    );
-    for (final String label in <String>['Home', 'Explore']) {
-      final Finder item = find.ancestor(
-        of: find.text(label),
-        matching: find.byType(GestureDetector),
-      );
-      expect(sizeOf(tester, item).height, greaterThanOrEqualTo(min));
-    }
-  });
-
   testWidgets('tappable GvContentCard hit area is at least 48 tall', (
     WidgetTester tester,
   ) async {

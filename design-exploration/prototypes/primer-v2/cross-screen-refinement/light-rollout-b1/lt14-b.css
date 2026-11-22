@@ -1,0 +1,7 @@
+/* LT-14 option B (Step 53C.1, comparison only): the smallest justified
+   dimming in Light. 0.84 (the brief's starting candidate) keeps secondary
+   text at 4.53:1 but drops the completed chip's status outline to 2.97:1
+   on the page (#EBECEE); 0.85 is the lowest value that keeps both (4.64
+   and 3.02 by calculation). Opacity also dims the focus ring, which stays
+   far above 3:1. */
+.ev--completed .ev__link { opacity: 0.85; }

@@ -47,28 +47,6 @@ void main() {
     handle.dispose();
   });
 
-  testWidgets('GvBottomNav flags the selected destination', (
-    WidgetTester tester,
-  ) async {
-    final SemanticsHandle handle = tester.ensureSemantics();
-    await pumpComponent(
-      tester,
-      GvBottomNav(
-        selectedIndex: 0,
-        onSelect: (_) {},
-        items: const <GvBottomNavItem>[
-          GvBottomNavItem(icon: Icons.home_outlined, label: 'Home'),
-          GvBottomNavItem(icon: Icons.explore_outlined, label: 'Explore'),
-        ],
-      ),
-    );
-    expect(
-      tester.getSemantics(find.text('Home')),
-      isSemantics(isSelected: true, isButton: true),
-    );
-    handle.dispose();
-  });
-
   testWidgets('GvStatusChip exposes its label to the semantics tree', (
     WidgetTester tester,
   ) async {

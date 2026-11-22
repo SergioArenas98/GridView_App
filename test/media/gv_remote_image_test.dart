@@ -29,6 +29,7 @@ Widget _host({
   double textScale = 1,
   bool disableAnimations = false,
   Size size = const Size(400, 800),
+  bool showPlaceholder = true,
 }) {
   final Widget image = GvRemoteImage(
     request: request,
@@ -36,6 +37,7 @@ Widget _host({
     logicalWidth: width,
     decorative: decorative,
     semanticLabel: semanticLabel,
+    showPlaceholder: showPlaceholder,
   );
   return MaterialApp(
     theme: theme ?? buildGridViewDarkTheme(),
@@ -491,6 +493,90 @@ void main() {
       await tester.tap(find.text('Open'));
       expect(taps, 1);
       expect(tester.takeException(), isNull);
+    });
+  });
+
+  // XS-15 (Step 55C.9R): an opt-in empty slot for decorative layers. The
+  // default above is unchanged for every other consumer.
+  group('showPlaceholder: false', () {
+    testWidgets('no media, pending and failed draw nothing, same size', (
+      WidgetTester tester,
+    ) async {
+      for (final (MediaImageLoader? loader, MediaImageRequest? request, Key key)
+          in <(MediaImageLoader?, MediaImageRequest?, Key)>[
+            (FakeMediaImageLoader(), null, GvRemoteImage.noMediaPlaceholderKey),
+            (_PendingLoader(), _request, GvRemoteImage.pendingPlaceholderKey),
+            (
+              FakeMediaImageLoader(),
+              _request,
+              GvRemoteImage.failedPlaceholderKey,
+            ),
+          ]) {
+        await tester.pumpWidget(const SizedBox.shrink());
+        await tester.pumpWidget(
+          _host(
+            loader: loader,
+            request: request,
+            aspectRatio: 16 / 9,
+            width: 160,
+            showPlaceholder: false,
+          ),
+        );
+        await _settle(tester);
+        expect(find.byType(GvImagePlaceholder), findsNothing);
+        expect(find.byType(Icon), findsNothing);
+        expect(find.byKey(key), findsOneWidget);
+        final Size size = tester.getSize(find.byType(GvRemoteImage));
+        expect(size.width, 160);
+        expect(size.height, closeTo(90, 0.5));
+      }
+    });
+
+    testWidgets('a fetched image still fades in over the empty slot', (
+      WidgetTester tester,
+    ) async {
+      final FakeMediaImageLoader loader = FakeMediaImageLoader(
+        loadedFiles: <String, File>{_request.cacheKey: image},
+      );
+      await tester.pumpWidget(_host(loader: loader, showPlaceholder: false));
+      await tester.pump();
+      await tester.pump();
+      expect(find.byType(Image), findsOneWidget);
+      expect(find.byType(GvImagePlaceholder), findsNothing);
+      // The existing fade, unchanged: partly transparent mid-way.
+      await tester.pump(const Duration(milliseconds: 50));
+      final Opacity mid = tester.widget(
+        find.ancestor(of: find.byType(Image), matching: find.byType(Opacity)),
+      );
+      expect(mid.opacity, inExclusiveRange(0, 1));
+      await tester.pumpAndSettle();
+      expect(loader.fetches, <String>[_request.cacheKey]);
+    });
+
+    testWidgets('semantics are the same as with the placeholder', (
+      WidgetTester tester,
+    ) async {
+      final SemanticsHandle handle = tester.ensureSemantics();
+      await tester.pumpWidget(
+        _host(
+          loader: FakeMediaImageLoader(),
+          semanticLabel: 'Portrait',
+          showPlaceholder: false,
+        ),
+      );
+      await _settle(tester);
+      expect(find.bySemanticsLabel('Portrait'), findsOneWidget);
+      await tester.pumpWidget(
+        _host(
+          loader: FakeMediaImageLoader(),
+          decorative: true,
+          semanticLabel: 'Portrait',
+          showPlaceholder: false,
+        ),
+      );
+      await _settle(tester);
+      expect(find.bySemanticsLabel('Portrait'), findsNothing);
+      handle.dispose();
     });
   });
 }

@@ -70,13 +70,33 @@ double _tableOffset(WidgetTester tester) {
   return tester.state<ScrollableState>(scrollable).position.pixels;
 }
 
+/// The tappable option of the Primer selector. Its slab layer repeats each
+/// label invisibly, without semantics or hit testing, so the plain text finder
+/// matches twice.
+Finder _segment(String label) => find.descendant(
+  of: find.byType(GvPrimerFocusTarget),
+  matching: find.text(label),
+);
+
+/// A row's secondary line as the Primer row renders it: the parts in order,
+/// joined by " · " with the separator kept with the part before it (a
+/// no-break space), and the last part (the stat) never split. A part wider
+/// than a whole line may keep its ordinary spaces, which depends on the font.
+Finder _detailsText(List<String> parts) => find.byWidgetPredicate((Widget w) {
+  if (w is! Text || w.data == null) return false;
+  final String data = w.data!;
+  return data.replaceAll(' ', ' ') == parts.join(' · ') &&
+      data.endsWith(parts.last.replaceAll(' ', ' ')) &&
+      (parts.length == 1 || data.contains(' · '));
+}, description: 'details ${parts.join(' · ')}');
+
 Future<void> _selectConstructors(WidgetTester tester) async {
-  await tester.tap(find.text('Constructors'));
+  await tester.tap(_segment('Constructors'));
   await tester.pumpAndSettle();
 }
 
 Future<void> _selectDrivers(WidgetTester tester) async {
-  await tester.tap(find.text('Drivers'));
+  await tester.tap(_segment('Drivers'));
   await tester.pumpAndSettle();
 }
 
@@ -98,11 +118,10 @@ void main() {
           constructors: (int season) => const <ConstructorStandingEntry>[],
         ),
       );
-      expect(find.byType(GvSkeletonBlock), findsWidgets);
-      expect(find.byType(GvEmptyState), findsNothing);
-      expect(find.byType(GvErrorState), findsNothing);
+      expect(find.byType(GvPrimerSkeleton), findsWidgets);
+      expect(find.byType(GvPrimerEmptyState), findsNothing);
       // The selector stays usable while loading.
-      expect(find.byType(GvSegmentedControl), findsOneWidget);
+      expect(find.byType(GvPrimerSegmentedControl), findsOneWidget);
     });
 
     testWidgets('a materialized empty drivers table shows a real empty state', (
@@ -117,8 +136,9 @@ void main() {
         ),
       );
       expect(find.text("No drivers' standings yet"), findsOneWidget);
-      expect(find.byType(GvSkeletonBlock), findsNothing);
-      expect(find.byType(GvErrorState), findsNothing);
+      expect(find.byType(GvPrimerSkeleton), findsNothing);
+      // An empty table offers no retry: it is not an error.
+      expect(find.byType(GvPrimerButton), findsNothing);
     });
 
     testWidgets(
@@ -133,7 +153,7 @@ void main() {
           ),
         );
         expect(find.text("No constructors' standings yet"), findsOneWidget);
-        expect(find.byType(GvSkeletonBlock), findsNothing);
+        expect(find.byType(GvPrimerSkeleton), findsNothing);
       },
     );
 
@@ -152,7 +172,7 @@ void main() {
         ),
       );
       expect(find.text("No drivers' standings yet"), findsOneWidget);
-      expect(find.byType(GvSkeletonBlock), findsNothing);
+      expect(find.byType(GvPrimerSkeleton), findsNothing);
       await _selectConstructors(tester);
       expect(find.text("No constructors' standings yet"), findsOneWidget);
     });
@@ -168,7 +188,7 @@ void main() {
       );
       expect(find.text('Max Verstappen'), findsOneWidget);
       expect(find.textContaining('Last successful check'), findsNothing);
-      expect(find.byType(GvOfflineNotice), findsNothing);
+      expect(find.byType(GvPrimerNotice), findsNothing);
     });
 
     testWidgets('a drivers first-load failure shows a section-level error', (
@@ -192,11 +212,11 @@ void main() {
       await tester.tap(find.byKey(const ValueKey<String>('standings-refresh')));
       await tester.pumpAndSettle();
 
-      expect(find.byType(GvErrorState), findsOneWidget);
+      expect(find.byType(GvPrimerEmptyState), findsOneWidget);
       expect(find.text("Can't load the drivers' standings"), findsOneWidget);
-      expect(find.text('Try again'), findsOneWidget);
+      expect(find.widgetWithText(GvPrimerButton, 'Try again'), findsOneWidget);
       // The application shell and the selector remain usable.
-      expect(find.byType(GvSegmentedControl), findsOneWidget);
+      expect(find.byType(GvPrimerSegmentedControl), findsOneWidget);
       expect(find.text('Standings'), findsWidgets);
     });
 
@@ -240,14 +260,17 @@ void main() {
         expect(find.text('Max Verstappen'), findsOneWidget);
         expect(find.text('2026 season'), findsOneWidget);
         // Team name and wins share the row's secondary line.
-        expect(find.text('Red Bull Racing · 6 wins'), findsOneWidget);
+        expect(
+          _detailsText(<String>['Red Bull Racing', '6 wins']),
+          findsOneWidget,
+        );
         // Integer points drop the meaningless decimal; fractions survive.
         expect(find.text('241'), findsOneWidget);
         expect(find.text('232.5'), findsOneWidget);
         // A confirmed zero is shown as zero.
         expect(find.text('0'), findsWidgets);
         // A confirmed zero wins is shown, not hidden.
-        expect(find.text('Ferrari · 0 wins'), findsOneWidget);
+        expect(_detailsText(<String>['Ferrari', '0 wins']), findsOneWidget);
         // No placeholder content remains.
         expect(find.text('Alex Driver'), findsNothing);
         expect(find.text('Scuderia Rossa'), findsNothing);
@@ -264,10 +287,15 @@ void main() {
       );
       expect(find.text('Reserve Entrant'), findsOneWidget);
       expect(find.text('—'), findsOneWidget);
-      // Its accessible meaning is explicit rather than silent.
+      // Its accessible meaning is explicit rather than silent: unranked
+      // (DD RK-1), never "Position unavailable".
       expect(
-        find.bySemanticsLabel(RegExp('Position unavailable, Reserve Entrant')),
+        find.bySemanticsLabel(RegExp(r'^Unranked, Reserve Entrant, ')),
         findsOneWidget,
+      );
+      expect(
+        find.bySemanticsLabel(RegExp('Position unavailable')),
+        findsNothing,
       );
     });
 
@@ -279,9 +307,17 @@ void main() {
         initialLocation: '/standings',
         surfaceSize: _tallSurface,
       );
-      // The reserve entrant has no constructor and no statistics at all.
-      expect(find.textContaining(' · '), findsWidgets);
-      expect(find.text(' · '), findsNothing);
+      // The reserve entrant has no constructor and no statistics at all, so
+      // its row has no secondary line; every line that exists starts and ends
+      // with a value, never with the separator.
+      final Iterable<String> lines = tester
+          .widgetList<Text>(find.textContaining('·'))
+          .map((Text t) => t.data!);
+      expect(lines, isNotEmpty);
+      for (final String line in lines) {
+        expect(line.trim().startsWith('·'), isFalse, reason: line);
+        expect(line.trim().endsWith('·'), isFalse, reason: line);
+      }
     });
 
     testWidgets('the constructors table uses season branding', (
@@ -474,7 +510,7 @@ void main() {
       expect(find.text('Known Driver'), findsOneWidget);
       // Wins render; the unavailable team contributes nothing and leaves no
       // dangling separator.
-      expect(find.text('1 win'), findsOneWidget);
+      expect(_detailsText(<String>['1 win']), findsOneWidget);
       expect(find.textContaining('unsynced'), findsNothing);
     });
 
@@ -645,7 +681,7 @@ void main() {
         syncMetadata: (String key) =>
             syncedMetadata(key, staleAfter: DateTime.utc(2026, 7, 18, 11)),
       );
-      expect(find.byType(GvOfflineNotice), findsOneWidget);
+      expect(find.byType(GvPrimerNotice), findsOneWidget);
       expect(
         find.text(
           'This data may be out of date — showing the last saved version.',
@@ -676,7 +712,9 @@ void main() {
       await tester.tap(find.byKey(const ValueKey<String>('standings-refresh')));
       await tester.pumpAndSettle();
 
-      expect(find.byType(GvErrorState), findsNothing);
+      // Non-blocking: no first-load error block, no retry button.
+      expect(find.byType(GvPrimerEmptyState), findsNothing);
+      expect(find.byType(GvPrimerButton), findsNothing);
       expect(find.text('Max Verstappen'), findsOneWidget);
       expect(
         find.text("Couldn't refresh — showing saved data."),
@@ -875,7 +913,10 @@ void main() {
       await tester.pumpAndSettle();
       final double before = _tableOffset(tester);
 
-      await tester.tap(find.text('Driver 8').first);
+      // The first row visible after the drag (geometry depends on the font).
+      await tester.tap(
+        find.textContaining(RegExp(r'^Driver \d+$')).hitTestable().first,
+      );
       await tester.pumpAndSettle();
       expect(find.byType(DriverDetailScreen), findsOneWidget);
 
@@ -899,7 +940,9 @@ void main() {
         final double before = _tableOffset(tester);
         expect(before, greaterThan(0));
 
-        await tester.tap(find.text('Team 4 Racing').first);
+        await tester.tap(
+          find.textContaining(RegExp(r'^Team \d+ Racing$')).hitTestable().first,
+        );
         await tester.pumpAndSettle();
         expect(find.byType(ConstructorDetailScreen), findsOneWidget);
 
@@ -1125,24 +1168,27 @@ void main() {
         surfaceSize: _tallSurface,
       );
       for (final Element element
-          in find.byType(GvStandingsRow).evaluate().toList()) {
+          in find.byType(GvPrimerStandingsRow).evaluate().toList()) {
         expect(
           tester.getSize(find.byWidget(element.widget)).height,
           greaterThanOrEqualTo(48),
         );
       }
-      final Finder segment = find.text('Constructors');
-      expect(tester.getSize(segment).height, greaterThan(0));
-      expect(
-        tester
-            .getSize(
-              find
-                  .ancestor(of: segment, matching: find.byType(ConstrainedBox))
-                  .first,
-            )
-            .height,
-        greaterThanOrEqualTo(48),
-      );
+      for (final String label in <String>['Drivers', 'Constructors']) {
+        final Finder target = find.ancestor(
+          of: _segment(label),
+          matching: find.byType(GvPrimerFocusTarget),
+        );
+        expect(tester.getSize(target).height, greaterThanOrEqualTo(48));
+      }
+      for (final String key in <String>[
+        'standings-refresh',
+        'standings-settings',
+      ]) {
+        final Size size = tester.getSize(find.byKey(ValueKey<String>(key)));
+        expect(size.width, greaterThanOrEqualTo(48));
+        expect(size.height, greaterThanOrEqualTo(48));
+      }
     });
 
     testWidgets('a large text scale keeps position, name and points visible', (
@@ -1174,7 +1220,10 @@ void main() {
       expect(find.text('Pilotos'), findsWidgets);
       // Locale-aware decimals: a comma in Spanish.
       expect(find.text('232,5'), findsOneWidget);
-      expect(find.text('Red Bull Racing · 6 victorias'), findsOneWidget);
+      expect(
+        _detailsText(<String>['Red Bull Racing', '6 victorias']),
+        findsOneWidget,
+      );
     });
   });
 }

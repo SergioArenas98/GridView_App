@@ -1,0 +1,193 @@
+/* GridView — Primer V2 core (shared foundation).
+   Copied from ../refinement-01/styles.css (the approved Home), values unchanged:
+   tokens, base, icons, app bar, section title, status chips, livery tag,
+   text link, bottom navigation. Home-only components stay in Home's stylesheet.
+   Screen stylesheets (calendar.css) load after this file and only add to it.
+   Proposed for extraction into one shared file once Home and Calendar are both
+   approved; Home was not modified to use it. */
+
+:root {
+  /* Primer palette */
+  --ground: #141518;
+  --ground-low: #101113;
+  --tray: #1F2125;
+  --raised: #2A2D32;
+  --text: #ECEAE5;          /* Chalk */
+  --text-2: #A9ABB1;
+  --oxide: #A03E2B;         /* Red Oxide: surfaces and text on Chalk only */
+  --oxide-deep: #7A2E21;
+  --ember: #F08A6C;         /* accent text on graphite */
+  --chalk: #ECEAE5;
+  --chalk-low: #E2DFD8;
+  --on-chalk: #141518;
+  --on-chalk-2: #4F525A;
+  --hair: rgba(236, 234, 229, 0.12);
+  --hair-strong: rgba(236, 234, 229, 0.22);
+  --hair-chalk: rgba(20, 21, 24, 0.14);
+
+  --cut: -12deg;
+  --gutter: 16px;
+  --radius-lg: 20px;
+  --radius-md: 14px;
+  --radius-sm: 8px;
+  --nav-min: 68px;   /* regular navigation height; real height in --nav-space (nav-inset.js) */
+
+  --font: "Archivo", system-ui, sans-serif;
+  color-scheme: dark;
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
+body {
+  margin: 0;
+  background: var(--ground);
+  color: var(--text);
+  font-family: var(--font);
+  font-size: 0.9375rem;      /* 15 */
+  line-height: 1.45;
+  font-variation-settings: "wdth" 100;
+  -webkit-font-smoothing: antialiased;
+  overflow-x: hidden;
+}
+h1, h2, h3, p, ol, ul { margin: 0; }
+ol, ul { padding: 0; list-style: none; }
+a { color: inherit; text-decoration: none; -webkit-tap-highlight-color: transparent; }
+button { font: inherit; color: inherit; }
+::selection { background: var(--oxide); color: var(--chalk); }
+:focus-visible { outline: 2px solid var(--ember); outline-offset: 3px; border-radius: 6px; }
+.sprite { position: absolute; }
+.sr-only {
+  position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+  overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;
+}
+.num { font-variant-numeric: tabular-nums lining-nums; }
+.icon {
+  width: 24px; height: 24px; flex: none;
+  fill: none; stroke: currentColor; stroke-width: 1.75;
+  stroke-linecap: round; stroke-linejoin: round;
+}
+.icon--sm { width: 16px; height: 16px; stroke-width: 2.25; }
+
+/* ---------- App bar ---------- */
+.appbar {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  column-gap: 8px;
+  padding: max(12px, env(safe-area-inset-top)) var(--gutter) 0;
+}
+.appbar__brand { display: flex; flex-wrap: wrap; align-items: baseline; column-gap: 10px; }
+.wordmark {
+  font-size: min(1.5rem, 34px);
+  font-weight: 800;
+  font-variation-settings: "wdth" 118;
+  letter-spacing: -0.02em;
+  line-height: 1.1;
+}
+.season { color: var(--text-2); font-size: 0.9375rem; font-weight: 500; }
+.appbar__actions { display: flex; gap: 4px; margin-right: -4px; }
+.icon-btn {
+  width: 48px; height: 48px; border: 0; border-radius: 50%;
+  display: grid; place-items: center;
+  background: transparent; color: var(--text); cursor: pointer;
+}
+.icon-btn:hover { background: var(--tray); }
+.icon-btn:active { background: var(--raised); }
+.freshness {
+  grid-column: 1 / -1;
+  color: var(--text-2);
+  font-size: 0.8125rem;      /* 13 */
+  margin-top: 2px;
+}
+
+.section-title {
+  font-size: min(1.25rem, 30px);    /* 20 */
+  font-weight: 700;
+  font-variation-settings: "wdth" 106;
+  letter-spacing: -0.01em;
+  line-height: 1.2;
+}
+
+/* ---------- Chips (status vocabulary) ----------
+   Meaning is carried by word + border/fill pattern, never colour alone.
+   unknown = dashed outline; confirmed (Final) = filled Chalk + check.
+   Accommodated, not rendered in the frozen scenario:
+   .chip--scheduled (solid outline), .chip--live (Ember fill + dot),
+   .chip--cancelled / --postponed (outline + strike icon), .chip--context
+   ("Race weekend", "Sprint": tray fill), .chip--provisional (dagger + word). */
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip {
+  display: inline-flex; align-items: center; gap: 6px;
+  min-height: 30px; padding: 6px 12px;
+  border-radius: var(--radius-sm);
+  font-size: 0.8125rem; font-weight: 600; line-height: 1.2;
+  max-width: 100%;   /* long localized states wrap instead of clipping */
+}
+.chip--unknown { border: 1.5px dashed rgba(236, 234, 229, 0.6); color: var(--text); }
+.chip--final { background: var(--chalk); color: var(--on-chalk); }
+.chip--scheduled { border: 1.5px solid var(--hair-strong); }
+.chip--live { background: var(--ember); color: var(--on-chalk); }
+.chip--context { background: var(--raised); }
+
+/* ---------- Livery tag (client-derived key fact) ---------- */
+.tag {
+  position: relative; z-index: 0;
+  display: inline-block;
+  padding: 6px 18px 6px 12px;
+  font-size: 0.8125rem; font-weight: 700; color: var(--chalk);
+}
+.tag::before {
+  content: ""; position: absolute; inset: 0; z-index: -1;
+  background: var(--oxide);
+  transform: skewX(var(--cut));
+}
+
+/* ---------- Text link ---------- */
+.text-link {
+  display: inline-flex; align-items: center; gap: 8px;
+  min-height: 48px; margin-top: 8px;
+  font-weight: 700; color: var(--text);
+}
+.text-link .icon { transition: transform 220ms cubic-bezier(0.16, 1, 0.3, 1); }
+.text-link:hover .icon { transform: translateX(3px); }
+.text-link--ember { color: var(--ember); margin-top: 0; }
+
+/* ---------- Bottom navigation ---------- */
+.tabbar {
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 10;
+  display: grid; grid-template-columns: repeat(4, 1fr);
+  min-height: calc(var(--nav-min) + env(safe-area-inset-bottom));
+  padding: 6px 4px env(safe-area-inset-bottom);
+  background: rgba(16, 17, 19, 0.96);
+  border-top: 1px solid var(--hair);
+  box-shadow: 0 -12px 24px -12px rgba(0, 0, 0, 0.6);
+}
+.tab {
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px;
+  min-height: 56px; min-width: 0; padding: 4px 2px;
+  color: var(--text-2);
+  font-size: 0.8125rem; font-weight: 600; line-height: 1.15; text-align: center;
+}
+.tab__icon { position: relative; z-index: 0; display: grid; place-items: center; width: 60px; height: 32px; flex: none; }
+.tab__label { display: block; max-width: 100%; white-space: nowrap; }
+.tab.is-selected { color: var(--text); font-weight: 800; }
+.tab.is-selected .tab__icon::before {
+  content: ""; position: absolute; inset: 0; z-index: -1;
+  background: var(--oxide);
+  border-radius: 4px;
+  transform: skewX(var(--cut));
+}
+.tab:hover:not(.is-selected) { color: var(--text); }
+
+/* Adaptive navigation (nav-inset.js picks the first mode where all labels fit).
+   regular → condensed (Archivo wdth 72) → stacked (2 × 2, hyphenation allowed). */
+.tabbar[data-fit="condensed"] .tab__label { font-variation-settings: "wdth" 72; }
+.tabbar[data-fit="stacked"] { grid-template-columns: repeat(2, 1fr); row-gap: 2px; padding-top: 4px; }
+.tabbar[data-fit="stacked"] .tab__label {
+  white-space: normal; hyphens: auto; overflow-wrap: normal;
+  font-variation-settings: "wdth" 72;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { transition: none !important; }
+}

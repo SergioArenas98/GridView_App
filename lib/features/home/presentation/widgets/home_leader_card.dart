@@ -6,34 +6,93 @@ import '../../../../l10n/app_localizations.dart';
 import '../../application/home_state.dart';
 import '../../domain/home_leader.dart';
 import '../home_formatting.dart';
+import 'home_primer_parts.dart';
 
-/// One championship-leader module.
+/// The championship band (`refinement-01` `.champ`): the screen's one inverse
+/// plane (Chalk in Dark, Graphite in Light), holding the two leader entries
+/// separated by the plane's hairline. The two championships stay independent:
+/// their data, failure and freshness never cross.
+class HomeChampionshipBand extends StatelessWidget {
+  const HomeChampionshipBand({
+    super.key,
+    required this.driver,
+    required this.team,
+  });
+
+  final HomeLeaderCard driver;
+  final HomeLeaderCard team;
+
+  @override
+  Widget build(BuildContext context) {
+    final GvPrimerRoles theme = GvPrimerSurface.of(context).themeRoles;
+    final bool dark = theme.brightness == Brightness.dark;
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(GvPrimerLayout.radiusLg),
+        gradient: theme.surface.inverse.toGradient(),
+        boxShadow: dark
+            ? _darkBandShadow
+            : GvPrimerEffects.inversePlaneShadow(Brightness.light),
+      ),
+      child: GvPrimerSurface(
+        kind: GvPrimerSurfaceKind.inverse,
+        child: Builder(
+          builder: (BuildContext context) {
+            final GvPrimerRoles roles = GvPrimerSurface.of(context).roles;
+            return Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: <Widget>[
+                  driver,
+                  DecoratedBox(
+                    decoration: BoxDecoration(
+                      border: Border(top: BorderSide(color: roles.line.subtle)),
+                    ),
+                    child: team,
+                  ),
+                ],
+              ),
+            );
+          },
+        ),
+      ),
+    );
+  }
+
+  /// `0 20px 36px -26px rgba(0, 0, 0, 0.9)` (Dark `.champ`). Depth only.
+  static const List<BoxShadow> _darkBandShadow = <BoxShadow>[
+    BoxShadow(
+      color: Color(0xE6000000),
+      offset: Offset(0, 20),
+      blurRadius: 36,
+      spreadRadius: -26,
+    ),
+  ];
+}
+
+/// One championship-leader entry inside [HomeChampionshipBand].
 ///
-/// The representable states are distinct and never blurred together:
+/// The representable states stay distinct:
 ///
-/// - while the standings materialization is still being read the card asserts
-///   **nothing**: no leader, no empty result and no unavailability;
-/// - a **single confirmed leader** shows the authoritative name, the confirmed
-///   points and the team association, and opens that competitor's detail;
-/// - **tied leaders** are announced as tied. No competitor is promoted to "the
-///   leader" and none of them becomes the primary action — the card opens the
-///   complete standings instead;
-/// - **no leader yet** — the table is materialized and has simply not produced
-///   one — says exactly that, because an available table has answered;
-/// - an **unavailable** table, one with no materialized representation for the
-///   season, shows controlled localized copy instead.
+/// - while the standings materialization is still being read the entry asserts
+///   **nothing**: no leader, no empty result, no unavailability, no figure;
+/// - a **single confirmed leader** shows the confirmed points, the 12° oxide
+///   seam, the authoritative name and the team, and opens that competitor;
+/// - **tied leaders** are announced as tied with the stored names; none is
+///   promoted, and the entry opens the complete standings;
+/// - **no leader yet** (an available table that names none) and an
+///   **unavailable** table each say so in the name position, with no figure.
 ///
-/// The last two both offer the standings action, so the section is never a dead
-/// end.
-///
-/// A stable identifier drives the route and is never displayed; a competitor
-/// whose identity is not stored locally is treated as unavailable rather than
-/// rendered as a humanised identifier.
+/// Every state keeps the standings link, so the entry is never a dead end. A
+/// missing points value is never shown as zero; a stable identifier drives the
+/// route and is never displayed.
 class HomeLeaderCard extends StatelessWidget {
   const HomeLeaderCard({
     super.key,
     required this.cardKey,
     required this.championshipLabel,
+    required this.standingsLabel,
     required this.module,
     required this.format,
     required this.onOpenStandings,
@@ -41,25 +100,57 @@ class HomeLeaderCard extends StatelessWidget {
     this.openEntitySemanticLabel,
   });
 
-  /// A stable widget key so a test can address exactly this module.
+  /// A stable widget key so a test can address exactly this entry.
   final String cardKey;
 
   /// The localized championship name, announced before anything else.
   final String championshipLabel;
 
+  /// The standings link label ("View drivers' standings").
+  final String standingsLabel;
+
   final HomeLeaderModule module;
   final HomeFormatter format;
-
-  /// Opens the exact-season standings route for this championship.
   final VoidCallback onOpenStandings;
-
-  /// Opens the leading competitor's detail. Supplied only for a single
-  /// confirmed leader with a resolved identity.
   final void Function(String entityId)? onOpenEntity;
   final String Function(String name)? openEntitySemanticLabel;
 
   @override
   Widget build(BuildContext context) {
+    final GvPrimerRoles roles = GvPrimerSurface.of(context).roles;
+    return Padding(
+      padding: const EdgeInsets.only(top: 14, bottom: 2),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: <Widget>[
+          Semantics(
+            header: true,
+            child: Text(
+              championshipLabel,
+              style: homeTextStyle(
+                weight: 600,
+                height: 1.3,
+                color: roles.text.secondary,
+              ),
+            ),
+          ),
+          const SizedBox(height: 4),
+          _body(context),
+          Padding(
+            padding: const EdgeInsets.only(top: 4),
+            child: HomeTextLink(
+              label: standingsLabel,
+              accent: true,
+              expand: true,
+              onActivate: onOpenStandings,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _body(BuildContext context) {
     final AppLocalizations l10n = AppLocalizations.of(context);
     return switch (module.leader) {
       HomeSingleLeader(
@@ -67,162 +158,245 @@ class HomeLeaderCard extends StatelessWidget {
         :final String name,
         :final double points,
         :final String? teamName,
-        :final String? teamColor,
         :final bool? provisional,
       ) =>
-        _card(
-          context: context,
-          l10n: l10n,
-          accent: GvTeamAccent.parse(teamColor),
-          title: name,
-          subtitle: teamName,
-          value: format.points(points),
-          badge: provisional == true ? l10n.standingsProvisionalBadge : null,
-          onTap: onOpenEntity == null ? null : () => onOpenEntity!(entityId),
+        _target(
           semanticLabel: <String>[
-            championshipLabel,
             name,
             ?teamName,
             l10n.standingsPointsSemantics(format.pointsNumber(points)),
             if (provisional == true) l10n.standingsProvisionalBadge,
+            ?openEntitySemanticLabel?.call(name),
           ].join(', '),
-          buttonSemanticLabel: openEntitySemanticLabel?.call(name),
+          onTap: onOpenEntity == null ? null : () => onOpenEntity!(entityId),
+          child: _LeaderBody(
+            points: format.pointsNumber(points),
+            unit: homeTemplateParts(l10n.homePointsValue).after.trim(),
+            name: name,
+            detail: teamName,
+            badge: provisional == true ? l10n.standingsProvisionalBadge : null,
+          ),
         ),
       HomeTiedLeaders(:final List<String> names, :final double? points) =>
-        _card(
-          context: context,
-          l10n: l10n,
-          title: l10n.homeTiedLeaders,
-          // Only names that are actually stored are summarised; an unresolved
-          // identity contributes nothing rather than an identifier.
-          subtitle: names.isEmpty ? null : names.join(' · '),
-          value: points == null ? null : format.points(points),
-          onTap: onOpenStandings,
+        _target(
           semanticLabel: <String>[
-            championshipLabel,
             l10n.homeTiedLeaders,
             if (names.isNotEmpty) names.join(', '),
             if (points != null)
               l10n.standingsPointsSemantics(format.pointsNumber(points)),
           ].join(', '),
+          onTap: onOpenStandings,
+          child: _LeaderBody(
+            points: points == null ? null : format.pointsNumber(points),
+            unit: homeTemplateParts(l10n.homePointsValue).after.trim(),
+            name: l10n.homeTiedLeaders,
+            // Only stored names are summarised; an unresolved identity
+            // contributes nothing rather than an identifier.
+            detail: names.isEmpty ? null : names.join(' · '),
+          ),
         ),
-      // No leader to name. Which reason applies is a real distinction: a
-      // materialized table that has simply not produced a leader yet has
-      // answered, and saying its information is unavailable would be false —
-      // as would saying either one before the materialization read completes.
-      HomeLeaderUnavailable() when module.availability.isResolving =>
-        _ResolvingLeader(cardKey: cardKey),
+      HomeLeaderUnavailable() when module.availability.isResolving => SizedBox(
+        key: ValueKey<String>('$cardKey-resolving'),
+        height: 36,
+      ),
       HomeLeaderUnavailable() => () {
         final String title = module.availability.isUnavailable
             ? l10n.homeLeaderUnavailable
             : l10n.homeNoLeaderYet;
-        return _card(
-          context: context,
-          l10n: l10n,
-          title: title,
+        return _target(
+          semanticLabel: title,
           onTap: onOpenStandings,
-          semanticLabel: '$championshipLabel, $title',
+          child: _LeaderBody(name: title, unit: '', muted: true),
         );
       }(),
     };
   }
 
-  Widget _card({
-    required BuildContext context,
-    required AppLocalizations l10n,
-    required String title,
+  Widget _target({
     required String semanticLabel,
-    String? subtitle,
-    String? value,
-    String? badge,
-    Color? accent,
-    VoidCallback? onTap,
-    String? buttonSemanticLabel,
-  }) {
-    return Semantics(
-      button: onTap != null,
-      label: buttonSemanticLabel == null
-          ? semanticLabel
-          : '$semanticLabel, $buttonSemanticLabel',
-      child: ExcludeSemantics(
-        child: GvContentCard(
-          key: ValueKey<String>(cardKey),
-          onTap: onTap,
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: <Widget>[
-              if (accent != null) ...<Widget>[
-                Container(
-                  width: 4,
-                  height: 40,
-                  decoration: BoxDecoration(
-                    color: accent,
-                    borderRadius: GvRadii.pillAll,
-                  ),
-                ),
-                const SizedBox(width: GvSpacing.sm),
-              ],
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: <Widget>[
-                    Text(
-                      title,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: context.gvText.cardTitle,
-                    ),
-                    if (subtitle != null)
-                      Text(
-                        subtitle,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: context.gvText.label,
-                      ),
-                    if (badge != null)
-                      Padding(
-                        padding: const EdgeInsets.only(top: GvSpacing.xxs),
-                        child: GvStatusChip(label: badge),
-                      ),
-                  ],
-                ),
-              ),
-              if (value != null) ...<Widget>[
-                const SizedBox(width: GvSpacing.sm),
-                Text(
-                  value,
-                  style: context.gvText.statValue.copyWith(fontSize: 18),
-                ),
-              ],
-            ],
-          ),
-        ),
+    required VoidCallback? onTap,
+    required Widget child,
+  }) => GvPrimerFocusTarget(
+    key: ValueKey<String>(cardKey),
+    onActivate: onTap,
+    role: GvPrimerTargetRole.link,
+    semanticLabel: semanticLabel,
+    child: ExcludeSemantics(
+      // A one-line state message still gets a full 48dp target.
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(minHeight: GvPrimerLayout.minTarget),
+        child: Align(alignment: AlignmentDirectional.bottomStart, child: child),
       ),
+    ),
+  );
+}
+
+/// Points, unit, seam, name and detail (`.leader__body`). The points and the
+/// holder sit side by side and wrap onto two lines when fewer than 8em remain
+/// for the holder (`flex: 1 1 8em`); without a figure the holder stands alone,
+/// with no seam.
+class _LeaderBody extends StatelessWidget {
+  const _LeaderBody({
+    required this.name,
+    required this.unit,
+    this.points,
+    this.detail,
+    this.badge,
+    this.muted = false,
+  });
+
+  final String? points;
+  final String unit;
+  final String name;
+  final String? detail;
+  final String? badge;
+
+  /// A state message rather than a name ("No leader yet").
+  final bool muted;
+
+  @override
+  Widget build(BuildContext context) {
+    final GvPrimerRoles roles = GvPrimerSurface.of(context).roles;
+    final TextScaler scaler = MediaQuery.textScalerOf(context);
+    final Widget who = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: <Widget>[
+        if (muted)
+          Text(
+            name,
+            style: homeTextStyle(
+              size: 17,
+              weight: 700,
+              height: 1.3,
+              color: roles.text.primary,
+            ),
+          )
+        else
+          HomeDisplayText(
+            name,
+            size: 24,
+            cap: 34,
+            weight: 800,
+            width: 84,
+            height: 1.08,
+            tracking: -0.015,
+            color: roles.text.primary,
+          ),
+        if (detail case final String text)
+          Padding(
+            padding: const EdgeInsets.only(top: 2),
+            child: Text(
+              text,
+              style: homeTextStyle(color: roles.text.secondary),
+            ),
+          ),
+        if (badge case final String word)
+          Padding(
+            padding: const EdgeInsets.only(top: 6),
+            child: GvPrimerStatusChip(
+              label: word,
+              kind: GvPrimerChipKind.known,
+              size: GvPrimerChipSize.small,
+            ),
+          ),
+      ],
+    );
+    final String? figure = points;
+    if (figure == null) {
+      return Padding(padding: const EdgeInsets.only(bottom: 2), child: who);
+    }
+    final TextStyle numberStyle = homeDisplayStyle(
+      scaler,
+      size: 60,
+      cap: 80,
+      weight: 850,
+      width: 112,
+      height: 0.82,
+      tracking: -0.045,
+      tabular: true,
+    ).copyWith(color: roles.text.primary);
+    final TextSpan pointsSpan = TextSpan(
+      children: <InlineSpan>[
+        TextSpan(text: figure, style: numberStyle),
+        if (unit.isNotEmpty)
+          TextSpan(
+            text: ' $unit',
+            style: homeTextStyle(
+              size: scaler.scale(15),
+              weight: 700,
+              height: 1,
+              color: roles.text.secondary,
+            ),
+          ),
+      ],
+    );
+    // Wraps the unit under the figure when even the stacked line is too
+    // narrow (Spanish "460,5 pts" at 320 @200%), rather than clipping it.
+    final Widget pointsBlock = Text.rich(
+      pointsSpan,
+      textScaler: TextScaler.noScaling,
+    );
+    final Widget seamed = CustomPaint(
+      painter: _SeamPainter(roles.fill.brand.fill),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(20, 2, 0, 2),
+        child: who,
+      ),
+    );
+    return LayoutBuilder(
+      builder: (BuildContext context, BoxConstraints constraints) {
+        final TextPainter measure = TextPainter(
+          text: pointsSpan,
+          textDirection: Directionality.of(context),
+          textScaler: TextScaler.noScaling,
+        )..layout();
+        final double remaining = constraints.maxWidth - measure.width - 12;
+        measure.dispose();
+        // `flex: 1 1 8em` (border-box, so the seam padding is included).
+        final bool stacked = remaining < GvPrimerLayout.containerEm(scaler, 8);
+        if (stacked) {
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[pointsBlock, const SizedBox(height: 8), seamed],
+          );
+        }
+        return Row(
+          crossAxisAlignment: CrossAxisAlignment.end,
+          children: <Widget>[
+            pointsBlock,
+            const SizedBox(width: 12),
+            Expanded(child: seamed),
+          ],
+        );
+      },
     );
   }
 }
 
-/// A championship module whose standings materialization has not been read yet.
-///
-/// It says nothing at all: naming no leader and calling the table unavailable
-/// are both claims about stored state that has not been consulted. The card
-/// shell keeps the section's height stable, carries no copy, no semantics
-/// beyond the championship name, no action and no animation.
-class _ResolvingLeader extends StatelessWidget {
-  const _ResolvingLeader({required this.cardKey});
+/// The 3px oxide livery seam (`.leader__who::before`): left 10px, from 6px
+/// above to 2px below the holder, skewed −12° about its top so the slant
+/// grows away from the text. Decoration only.
+class _SeamPainter extends CustomPainter {
+  const _SeamPainter(this.color);
 
-  final String cardKey;
+  final Color color;
 
   @override
-  Widget build(BuildContext context) => GvContentCard(
-    key: ValueKey<String>('$cardKey-resolving'),
-    child: Container(
-      height: 24,
-      decoration: BoxDecoration(
-        color: context.gvColors.surfaceElevatedAlt,
-        borderRadius: GvRadii.smAll,
-      ),
-    ),
-  );
+  void paint(Canvas canvas, Size size) {
+    const double left = 10;
+    const double top = -6;
+    final double bottom = size.height + 2;
+    final double run = GvLiveryCut.runFor(bottom - top);
+    final Path path = Path()
+      ..moveTo(left, top)
+      ..lineTo(left + 3, top)
+      ..lineTo(left + 3 - run, bottom)
+      ..lineTo(left - run, bottom)
+      ..close();
+    canvas.drawPath(path, Paint()..color = color);
+  }
+
+  @override
+  bool shouldRepaint(_SeamPainter oldDelegate) => oldDelegate.color != color;
 }

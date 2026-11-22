@@ -1,0 +1,35 @@
+/* GridView — Primer V2 shared component: app bar (title / wordmark, season,
+   actions, freshness caption). Moved verbatim from primer-core.css.
+   Screen variants (sticky, pinned, title fit, header budget) stay in the screen
+   stylesheets until XS-06 / XS-07 are decided. */
+
+.appbar {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  column-gap: 8px;
+  padding: max(12px, env(safe-area-inset-top)) var(--gutter) 0;
+}
+.appbar__brand { display: flex; flex-wrap: wrap; align-items: baseline; column-gap: 10px; }
+.wordmark {
+  font-size: min(1.5rem, 34px);
+  font-weight: 800;
+  font-variation-settings: "wdth" 118;
+  letter-spacing: -0.02em;
+  line-height: 1.1;
+}
+.season { color: var(--text-2); font-size: 0.9375rem; font-weight: 500; }
+.appbar__actions { display: flex; gap: 4px; margin-right: -4px; }
+.icon-btn {
+  width: 48px; height: 48px; border: 0; border-radius: 50%;
+  display: grid; place-items: center;
+  background: transparent; color: var(--text); cursor: pointer;
+}
+.icon-btn:hover { background: var(--tray); }
+.icon-btn:active { background: var(--raised); }
+.freshness {
+  grid-column: 1 / -1;
+  color: var(--text-2);
+  font-size: 0.8125rem;      /* 13 */
+  margin-top: 2px;
+}

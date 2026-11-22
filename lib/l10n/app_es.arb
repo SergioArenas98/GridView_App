@@ -97,6 +97,7 @@
   "a11yLoading": "Cargando",
   "offlineStaleNotice": "Estos datos pueden estar desactualizados — mostrando la última versión guardada.",
   "refreshFailedNotice": "No se pudo actualizar — mostrando datos guardados.",
+  "refreshFailedStaleNotice": "No se pudo actualizar. Los datos guardados pueden estar desactualizados.",
   "retry": "Reintentar",
   "homeErrorTitle": "No se puede cargar Inicio",
   "errorOffline": "Parece que no tienes conexión.",
@@ -126,6 +127,8 @@
   "weekendFormatSprint": "Fin de semana al sprint",
   "weekendFormatUnknown": "Formato desconocido",
   "calendarNextLabel": "Siguiente",
+  "calendarGoToNextAction": "Ir al próximo Gran Premio",
+  "calendarGoToCurrentAction": "Ir al Gran Premio en curso",
   "calendarEmptyTitle": "Todavía no hay carreras programadas",
   "calendarEmptyMessage": "El calendario de esta temporada aún no se ha publicado. Aparecerá aquí en cuanto lo esté.",
   "calendarErrorTitle": "No se puede cargar el calendario",
@@ -433,6 +436,10 @@
   "homeUpdateFailed": "No se pudo actualizar",
   "@homeUpdateFailed": {
     "description": "Non-blocking notice that the last Home refresh failed."
+  },
+  "homeUpdateFailedStale": "No se pudo actualizar. Los datos guardados pueden estar desactualizados.",
+  "@homeUpdateFailedStale": {
+    "description": "Home notice (N-2, approved wording) shown instead of the separate failure and stale notices only when the failed Home refresh and the out-of-date saved data concern the same content."
   },
   "settingsSectionPreferences": "Preferencias",
   "settingsSectionDataApp": "Datos y aplicación",

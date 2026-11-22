@@ -6,7 +6,7 @@ import 'package:gridview/core/api/errors/api_failure.dart';
 import 'package:gridview/core/widgets/widgets.dart';
 import 'package:gridview/features/calendar/presentation/calendar_screen.dart';
 import 'package:gridview/features/calendar/presentation/grand_prix_detail_screen.dart';
-import 'package:gridview/features/calendar/presentation/widgets/calendar_event_card.dart';
+import 'package:gridview/features/calendar/presentation/widgets/calendar_event_row.dart';
 import 'package:gridview/features/shared/domain/entities/calendar_entry.dart';
 import 'package:gridview/features/shared/domain/entities/circuit.dart';
 import 'package:gridview/features/shared/domain/entities/enums.dart';
@@ -83,6 +83,27 @@ void _publishCalendarOutcome(
       );
 }
 
+/// Calendar Stage 1 (CT-03): the caption and notices scroll with the rows. With
+/// N-6 (Step 55C.2.1) a notice already shown at the first useful render is
+/// brought into view, but one that appears later (these tests publish the
+/// failure after opening) never moves the list, so it stays at the top of the
+/// content, above the next round. This brings it into view without a
+/// pull-to-refresh gesture.
+Future<void> _scrollCalendarToTop(WidgetTester tester) async {
+  tester
+      .state<ScrollableState>(
+        find
+            .descendant(
+              of: find.byType(CalendarScreen),
+              matching: find.byType(Scrollable),
+            )
+            .first,
+      )
+      .position
+      .jumpTo(0);
+  await tester.pumpAndSettle();
+}
+
 void main() {
   group('Calendar states', () {
     testWidgets('shows a skeleton while nothing is cached yet', (
@@ -100,8 +121,9 @@ void main() {
         disableAnimations: true,
       );
 
-      expect(find.byType(GvSkeletonBlock), findsWidgets);
-      expect(find.byType(CalendarEventCard), findsNothing);
+      expect(find.byKey(const ValueKey<String>('calendar-skeleton')), findsOne);
+      expect(find.byType(GvPrimerSkeleton), findsWidgets);
+      expect(find.byType(CalendarEventRow), findsNothing);
     });
 
     testWidgets('a valid empty calendar is a real empty state, not a loader', (
@@ -114,8 +136,9 @@ void main() {
       await pumpApp(tester, initialLocation: '/calendar', repository: repo);
 
       expect(find.text('No races scheduled yet'), findsOneWidget);
-      expect(find.byType(GvSkeletonBlock), findsNothing);
-      expect(find.byType(GvErrorState), findsNothing);
+      expect(find.byType(GvPrimerSkeleton), findsNothing);
+      // No first-load error block (Primer V2: an alert empty state).
+      expect(find.text("Can't load the calendar"), findsNothing);
     });
 
     testWidgets('a first-load failure offers a retry that refreshes', (
@@ -308,8 +331,14 @@ void main() {
         syncMetadata: (String key) =>
             syncedMetadata(key, staleAfter: DateTime.utc(2026, 7, 18, 11)),
       );
+      await _scrollCalendarToTop(tester);
 
-      expect(find.byType(GvOfflineNotice), findsOneWidget);
+      expect(find.byType(GvPrimerNotice), findsOneWidget);
+      expect(
+        tester.widget<GvPrimerNotice>(find.byType(GvPrimerNotice)).cause,
+        GvPrimerNoticeCause.stale,
+        reason: 'VS-4: the clock icon marks stale data',
+      );
       expect(
         find.text(
           'This data may be out of date — showing the last saved '
@@ -317,7 +346,7 @@ void main() {
         ),
         findsOneWidget,
       );
-      expect(find.byType(CalendarEventCard), findsWidgets);
+      expect(find.byType(CalendarEventRow), findsWidgets);
     });
 
     testWidgets('pull-to-refresh keeps the rows visible', (
@@ -328,17 +357,17 @@ void main() {
         initialLocation: '/calendar',
         surfaceSize: _listSurface,
       );
-      expect(find.byType(CalendarEventCard), findsWidgets);
+      expect(find.byType(CalendarEventRow), findsWidgets);
 
       await tester.fling(
-        find.byType(CalendarEventCard).first,
+        find.byType(CalendarEventRow).first,
         const Offset(0, 300),
         1000,
       );
       await tester.pump();
-      expect(find.byType(CalendarEventCard), findsWidgets);
+      expect(find.byType(CalendarEventRow), findsWidgets);
       await tester.pumpAndSettle();
-      expect(find.byType(CalendarEventCard), findsWidgets);
+      expect(find.byType(CalendarEventRow), findsWidgets);
     });
 
     testWidgets('a refresh failure keeps the rows and shows a notice', (
@@ -350,11 +379,17 @@ void main() {
         failure: ApiFailureKind.networkUnavailable,
       );
       await tester.pumpAndSettle();
+      await _scrollCalendarToTop(tester);
 
-      expect(find.byType(CalendarEventCard), findsWidgets);
+      expect(find.byType(CalendarEventRow), findsWidgets);
       expect(
         find.text("Couldn't refresh — showing saved data."),
         findsOneWidget,
+      );
+      expect(
+        tester.widget<GvPrimerNotice>(find.byType(GvPrimerNotice)).cause,
+        GvPrimerNoticeCause.failure,
+        reason: 'VS-4: the alert icon marks a refresh failure',
       );
     });
 
@@ -378,9 +413,10 @@ void main() {
           );
       await tester.pumpAndSettle();
 
-      expect(find.byType(CalendarEventCard), findsWidgets);
+      expect(find.byType(CalendarEventRow), findsWidgets);
       expect(find.text("Couldn't refresh — showing saved data."), findsNothing);
-      expect(find.byType(GvErrorState), findsNothing);
+      // No first-load error block (Primer V2: an alert empty state).
+      expect(find.text("Can't load the calendar"), findsNothing);
     });
 
     testWidgets('the refresh action is reachable and labelled', (
@@ -391,13 +427,10 @@ void main() {
         const ValueKey<String>('calendar-refresh'),
       );
       expect(action, findsOneWidget);
-      expect(
-        tester.getSize(find.byType(IconButton).first).height,
-        greaterThanOrEqualTo(48),
-      );
+      expect(tester.getSize(action), const Size(48, 48));
       await tester.tap(action);
       await tester.pumpAndSettle();
-      expect(find.byType(CalendarEventCard), findsWidgets);
+      expect(find.byType(CalendarEventRow), findsWidgets);
     });
   });
 
@@ -541,7 +574,7 @@ void main() {
       WidgetTester tester,
     ) async {
       await pumpApp(tester, initialLocation: '/calendar');
-      final Size size = tester.getSize(find.byType(CalendarEventCard).first);
+      final Size size = tester.getSize(find.byType(CalendarEventRow).first);
       expect(size.height, greaterThanOrEqualTo(48));
     });
 
@@ -555,7 +588,7 @@ void main() {
         surfaceSize: const Size(400, 1200),
       );
 
-      expect(find.byType(CalendarEventCard), findsWidgets);
+      expect(find.byType(CalendarEventRow), findsWidgets);
       expect(tester.takeException(), isNull);
     });
 

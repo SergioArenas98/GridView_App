@@ -6,6 +6,7 @@ import 'package:gridview/core/api/errors/api_failure.dart';
 import 'package:gridview/core/preferences/preference_values.dart';
 import 'package:gridview/core/widgets/widgets.dart';
 import 'package:gridview/features/home/presentation/home_screen.dart';
+import 'package:gridview/features/home/presentation/widgets/home_header.dart';
 import 'package:gridview/features/shared/domain/entities/calendar_entry.dart';
 import 'package:gridview/features/shared/domain/entities/enums.dart';
 import 'package:gridview/features/shared/domain/entities/home_dashboard.dart';
@@ -24,8 +25,9 @@ import '../support/router_harness.dart';
 
 /// Home is a long dashboard, so most assertions use a tall surface rather than
 /// scrolling step by step; nothing about the assertions is relaxed. The narrow
-/// and large-text cases below use a real phone surface on purpose.
-const Size _tall = Size(400, 2400);
+/// and large-text cases below use a real phone surface on purpose. (The Primer
+/// V2 Home of Step 55C.1 is taller than the legacy layout, hence 3600.)
+const Size _tall = Size(400, 3600);
 const Size _phone = Size(390, 844);
 const Size _narrow = Size(320, 900);
 
@@ -122,7 +124,8 @@ void main() {
         ),
       );
 
-      expect(find.byType(GvSkeletonCard), findsOneWidget);
+      expect(find.byKey(const ValueKey<String>('home-skeleton')), findsOne);
+      expect(find.byType(GvPrimerSkeleton), findsWidgets);
       expect(find.text('Belgian Grand Prix'), findsNothing);
     });
 
@@ -196,7 +199,8 @@ void main() {
       await pumpHome(tester);
       expect(find.text('Next Grand Prix'), findsOneWidget);
       expect(find.text('Belgian Grand Prix'), findsWidgets);
-      expect(find.text('Round 13'), findsWidgets);
+      // Visually "Round" above "13"; announced as one phrase.
+      expect(find.bySemanticsLabel('Round 13'), findsOneWidget);
     });
 
     testWidgets('a race weekend leads with the current Grand Prix', (
@@ -236,8 +240,16 @@ void main() {
       expect(find.text('Current session'), findsOneWidget);
       expect(
         find.text('Live now'),
-        findsNWidgets(2),
-        reason: 'the hero and the session block both state it',
+        findsOneWidget,
+        reason: 'the hero states it once; the session row is not a second copy',
+      );
+      expect(
+        find.descendant(
+          of: find.byKey(const ValueKey<String>('home-session-focus')),
+          matching: find.text('Live'),
+        ),
+        findsOneWidget,
+        reason: 'the focused session carries its own Live status chip',
       );
     });
 
@@ -255,11 +267,11 @@ void main() {
   });
 
   group('hero', () {
-    testWidgets('renders without an image, using a placeholder only', (
+    testWidgets('renders no imagery: the approved Primer hero has none', (
       WidgetTester tester,
     ) async {
       await pumpHome(tester);
-      expect(find.byType(GvImagePlaceholder), findsWidgets);
+      expect(find.byType(GvImagePlaceholder), findsNothing);
       expect(
         find.byType(Image),
         findsNothing,
@@ -274,7 +286,13 @@ void main() {
       );
 
       expect(find.text('Belgian Grand Prix'), findsWidgets);
-      expect(find.text('View Grand Prix'), findsOneWidget);
+      expect(
+        find.descendant(
+          of: find.byKey(const ValueKey<String>('home-hero-open')),
+          matching: find.text('View Grand Prix'),
+        ),
+        findsOneWidget,
+      );
       expect(
         renderedText(tester).join(' '),
         isNot(contains('spa-francorchamps')),
@@ -354,7 +372,14 @@ void main() {
         findsOne,
       );
       // A compact subset — never the full five-session weekend.
-      expect(find.byType(GvSessionRow), findsNWidgets(3));
+      expect(
+        find.byWidgetPredicate(
+          (Widget w) =>
+              w.key is ValueKey<String> &&
+              (w.key! as ValueKey<String>).value.startsWith('session-'),
+        ),
+        findsNWidgets(3),
+      );
     });
 
     testWidgets('a weekend with no sessions says so', (
@@ -642,8 +667,18 @@ void main() {
         ),
       );
 
+      final Finder latest = find.byKey(
+        const ValueKey<String>('home-latest-result'),
+      );
       expect(find.text('Winner'), findsOneWidget);
-      expect(find.text('Max Verstappen · Red Bull Racing'), findsOneWidget);
+      expect(
+        find.descendant(of: latest, matching: find.text('Max Verstappen')),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(of: latest, matching: find.text('Red Bull Racing')),
+        findsOneWidget,
+      );
       expect(find.text('Final'), findsWidgets);
     });
 
@@ -719,20 +754,40 @@ void main() {
       );
     });
 
-    testWidgets('no upcoming events shows a concise line, not an error', (
+    testWidgets(
+      'HM-01: under Next Grand Prix an answered empty calendar omits the section',
+      (WidgetTester tester) async {
+        await pumpHome(
+          tester,
+          dashboard: homeDashboardFixture(upcoming: const <CalendarEntry>[]),
+        );
+        expect(find.text('Next Grand Prix'), findsOneWidget);
+        expect(find.text('Upcoming events'), findsNothing);
+        expect(find.text('No upcoming events'), findsNothing);
+        expect(find.text('Belgian Grand Prix'), findsWidgets);
+        expect(
+          find.byType(GvPrimerNotice),
+          findsNothing,
+          reason: 'an available calendar with nothing left is not a data gap',
+        );
+      },
+    );
+
+    testWidgets('outside pre-event, no upcoming events is one concise line', (
       WidgetTester tester,
     ) async {
       await pumpHome(
         tester,
-        dashboard: homeDashboardFixture(upcoming: const <CalendarEntry>[]),
+        dashboard: homeDashboardFixture(
+          focus: homeFocusFixture(status: EventStatus.completed),
+          upcoming: const <CalendarEntry>[],
+        ),
       );
+      expect(find.text('Latest Grand Prix'), findsOneWidget);
+      expect(find.text('Upcoming events'), findsOneWidget);
       expect(find.text('No upcoming events'), findsOneWidget);
-      expect(find.text('Belgian Grand Prix'), findsWidgets);
-      expect(
-        find.byType(GvOfflineNotice),
-        findsNothing,
-        reason: 'an available calendar with nothing left is not a data gap',
-      );
+      expect(find.text('View Calendar'), findsOneWidget);
+      expect(find.byType(GvPrimerNotice), findsNothing);
     });
   });
 
@@ -783,7 +838,12 @@ void main() {
         syncMetadata: unmaterialized(<String>{'standings:drivers:2026'}),
       );
       expect(find.text('Some information is unavailable'), findsOneWidget);
-      expect(find.byType(GvOfflineNotice), findsOneWidget);
+      expect(find.byType(GvPrimerNotice), findsOneWidget);
+      expect(
+        tester.widget<GvPrimerNotice>(find.byType(GvPrimerNotice)).cause,
+        GvPrimerNoticeCause.incomplete,
+        reason: 'VS-4 / O-2: the help icon marks incomplete information',
+      );
     });
 
     testWidgets('the season finale is never reported as missing information', (
@@ -804,7 +864,7 @@ void main() {
         findsNothing,
         reason: 'a complete empty answer is not missing information',
       );
-      expect(find.byType(GvOfflineNotice), findsNothing);
+      expect(find.byType(GvPrimerNotice), findsNothing);
     });
 
     // While the materialization records are still being read, neither "nothing
@@ -846,7 +906,7 @@ void main() {
         expect(find.text('No upcoming events'), findsNothing);
         expect(find.text('Upcoming events unavailable'), findsNothing);
         expect(find.text('Some information is unavailable'), findsNothing);
-        expect(find.byType(GvOfflineNotice), findsNothing);
+        expect(find.byType(GvPrimerNotice), findsNothing);
       });
 
       testWidgets('neither leader asserts anything while its table is being '
@@ -891,7 +951,7 @@ void main() {
           reason: 'no update time is claimed from an unread record',
         );
         expect(find.text('Some information may be outdated'), findsNothing);
-        expect(find.byType(GvOfflineNotice), findsNothing);
+        expect(find.byType(GvPrimerNotice), findsNothing);
       });
 
       testWidgets('resolving settles into the valid empty result', (
@@ -917,7 +977,7 @@ void main() {
 
         expect(find.text('No upcoming events'), findsOneWidget);
         expect(find.text('Upcoming events unavailable'), findsNothing);
-        expect(find.byType(GvOfflineNotice), findsNothing);
+        expect(find.byType(GvPrimerNotice), findsNothing);
       });
 
       testWidgets('resolving settles into unavailable', (
@@ -934,7 +994,7 @@ void main() {
           syncMetadataStream: records.streams,
         );
         expect(find.text('Upcoming events unavailable'), findsNothing);
-        expect(find.byType(GvOfflineNotice), findsNothing);
+        expect(find.byType(GvPrimerNotice), findsNothing);
 
         records.emit(unmaterialized(<String>{'calendar:2026'}));
         await tester.pumpAndSettle();
@@ -1108,12 +1168,18 @@ void main() {
       WidgetTester tester,
     ) async {
       await pumpHome(tester);
+      // The championship label is its own composition heading, read just
+      // before the leader link (not repeated inside it).
+      expect(
+        find.bySemanticsLabel("Drivers' Championship leader"),
+        findsOneWidget,
+      );
       expect(
         semanticLabels(tester).any(
           (String l) =>
-              l.contains("Drivers' Championship leader") &&
               l.contains('Max Verstappen') &&
-              l.contains('241 points'),
+              l.contains('241 points') &&
+              l.contains('Open Driver Max Verstappen'),
         ),
         isTrue,
       );
@@ -1122,12 +1188,23 @@ void main() {
     testWidgets('interactive targets are at least 48 logical pixels', (
       WidgetTester tester,
     ) async {
-      await pumpHome(tester, surfaceSize: _phone);
-      for (final Element element
-          in find
-              .byWidgetPredicate((Widget w) => w is GvIconButton)
-              .evaluate()) {
-        expect(tester.getSize(find.byWidget(element.widget)).height, 48.0);
+      await pumpHome(tester);
+      expect(find.byType(HomeIconButton), findsNWidgets(2));
+      for (final Element element in find.byType(HomeIconButton).evaluate()) {
+        expect(
+          tester.getSize(find.byWidget(element.widget)),
+          const Size(48, 48),
+        );
+      }
+      final Finder targets = find.descendant(
+        of: find.byType(HomeScreen),
+        matching: find.byType(GvPrimerFocusTarget),
+      );
+      expect(targets, findsWidgets);
+      for (final Element element in targets.evaluate()) {
+        final Size size = tester.getSize(find.byWidget(element.widget));
+        expect(size.height, greaterThanOrEqualTo(48), reason: '$size');
+        expect(size.width, greaterThanOrEqualTo(48), reason: '$size');
       }
     });
 

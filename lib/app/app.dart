@@ -9,6 +9,7 @@ import '../core/preferences/locale_resolution.dart';
 import '../core/preferences/preference_values.dart';
 import '../core/preferences/preferences_providers.dart';
 import '../core/theme/gridview_theme.dart';
+import '../core/theme/gv_primer_system_overlay.dart';
 import '../features/shared/presentation/widgets/environment_badge.dart';
 import '../l10n/app_localizations.dart';
 import 'router/app_router.dart';
@@ -73,9 +74,15 @@ class _GridViewAppState extends ConsumerState<GridViewApp> {
                 supportedLocales: supported,
               ),
       routerConfig: _router,
-      builder: (BuildContext context, Widget? child) => MediaLoaderScope(
-        loader: _mediaLoader,
-        child: EnvironmentBadgeOverlay(child: child ?? const SizedBox.shrink()),
+      // The system bars follow the Primer theme in every environment and on
+      // every route (XS-35); the region sits above the environment strip.
+      builder: (BuildContext context, Widget? child) => GvPrimerSystemOverlay(
+        child: MediaLoaderScope(
+          loader: _mediaLoader,
+          child: EnvironmentBadgeOverlay(
+            child: child ?? const SizedBox.shrink(),
+          ),
+        ),
       ),
     );
   }

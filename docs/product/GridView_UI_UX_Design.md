@@ -1,5 +1,21 @@
 # GridView - UI/UX Design
 
+> **Visual design superseded by Primer V2 (2026-11-22).** The app now ships
+> the Primer V2 design system in Dark and Light. The visual language in this
+> document — the visual style (§6), the colour system and palette (§7), the
+> Sora/Inter typography (§8), shape, spacing and layout (§9), the component
+> styling and the screen-level visual guidance — is the original pre-Primer
+> direction and is
+> **not authoritative** for tokens, colours, fonts or components. For the
+> current design see
+> [`../technical/GridView_Design_System.md`](../technical/GridView_Design_System.md)
+> and the design record in
+> [`design-exploration/prototypes/primer-v2/`](../../design-exploration/prototypes/primer-v2/README.md).
+> The product goals, experience principles, accessibility intent and
+> content rules here remain useful context; where they conflict with the
+> Primer V2 decisions, the decisions win. The document is kept unchanged below
+> as the historical brief.
+
 ## Document information
 
 - Product: GridView

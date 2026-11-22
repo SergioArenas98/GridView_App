@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import 'gv_primer_roles.dart';
 import 'gv_semantic_colors.dart';
 import 'gv_text_styles.dart';
 import 'tokens/tokens.dart';
@@ -11,21 +12,34 @@ import 'tokens/tokens.dart';
 /// below is produced from the same component configuration and the same
 /// typographic hierarchy — only the palette differs — so the two can never drift
 /// apart structurally.
-ThemeData buildGridViewDarkTheme() =>
-    _buildTheme(Brightness.dark, GvSemanticColors.dark, GvTextStyles.dark);
+ThemeData buildGridViewDarkTheme() => _buildTheme(
+  Brightness.dark,
+  GvSemanticColors.dark,
+  GvTextStyles.dark,
+  GvPrimerRoles.dark,
+);
 
 /// Builds the GridView **light** theme (Phase 8 §5).
 ///
 /// Same layouts, same information hierarchy, same restrained red emphasis;
 /// cool off-white and light-neutral surfaces, contrast-corrected accents, and
 /// dark system-bar icons.
-ThemeData buildGridViewLightTheme() =>
-    _buildTheme(Brightness.light, GvSemanticColors.light, GvTextStyles.light);
+ThemeData buildGridViewLightTheme() => _buildTheme(
+  Brightness.light,
+  GvSemanticColors.light,
+  GvTextStyles.light,
+  GvPrimerRoles.light,
+);
 
+/// [primer] is installed as an extension only. The colour scheme, text theme
+/// and component themes below still come from the legacy [colors] and [text],
+/// so nothing rendered changes until a migration step moves a screen onto the
+/// Primer V2 roles (XS-28).
 ThemeData _buildTheme(
   Brightness brightness,
   GvSemanticColors colors,
   GvTextStyles text,
+  GvPrimerRoles primer,
 ) {
   final ColorScheme scheme = ColorScheme(
     brightness: brightness,
@@ -50,7 +64,7 @@ ThemeData _buildTheme(
     canvasColor: colors.background,
     textTheme: text.textTheme,
     dividerColor: colors.divider,
-    extensions: <ThemeExtension<dynamic>>[colors, text],
+    extensions: <ThemeExtension<dynamic>>[colors, text, primer],
   );
 
   return base.copyWith(

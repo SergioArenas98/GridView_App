@@ -1,20 +1,18 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../core/theme/theme.dart';
-import '../../../core/widgets/widgets.dart';
 import '../../../l10n/app_localizations.dart';
 import '../../shared/application/fixture_data_identity_provider.dart';
 import '../../shared/application/providers.dart';
 import '../../shared/domain/entities/media.dart';
 import '../../shared/presentation/domain_status.dart';
-import '../../shared/presentation/widgets/screen_scaffold.dart';
-import '../../shared/presentation/widgets/screen_sections.dart';
 import '../application/data_source_attributions.dart';
 import '../domain/data_source_attribution.dart';
 import 'widgets/data_source_attribution_card.dart';
 import 'widgets/fixture_data_label.dart';
-import 'widgets/settings_rows.dart';
+import 'widgets/settings_app_bar.dart';
+import 'widgets/settings_group.dart';
+import 'widgets/settings_information.dart';
 
 /// The credits GridView is required to show, built from the actually-configured
 /// data source, the repository-owned data-source attribution record and locally
@@ -29,6 +27,11 @@ import 'widgets/settings_rows.dart';
 /// decision 5), each with its own status. No status claims that provider data
 /// is being served or retrieved live: a dormant source is credited as not
 /// connected, and an active one as published only in operator-run batches.
+///
+/// Primer V2 (Step 55C.13B, `settings/information/acknowledgements.html`,
+/// `light-rollout-b2/info-acknowledgements-*`): the independence statement,
+/// then the Data, Data sources and Images sections under kicker headings,
+/// flat on the page. The truth conditions are unchanged.
 class AcknowledgementsScreen extends ConsumerWidget {
   const AcknowledgementsScreen({super.key});
 
@@ -47,107 +50,95 @@ class AcknowledgementsScreen extends ConsumerWidget {
       dataSourceAttributionsProvider,
     );
 
-    return GvScreenScaffold(
+    return SettingsPrimerScaffold(
       title: l10n.settingsAcknowledgements,
-      body: ListView(
-        padding: const EdgeInsets.fromLTRB(
-          GvLayout.screenPaddingHorizontal,
-          GvSpacing.md,
-          GvLayout.screenPaddingHorizontal,
-          GvSpacing.xxl,
-        ),
-        children: <Widget>[
-          Text(l10n.settingsAboutUnofficial, style: context.gvText.bodyM),
-          const SizedBox(height: GvSpacing.lg),
-
-          GvScreenSection(
-            title: l10n.settingsAcknowledgementsData,
-            child: GvInfoCard(
+      body: (BuildContext context, double bottomPadding) =>
+          SingleChildScrollView(
+            padding: EdgeInsets.only(
+              top: settingsInformationTop,
+              bottom: bottomPadding,
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: <Widget>[
-                GvSettingsField(
-                  label: l10n.settingsDataSource,
-                  value: usesMockData
-                      ? fixtureLabel ?? l10n.settingsDataSourceSample
-                      : l10n.settingsDataSourceRemote,
+                SettingsProse(l10n.settingsAboutUnofficial),
+                SettingsGroup.information(
+                  title: l10n.settingsAcknowledgementsData,
+                  children: <Widget>[
+                    SettingsFactList(
+                      facts: <SettingsFact>[
+                        SettingsFact(
+                          label: l10n.settingsDataSource,
+                          value: usesMockData
+                              ? fixtureLabel ?? l10n.settingsDataSourceSample
+                              : l10n.settingsDataSourceRemote,
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+                ?_sources(l10n, sources),
+                SettingsGroup.information(
+                  title: l10n.settingsAcknowledgementsMedia,
+                  children: <Widget>[_credits(l10n, credits)],
                 ),
               ],
             ),
           ),
-          const SizedBox(height: GvSpacing.xl),
-
-          ..._sources(context, l10n, sources),
-
-          GvScreenSection(
-            title: l10n.settingsAcknowledgementsMedia,
-            child: _credits(context, l10n, credits),
-          ),
-        ],
-      ),
     );
   }
 
-  /// The data-source attribution section, one card per source.
+  /// The data-source attribution section, one block per source, 40px apart.
   ///
   /// The record is bundled with the app, so it resolves almost at once. Until
-  /// it has, a neutral reserved block is shown rather than a claim about which
-  /// sources exist. A record that cannot be read says so plainly; it is never
-  /// rendered as "no sources". An empty record renders no section at all.
-  List<Widget> _sources(
-    BuildContext context,
+  /// it has, a neutral static skeleton is shown rather than a claim about which
+  /// sources exist. A record that cannot be read says so plainly, in the
+  /// Primer notice; it is never rendered as "no sources". An empty record
+  /// renders no section at all.
+  Widget? _sources(
     AppLocalizations l10n,
     AsyncValue<DataSourceAttributions> sources,
   ) {
     final Widget content;
     if (sources.hasValue) {
       final List<DataSourceAttribution> resolved = sources.requireValue.sources;
-      if (resolved.isEmpty) return const <Widget>[];
+      if (resolved.isEmpty) return null;
       content = Column(
         key: sourcesKey,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: <Widget>[
           for (int i = 0; i < resolved.length; i++) ...<Widget>[
-            if (i > 0) const SizedBox(height: GvSpacing.md),
+            if (i > 0) const SizedBox(height: 40),
             DataSourceAttributionCard(source: resolved[i]),
           ],
         ],
       );
     } else if (sources.hasError) {
-      content = GvInfoCard(
+      content = SettingsInfoNotice(
+        l10n.settingsSourcesUnavailable,
         key: sourcesUnavailableKey,
-        children: <Widget>[
-          Text(l10n.settingsSourcesUnavailable, style: context.gvText.bodyM),
-        ],
       );
     } else {
-      content = GvInfoCard(
+      content = SettingsInfoLoading(
         key: sourcesResolvingKey,
-        children: <Widget>[
-          GvLoadingSemantics(
-            label: l10n.a11yLoading,
-            child: const GvSkeletonBlock(height: 20),
-          ),
-        ],
+        semanticLabel: l10n.a11yLoading,
       );
     }
-    return <Widget>[
-      GvScreenSection(
-        title: l10n.settingsAcknowledgementsSources,
-        child: content,
-      ),
-      const SizedBox(height: GvSpacing.xl),
-    ];
+    return SettingsGroup.information(
+      title: l10n.settingsAcknowledgementsSources,
+      children: <Widget>[content],
+    );
   }
 
   /// The credits section.
   ///
   /// "No attributions are stored yet" is a **statement about stored data**, so it
   /// may only be made once the read has actually answered. While it is in flight
-  /// this renders a neutral reserved block instead: claiming there are no credits
-  /// before knowing would be asserting something the screen has not yet
+  /// this renders a neutral static skeleton instead: claiming there are no
+  /// credits before knowing would be asserting something the screen has not yet
   /// established, and for a legal notice that is the worst possible moment to be
   /// wrong. A stream error is treated the same way — unknown, not empty.
   Widget _credits(
-    BuildContext context,
     AppLocalizations l10n,
     AsyncValue<List<MediaAttribution>> credits,
   ) {
@@ -155,31 +146,26 @@ class AcknowledgementsScreen extends ConsumerWidget {
         ? credits.requireValue
         : null;
     if (resolved == null) {
-      return GvInfoCard(
+      return SettingsInfoLoading(
         key: resolvingKey,
-        children: <Widget>[
-          GvLoadingSemantics(
-            label: l10n.a11yLoading,
-            child: const GvSkeletonBlock(height: 20),
-          ),
-        ],
+        semanticLabel: l10n.a11yLoading,
       );
     }
     if (resolved.isEmpty) {
-      return GvInfoCard(
+      return SettingsInfoEmpty(
+        l10n.settingsAcknowledgementsEmpty,
         key: emptyKey,
-        children: <Widget>[
-          Text(l10n.settingsAcknowledgementsEmpty, style: context.gvText.bodyM),
-        ],
       );
     }
-    return GvInfoCard(
+    return SettingsFactList(
       key: creditsKey,
-      children: <Widget>[
+      facts: <SettingsFact>[
         for (final MediaAttribution credit in resolved)
-          GvSettingsField(
-            // The subject of the credit, localized. Never the media id, the owner
-            // id, the URL or the wire category token.
+          SettingsFact(
+            // The subject of the credit, localized. Never the media id, the
+            // owner id, the URL or the wire category token. The credit text
+            // is the rights holder's own and its language is not known, so
+            // it is not marked.
             label: mediaCategoryLabel(l10n, credit.category),
             value: <String>[credit.attribution, ?credit.license].join(' · '),
           ),

@@ -10,6 +10,7 @@ import '../core/observability/observability_providers.dart';
 import '../core/observability/preference_observation.dart';
 import '../core/preferences/preferences_providers.dart';
 import '../core/preferences/preferences_repository.dart';
+import '../core/theme/gv_font_licenses.dart';
 import '../core/time/timezones.dart';
 import '../features/sync/application/app_sync_lifecycle.dart';
 import 'app.dart';
@@ -43,6 +44,8 @@ import 'environment/app_environment.dart';
 /// activation initializes the SDK and hands back a reporter, and that is all.
 Future<void> bootstrap({AppEnvironment? environment}) async {
   WidgetsFlutterBinding.ensureInitialized();
+  // Lazy and synchronous: nothing is read until a licence listing asks.
+  registerBundledFontLicenses();
 
   final AppEnvironment env = environment ?? AppEnvironment.current;
 

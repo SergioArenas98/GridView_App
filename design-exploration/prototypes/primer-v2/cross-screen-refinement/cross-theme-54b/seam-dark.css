@@ -1,0 +1,39 @@
+/* EXPERIMENT (Step 54B, XS-25), not an approved design. Loaded last on the
+   frozen Dark chain (dark-seam pages only); every approved sheet is only read.
+
+   One shared team-colour edge geometry (the same file logic as
+   seam-light.css; only the selection differs, as a stand-in for Flutter's
+   runtime contrast test against the surface the shape actually sits on):
+   - the team-colour shape keeps its own size in every theme and state
+     (tick 3px, line-up seam 2px, banner bar 12px, pinstripe 3px), all with
+     the existing 12° cut;
+   - when the supplied colour is below 3:1 against that surface, a 1px edge
+     in the surface's primary text colour (var(--text): Chalk here) is
+     painted OUTSIDE the shape, following its cut, and takes no layout;
+   - the supplied colour is never changed or replaced.
+   No new colour, token or dimension. */
+
+/* Line-up seam: the column stays 2px wide (today's Dark edge widens it to
+   4px and moves the name 2px); the edge is drawn outside the seam. The
+   narrow-container rule that hides the seam keeps priority. */
+@container lu not (max-width: 20em) {
+  .lu--edge .lu__row { grid-template-columns: 3.5em 2px minmax(0, 1fr) auto; }
+}
+.lu--edge .lu__seam { width: 2px; background: var(--team); box-shadow: 0 0 0 1px var(--text); }
+
+/* Banner rail: bar and pinstripe keep the team colour at full size (today's
+   Dark edge narrows the bar's colour to 8px inside a 2px Chalk frame and
+   replaces the pinstripe with a 2px Chalk line). The edge is a 1px outline
+   around both clipped shapes, drawn by the rail (clip-path would cut a
+   shadow drawn by the shapes themselves). */
+.tb--edge .tb__bar { background: var(--team); }
+.tb--edge .tb__pin { background: var(--team); height: 3px; }
+.tb--edge .tb__rail {
+  filter: drop-shadow(1px 0 0 var(--text)) drop-shadow(-1px 0 0 var(--text))
+          drop-shadow(0 1px 0 var(--text)) drop-shadow(0 -1px 0 var(--text));
+}
+
+/* Explore tick (LT-6 extended to Dark, as XS-25 proposes): #1E41FF is 2.83:1
+   on the Dark page, so it gets the edge; #FF8000 (7.25) and #0093CC (5.26)
+   do not. */
+.ent[style*="#1E41FF"] .ent__link::before { box-shadow: 0 0 0 1px var(--text); }

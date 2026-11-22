@@ -68,7 +68,7 @@ void main() {
     );
     expect(tester.takeException(), isNull);
     expect(find.byType(HomeScreen), findsOneWidget);
-    expect(find.byType(GvBottomNav), findsOneWidget);
+    expect(find.byType(GvPrimerBottomNav), findsOneWidget);
   });
 
   testWidgets('screens render with animations disabled (reduced motion)', (

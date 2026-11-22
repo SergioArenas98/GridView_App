@@ -328,6 +328,10 @@ class AppLocalizationsEn extends AppLocalizations {
       'This data may be out of date — showing the last saved version.';
 
   @override
+  String get refreshFailedStaleNotice =>
+      'Couldn\'t refresh. Saved data may be out of date.';
+
+  @override
   String get refreshFailedNotice => 'Couldn\'t refresh — showing saved data.';
 
   @override
@@ -422,6 +426,12 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get calendarNextLabel => 'Next';
+
+  @override
+  String get calendarGoToNextAction => 'Go to next Grand Prix';
+
+  @override
+  String get calendarGoToCurrentAction => 'Go to current Grand Prix';
 
   @override
   String get calendarEmptyTitle => 'No races scheduled yet';
@@ -966,6 +976,10 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get homeUpdateFailed => 'Update failed';
+
+  @override
+  String get homeUpdateFailedStale =>
+      'Couldn\'t refresh. Saved data may be out of date.';
 
   @override
   String get settingsSectionPreferences => 'Preferences';

@@ -1,0 +1,29 @@
+# design-exploration: what stays local.
+# Everything listed here is kept on disk as evidence; it is only kept out of
+# Git to keep the repository lean or because it may not be redistributed.
+# Rules are deliberately narrow (explicit folders and file types) so no
+# documentation, prototype source or generator can be hidden by accident.
+
+# ---------------------------------------------------------------------------
+# Third-party visual references (Pinterest): study material only, not
+# licensed for redistribution (see references/README.md). The README is tracked.
+/references/*.jpg
+/concepts/primer-visual-lab/exploration-b/racing-editorial-reference.png
+
+# ---------------------------------------------------------------------------
+# Stitch concept exports (generated HTML and screenshots). The concept
+# specifications and metadata (*.md) are tracked.
+/concepts/**/*.html
+/concepts/**/*.png
+
+# ---------------------------------------------------------------------------
+# Generated validation output. Every prototype validation pass writes its
+# screenshots, measurement JSON, text reports and a copy of its capture
+# scripts into a timestamped folder named
+# validation-YYYYMMDD-HHMMSS[-label]/. Those folders are run output, not
+# source: they are excluded from the published repository (2026-11 history
+# consolidation) and the historical runs are retained in the original-history
+# backup. The pattern matches only directories under prototypes/ whose name
+# starts with that exact timestamp, so prototype pages, generators
+# (build.py, checks-*.mjs), tools and documents can never match it.
+/prototypes/**/validation-[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]-[0-9][0-9][0-9][0-9][0-9][0-9]*/

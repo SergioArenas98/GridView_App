@@ -1,0 +1,317 @@
+/* GridView — Primer V2: Team Detail. Loads after primer-core.css
+   (byte-identical copy of the shared foundation) and only adds to it.
+   Conventions as the other screens: text in rem, layout in px, display
+   figures capped with min() (Android-like non-linear scaling).
+
+   Composition: an entrant banner, then the season record.
+   - The banner is typographic and full width: season line, the season-aware
+     entrant name, the stable constructor name when it differs, nationality.
+     The team colour, when the data supplies one, is a single livery rail cut
+     at 12° along the banner's lower edge. It never carries text. There is no
+     number board: that is Driver Detail's identity, and a team has no number.
+   - Championship is a three-figure strip (position | points | wins) in
+     Standings' figure grammar.
+   - The line-up is a list of car rows: number and code in a figure column, a
+     12° seam in the team colour, then the driver and the observed span. One
+     row per participation span, in the order supplied.
+   - Season facts are a ruled spec sheet.
+
+   Detail screens open on the root navigator in Flutter: no bottom
+   navigation, only the app bar's back action. */
+
+/* CONSOLIDATION PILOT copy of ../../team-detail/td.css (2026-11-09).
+   Loads after the shared foundation in ../../shared/ instead of
+   primer-core.css. Only these rules were removed, each moved verbatim to a
+   shared file: [hidden] (base.css); .dbar, .dbar__title
+   (components/detail-app-bar.css); .notice, .notice .icon
+   (components/notice.css, common subset); .empty, .empty__msg, .btn
+   (components/empty-state.css); .empty .icon, .empty__title
+   (components/empty-state-detail.css); and, since the Grand Prix pilot
+   (2026-11-10), .page, .sec, .sec__title (components/detail-page.css).
+   `.notice` keeps its local extension (text-wrap: pretty), as in the
+   Standings and Explore pilots. Everything else is unchanged, in its
+   original order. */
+
+/* ---------- Copied from ../driver-detail/dd.css (itself from gpd.css; candidates for the core, XS-09). In the pilot:
+   the app bar, notice base and empty block are in ../../shared/; these stay local ---------- */
+.page-notice { padding: 12px var(--gutter); }
+.notice { text-wrap: pretty; }
+.chip--outline { border: 1.5px solid var(--hair-strong); }
+.btn:hover { background: var(--chalk-low); }
+.about {
+  margin: 10px var(--gutter) 0;
+  max-width: 38em;
+  font-size: 1rem; line-height: 1.55;
+  text-wrap: pretty;
+}
+/* Destination link row (Driver Detail's .ch__link): ruled row + arrow for a
+   non-entity destination, here the constructors' standings. */
+.dest {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  min-height: 56px; margin-top: 16px;
+  padding: 8px var(--gutter);
+  border-block: 1px solid var(--hair);
+  font-weight: 700; line-height: 1.3;
+}
+.dest:hover { background: rgba(236, 234, 229, 0.03); }
+.dest:active { background: var(--tray); }
+.dest:focus-visible { outline-offset: -3px; border-radius: 4px; }
+.dest .icon { transition: transform 220ms cubic-bezier(0.16, 1, 0.3, 1); }
+.dest:hover .icon { transform: translateX(3px); }
+
+/* ---------- Entrant banner (T01–T05) ---------- */
+.tb {
+  position: relative; isolation: isolate; overflow: hidden;
+  display: grid;
+  grid-template-areas: "season" "name" "meta" "rail";
+  padding: 22px var(--gutter) 24px;
+  background:
+    linear-gradient(168deg, rgba(255, 255, 255, 0.045) 0%, rgba(255, 255, 255, 0) 46%),
+    var(--tray);
+}
+.tb--color { padding-bottom: 0; }
+/* Season context: seasonLabel with the ready state's season, the type of
+   Grand Prix Detail's season line (as Driver Detail's refinement). After the
+   heading in the DOM; above it visually. */
+.tb__season {
+  grid-area: season;
+  color: var(--text-2); font-size: 0.8125rem; font-weight: 600; line-height: 1.2;
+}
+/* The season-aware entrant name: long by nature ("BWT Alpine Formula One
+   Team"), so a heavier, less condensed cut than the driver's name, balanced
+   over two or three lines. Never truncated. */
+.tb__name {
+  grid-area: name;
+  margin-top: 8px;
+  max-width: 15em;
+  font-size: min(2.25rem, 40px);   /* 36 */
+  font-weight: 820;
+  font-variation-settings: "wdth" 90;
+  line-height: 1.02;
+  letter-spacing: -0.018em;
+  overflow-wrap: break-word;
+  text-wrap: balance;
+}
+/* Stable constructor name (only when it differs) and nationality: a name in
+   Chalk, a fact in the secondary colour, split by a 12° hairline. A term
+   list (refinement): screen readers hear "Team: Alpine", "Nationality:
+   French"; both terms are visually hidden. */
+.tb__meta {
+  grid-area: meta;
+  display: flex; flex-wrap: wrap; align-items: center;
+  column-gap: 12px; row-gap: 2px;
+  margin-top: 12px;
+  font-size: 0.9375rem; line-height: 1.35;
+}
+.tb__meta dd { margin: 0; }
+.tb__stable { font-weight: 750; font-variation-settings: "wdth" 96; overflow-wrap: break-word; min-width: 0; }
+.tb__nat { display: flex; align-items: center; gap: 12px; color: var(--text-2); font-weight: 600; overflow-wrap: break-word; min-width: 0; }
+.tb__stable + .tb__nat::before {
+  content: ""; flex: none;
+  width: 2px; height: 0.95em;
+  background: var(--hair-strong);
+  transform: skewX(var(--cut));
+}
+/* Livery rail: the team colour (season colour, else the constructor's),
+   only when supplied. A 12px bar from the text edge to the right edge and a
+   3px pinstripe over its right half, both cut at 12° on the left (clip-path,
+   so nothing leans past the viewport). One colour, no tints. Decorative and
+   never the only carrier of identity. */
+.tb__rail {
+  grid-area: rail;
+  display: flex; flex-direction: column; align-items: flex-end; gap: 4px;
+  margin: 20px calc(-1 * var(--gutter)) 0 0;
+}
+.tb__rail span { display: block; background: var(--team); }
+.tb__pin { width: 46%; height: 3px; clip-path: polygon(calc(3px * 0.2126) 0, 100% 0, 100% 100%, 0 100%); }
+.tb__bar { width: 100%; height: 12px; clip-path: polygon(calc(12px * 0.2126) 0, 100% 0, 100% 100%, 0 100%); }
+/* Low-contrast team colour (below 3:1 on the banner, measured in build.py,
+   refinement): the supplied colour is kept unchanged and framed by Chalk,
+   2px above and below the bar, and the pinstripe becomes a Chalk line, so
+   the rail's shape meets 3:1 (Chalk on the banner 13.4:1). No new colour. */
+.tb--edge .tb__bar {
+  background:
+    linear-gradient(var(--team), var(--team)) 0 50% / 100% calc(100% - 4px) no-repeat,
+    var(--chalk);
+}
+.tb--edge .tb__pin { background: var(--chalk); height: 2px; }
+/* Media (T05): the constructor's stable imagery only (never a season
+   livery), decorative, behind everything. No cleared media exists, so the
+   layer is never filled; the states page shows its geometry. Absent,
+   loading and failed render the banner exactly as without it. */
+.tb__media { position: absolute; inset: 0; z-index: -1; }
+.tb__media::after {
+  content: ""; position: absolute; inset: 0;
+  background: linear-gradient(90deg, var(--tray) 0%, rgba(31, 33, 37, 0.9) 55%, rgba(31, 33, 37, 0.55) 100%);
+}
+
+/* ---------- Championship strip (T06–T09, T22) ---------- */
+.tcw { container: tc / inline-size; margin-top: 14px; }
+.tc {
+  display: grid;
+  grid-template-columns: auto auto minmax(0, 1fr);
+  grid-template-areas: "pos pts wins";
+  align-items: end;
+  padding: 0 var(--gutter);
+}
+.tc__cell { position: relative; min-width: 0; display: flex; flex-direction: column; padding-right: 22px; }
+.tc__cell + .tc__cell { padding-left: 22px; }
+.tc__cell + .tc__cell::before {
+  content: ""; position: absolute; left: 0; bottom: 0; top: 2px;
+  width: 2px; background: var(--hair-strong);
+  transform: skewX(var(--cut));
+}
+.tc__cell dt { color: var(--text-2); font-size: 0.8125rem; font-weight: 700; line-height: 1.2; }
+.tc__cell dd {
+  margin: 8px 0 0;
+  font-size: min(2.5rem, 44px);    /* 40 */
+  font-weight: 800;
+  font-variation-settings: "wdth" 112;
+  letter-spacing: -0.03em;
+  line-height: 0.86;
+  overflow-wrap: anywhere;
+}
+.tc__pos { grid-area: pos; }
+.tc__pts { grid-area: pts; }
+.tc__wins { grid-area: wins; }
+.tc__pos dd {
+  margin-left: -3px;
+  font-size: min(4.5rem, 80px);    /* 72 */
+  font-weight: 850;
+  font-variation-settings: "wdth" 125;
+  letter-spacing: -0.04em;
+  line-height: 0.8;
+}
+.tc__pos--word dd {
+  margin: 8px 0 0;
+  font-size: min(1.75rem, 34px);
+  font-weight: 800;
+  font-variation-settings: "wdth" 82;
+  letter-spacing: 0;
+  line-height: 1.05;
+  overflow-wrap: break-word;
+}
+.tc__prov { margin: 14px var(--gutter) 0; }
+/* Narrow strip (320dp, or large text): position on its own line, points and
+   wins share the next; the seam before points is dropped. */
+@container tc (max-width: 20em) {
+  .tc { grid-template-columns: auto minmax(0, 1fr); grid-template-areas: "pos pos" "pts wins"; row-gap: 18px; }
+  .tc__cell.tc__pts { padding-left: 0; }
+  .tc__cell.tc__pts::before { display: none; }
+}
+
+/* ---------- Line-up (T10–T14, T22) ----------
+   One row per participation span (TeamLineupMember.entryId), exactly in the
+   order the read model supplies (the app's _byRosterOrder: numbered first,
+   race number, name, start round); a returning driver has one row per span.
+   Refinement: an observed boundary is set in Ember, so a hand-over reads as
+   a pair ("Until round 6" ... "From round 7") even when race-number order
+   puts another driver between the two rows. The words carry the meaning;
+   Ember only makes the bounded rows findable. No timeline, no re-sorting.
+   The span appears only when a boundary was observed, and leads the facts. */
+.lu { container: lu / inline-size; margin-top: 10px; }
+.lu__row {
+  position: relative;
+  display: grid;
+  grid-template-columns: 3.5em 2px minmax(0, 1fr) auto;
+  grid-template-areas: "car seam body go";
+  column-gap: 14px; align-items: center;
+  min-height: 72px;
+  padding: 14px var(--gutter);
+}
+.lu__row + .lu__row::before {
+  content: ""; position: absolute; top: 0; height: 1px;
+  left: var(--gutter); right: var(--gutter);
+  background: var(--hair);
+}
+.lu__car { grid-area: car; display: flex; flex-direction: column; align-items: flex-end; text-align: right; min-width: 0; }
+.lu__num {
+  font-size: min(1.75rem, 32px);   /* 28 */
+  font-weight: 850;
+  font-variation-settings: "wdth" 125;
+  letter-spacing: -0.04em;
+  line-height: 0.9;
+}
+.lu__code {
+  margin-top: 6px; margin-right: -0.12em;
+  color: var(--text-2);
+  font-size: 0.8125rem; font-weight: 800;
+  font-variation-settings: "wdth" 112;
+  letter-spacing: 0.12em;
+  line-height: 1;
+}
+/* The seam carries the team colour when supplied (else a hairline); height
+   capped so the slant stays inside the row at large text. */
+.lu__seam {
+  grid-area: seam; align-self: stretch;
+  width: 2px; min-height: 36px; max-height: 56px;
+  background: var(--team, var(--hair-strong));
+  transform: skewX(var(--cut));
+}
+.lu__body { grid-area: body; min-width: 0; pointer-events: none; }
+.lu__name {
+  font-size: min(1.1875rem, 30px);  /* 19 */
+  font-weight: 800;
+  font-variation-settings: "wdth" 84;
+  line-height: 1.15;
+  overflow-wrap: break-word;
+}
+.lu__facts {
+  display: flex; flex-wrap: wrap; align-items: baseline;
+  gap: 2px 14px;
+  margin-top: 4px;
+  color: var(--text-2); font-size: 0.875rem; line-height: 1.35;
+}
+.lu__facts div { display: flex; }
+.lu__facts dd { margin: 0; }
+.lu__span { color: var(--ember); font-weight: 700; font-variant-numeric: tabular-nums; }
+.lu__go { grid-area: go; width: 16px; height: 16px; stroke-width: 2.25; color: var(--text-2); margin-right: -4px; pointer-events: none; }
+.lu__hit { position: absolute; inset: 0; z-index: 1; }
+.lu__hit:hover { background: rgba(236, 234, 229, 0.03); }
+.lu__hit:active { background: var(--tray); }
+.lu__hit:focus-visible { outline-offset: -3px; border-radius: 4px; }
+.lu__row:hover .lu__go { color: var(--text); }
+/* No member has a number or code: no figure column, no seam. */
+.lu--plain .lu__row { grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "body go"; }
+.lu--plain .lu__seam { display: none; }
+/* Low-contrast team colour (below 3:1 on the page, measured in build.py):
+   the seam keeps the supplied colour in its 2px core with a 1px Chalk line
+   either side, so its shape meets 3:1. */
+.lu--edge .lu__row { grid-template-columns: 3.5em 4px minmax(0, 1fr) auto; }
+.lu--edge .lu__seam {
+  width: 4px;
+  background: linear-gradient(90deg, var(--chalk) 0 1px, var(--team) 1px 3px, var(--chalk) 3px 4px);
+}
+/* Narrow list (large text): number and code share the first line with the
+   chevron; the driver and facts take the full width below. */
+@container lu (max-width: 20em) {
+  .lu__row { grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "car go" "body body"; row-gap: 6px; }
+  .lu__car { flex-direction: row; align-items: baseline; justify-content: flex-start; gap: 10px; text-align: left; }
+  .lu__code { margin: 0; }
+  .lu__seam { display: none; }
+  .lu--plain .lu__row { grid-template-areas: "body go"; }
+  .lu--edge .lu__row { grid-template-columns: minmax(0, 1fr) auto; }   /* out-ranks the wide edge column rule */
+}
+
+/* ---------- Season facts: spec sheet (T15–T18) ---------- */
+.sheet { container: sheet / inline-size; margin: 10px var(--gutter) 0; }
+.sheet__row {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(0, 3fr);
+  column-gap: 16px; align-items: baseline;
+  padding: 12px 0;
+  border-top: 1px solid var(--hair);
+}
+.sheet__row:last-child { border-bottom: 1px solid var(--hair); }
+.sheet__row dt { color: var(--text-2); font-size: 0.875rem; line-height: 1.35; overflow-wrap: break-word; }
+.sheet__row dd { margin: 0; font-size: 1rem; font-weight: 650; line-height: 1.3; overflow-wrap: break-word; }
+@container sheet (max-width: 20em) {
+  .sheet__row { grid-template-columns: minmax(0, 1fr); row-gap: 2px; }
+}
+
+/* ---------- Loading (_DetailSkeleton) ---------- */
+.skel { display: flex; flex-direction: column; gap: 8px; padding: 0 0 8px; }
+.skel span { display: block; background: linear-gradient(90deg, var(--tray), var(--raised), var(--tray)); }
+.skel__banner { height: 168px; margin-bottom: 24px; }
+.skel__label { width: 140px; height: 18px; margin: 0 var(--gutter) 6px; border-radius: 4px; }
+.skel__row { height: 72px; margin: 0 var(--gutter); border-radius: var(--radius-sm); }

@@ -1,0 +1,24 @@
+/* GridView — Primer V2 shared component: empty / error block and pill button
+   (Flutter GvEmptyState / GvErrorState and their retry action).
+
+   Moved verbatim. These three rules are byte-identical (after whitespace
+   normalisation) in standings.css, explore.css, gpd.css, dd.css, td.css and
+   cd.css (verified 2026-11-09). First consumer: the Standings pilot.
+
+   NOT here, because the copies disagree (two sizes, both in approved screens):
+   - `.empty .icon` and `.empty__title`: list screens (Standings, Explore) use
+     a 32px icon with margin-bottom 4px and a 20px / 1.2 title, capped 30px;
+     detail screens (GP, Driver, Team, Circuit) use a 28px icon with
+     margin-bottom 2px and an 18px / 1.25 title, capped 28px. Each screen keeps
+     its own size in its stylesheet until a decision says otherwise.
+   Loading skeletons are not shared either: shapes differ per screen. */
+
+.empty { padding: 40px var(--gutter) 24px; display: flex; flex-direction: column; align-items: flex-start; gap: 8px; }
+.empty__msg { color: var(--text-2); max-width: 36em; text-wrap: pretty; }
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  min-height: 48px; margin-top: 8px; padding: 0 20px;
+  border: 0; border-radius: 999px;
+  background: var(--chalk); color: var(--on-chalk);
+  font-weight: 700; cursor: pointer;
+}

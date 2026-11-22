@@ -1,0 +1,26 @@
+/* EXPERIMENT (Step 51C.1), not an approved design. Loaded after
+   candidate.css on the "-refine" pages. Focus-indicator and painting-order
+   adjustments only: no colour token, size, offset, target, order or
+   behaviour change, and nothing changes while nothing is focused.
+
+   1. Selector: Chalk ring on every option (51C used Ember on unselected
+      options, which crossed the selected slab's 12-degree tip at 2.66:1).
+   2. Calendar next-event: while the link is focused, the oxide block paints
+      below the link's ring instead of over it (block stays in the band's own
+      stacking context).
+   3. GP classification rows: while a row link is focused, the rail cell
+      paints below the row's ring. The winner row's ring crosses the oxide
+      cell, so it takes Chalk (the surface rule approved in 51C); the winner
+      cell itself is unchanged. */
+
+/* 1 */
+.seg__btn:focus-visible { outline-color: var(--chalk); }
+
+/* 2 */
+.ev--next:has(.ev__link:focus-visible) { isolation: isolate; }
+.ev--next:has(.ev__link:focus-visible) .ev__round { z-index: auto; }
+
+/* 3 */
+.cl:has(> .cl__hit:focus-visible) { isolation: isolate; }
+.cl:has(> .cl__hit:focus-visible) .cl__pos { z-index: -1; }
+.cl--winner .cl__hit:focus-visible { outline-color: var(--chalk); }

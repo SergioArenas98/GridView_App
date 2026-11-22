@@ -1,30 +1,36 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:intl/intl.dart';
 
 import '../../../app/router/entity_navigation.dart';
 import '../../../app/router/route_paths.dart';
 import '../../../core/theme/theme.dart';
-import '../../../core/widgets/widgets.dart';
 import '../../../l10n/app_localizations.dart';
 import '../../shared/application/providers.dart';
 import '../../shared/domain/entities/standing_entry.dart';
 import '../../shared/presentation/domain_status.dart';
-import '../../shared/presentation/widgets/mock_data_banner.dart';
-import '../../shared/presentation/widgets/screen_scaffold.dart';
+import '../../shared/presentation/widgets/primer_pinned_header_layout.dart';
 import '../application/standings_providers.dart';
 import '../application/standings_state.dart';
 import '../application/standings_ui_state.dart';
 import 'standings_row_view.dart';
+import 'widgets/standings_header.dart';
+import 'widgets/standings_status_block.dart';
+import 'widgets/standings_table.dart';
 
-/// The Standings branch: the drivers' and constructors' championship tables for
-/// the resolved season, read from Drift in their delivered order.
+/// The Standings branch, in Primer V2 (Step 55C.5): the drivers' and
+/// constructors' championship tables for the resolved season, read from Drift
+/// in their delivered order, as a timing-sheet ranking.
+///
+/// The title row, the season row and the championship selector are pinned
+/// above the selected table; that table's freshness caption, provisional
+/// caption and notices scroll with its rows (see [StandingsHeader] for the
+/// header budget, which is not applied).
 ///
 /// The screen never launches a refresh of its own — neither when it is built nor
 /// when the selector changes — because startup and foreground synchronization of
 /// the current-season core set belong to the application coordinator (ADR 0015).
-/// Pull-to-refresh and the app-bar action go through the coordinator's manual
+/// Pull-to-refresh and the header action go through the coordinator's manual
 /// current-season entry point, or, on a historical season route, through one
 /// focused refresh of exactly the selected championship's own resource.
 ///
@@ -116,171 +122,38 @@ class _StandingsScreenState extends ConsumerState<StandingsScreen> {
       standingsStateProvider(_scope),
     );
     final StandingsChampionship selected = state.selected;
-
-    return GvScreenScaffold(
-      title: l10n.standingsTitle,
-      showSettingsAction: true,
-      extraActions: <Widget>[
-        GvIconButton(
-          key: const ValueKey<String>('standings-refresh'),
-          icon: Icons.refresh,
-          semanticLabel: l10n.standingsRefreshAction,
-          onPressed: () => _refresh(selected),
-        ),
-      ],
-      body: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: <Widget>[
-          _StandingsHeader(season: state.season, selected: selected),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(
-              GvLayout.screenPaddingHorizontal,
-              0,
-              GvLayout.screenPaddingHorizontal,
-              GvSpacing.sm,
-            ),
-            child: Semantics(
-              label: l10n.standingsChampionshipSelector,
-              container: true,
-              child: GvSegmentedControl(
-                segments: <String>[
-                  l10n.standingsDrivers,
-                  l10n.standingsConstructors,
-                ],
-                selectedIndex: selected.index,
-                onChanged: (int index) =>
-                    _select(StandingsChampionship.values[index]),
-              ),
-            ),
-          ),
-          Expanded(
-            child: switch (selected) {
-              StandingsChampionship.drivers => _DriversTable(
-                state: state.drivers,
-                controller: _controllers[StandingsChampionship.drivers]!,
-                onRefresh: () => _refresh(StandingsChampionship.drivers),
-              ),
-              StandingsChampionship.constructors => _ConstructorsTable(
-                state: state.constructors,
-                controller: _controllers[StandingsChampionship.constructors]!,
-                onRefresh: () => _refresh(StandingsChampionship.constructors),
-              ),
-            },
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-/// The season context and the mock-data banner. Freshness, notices and progress
-/// belong to the selected table and are rendered with its content, so switching
-/// the selector immediately switches that context.
-class _StandingsHeader extends ConsumerWidget {
-  const _StandingsHeader({required this.season, required this.selected});
-
-  final int? season;
-  final StandingsChampionship selected;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final AppLocalizations l10n = AppLocalizations.of(context);
+    final int? season = state.season;
     final bool showMock = ref.watch(usesMockDataProvider);
 
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(
-        GvLayout.screenPaddingHorizontal,
-        GvSpacing.md,
-        GvLayout.screenPaddingHorizontal,
-        GvSpacing.sm,
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisSize: MainAxisSize.min,
-        children: <Widget>[
-          if (season != null)
-            Text(
-              l10n.seasonLabel('$season'),
-              style: context.gvText.sectionTitle,
+    return Scaffold(
+      backgroundColor: context.gvPrimer.surface.page,
+      body: SafeArea(
+        // Step 55C.15R: the header stays pinned unless it would leave the
+        // list less than two targets (a short viewport at large text with the
+        // strip and the 2 x 2 navigation); then it scrolls with the page.
+        child: PrimerPinnedHeaderLayout(
+          header: StandingsHeader(
+            season: season == null ? null : l10n.seasonLabel('$season'),
+            selected: selected,
+            onSelect: _select,
+            onRefresh: () => _refresh(selected),
+            onOpenSettings: () => context.openSettings(),
+          ),
+          body: switch (selected) {
+            StandingsChampionship.drivers => _DriversTable(
+              state: state.drivers,
+              controller: _controllers[StandingsChampionship.drivers]!,
+              showMock: showMock,
+              onRefresh: () => _refresh(StandingsChampionship.drivers),
             ),
-          if (showMock) ...<Widget>[
-            const SizedBox(height: GvSpacing.sm),
-            const MockDataBanner(),
-          ],
-        ],
-      ),
-    );
-  }
-}
-
-/// The selected table's own freshness, progress and non-blocking failure.
-///
-/// Everything here is scoped to one resource: the drivers' timestamp is never
-/// shown while Constructors is selected, and a bootstrap-materialized table
-/// claims no update time at all because it has no individual freshness yet.
-class _TableStatus extends StatelessWidget {
-  const _TableStatus({
-    required this.lastSuccessAt,
-    required this.isStale,
-    required this.refreshing,
-    required this.failure,
-    this.provisional = StandingsProvisionalSummary.unspecified,
-  });
-
-  final DateTime? lastSuccessAt;
-  final bool isStale;
-  final bool refreshing;
-  final StandingsFailure? failure;
-  final StandingsProvisionalSummary provisional;
-
-  @override
-  Widget build(BuildContext context) {
-    final AppLocalizations l10n = AppLocalizations.of(context);
-    final DateTime? updated = lastSuccessAt;
-    final bool showProvisional =
-        provisional == StandingsProvisionalSummary.provisional;
-    if (updated == null && !refreshing && failure == null && !isStale) {
-      if (!showProvisional) return const SizedBox.shrink();
-    }
-
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(
-        GvLayout.screenPaddingHorizontal,
-        0,
-        GvLayout.screenPaddingHorizontal,
-        GvSpacing.sm,
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisSize: MainAxisSize.min,
-        children: <Widget>[
-          if (refreshing)
-            Text(l10n.standingsRefreshingLabel, style: context.gvText.caption)
-          else if (updated != null)
-            Text(
-              l10n.lastUpdatedLabel(
-                DateFormat.Hm(
-                  Localizations.localeOf(context).languageCode,
-                ).format(updated.toLocal()),
-              ),
-              style: context.gvText.caption,
+            StandingsChampionship.constructors => _ConstructorsTable(
+              state: state.constructors,
+              controller: _controllers[StandingsChampionship.constructors]!,
+              showMock: showMock,
+              onRefresh: () => _refresh(StandingsChampionship.constructors),
             ),
-          if (showProvisional) ...<Widget>[
-            const SizedBox(height: GvSpacing.xxs),
-            Text(
-              l10n.standingsProvisionalNotice,
-              style: context.gvText.caption,
-            ),
-          ],
-          if (failure != null || isStale) ...<Widget>[
-            const SizedBox(height: GvSpacing.sm),
-            GvOfflineNotice(
-              message: failure != null
-                  ? l10n.refreshFailedNotice
-                  : l10n.offlineStaleNotice,
-            ),
-          ],
-        ],
+          },
+        ),
       ),
     );
   }
@@ -290,23 +163,26 @@ class _DriversTable extends StatelessWidget {
   const _DriversTable({
     required this.state,
     required this.controller,
+    required this.showMock,
     required this.onRefresh,
   });
 
   final StandingsTableState<DriverStandingEntry> state;
   final ScrollController controller;
+  final bool showMock;
   final Future<void> Function() onRefresh;
 
   @override
   Widget build(BuildContext context) {
     final AppLocalizations l10n = AppLocalizations.of(context);
     return switch (state) {
-      StandingsLoading<DriverStandingEntry>() => const _StandingsSkeleton(),
+      StandingsLoading<DriverStandingEntry>() => const StandingsSkeleton(),
       StandingsFirstLoadError<DriverStandingEntry>(
         :final StandingsFailure failure,
       ) =>
-        _StandingsError(
-          failure: failure,
+        _firstLoadError(
+          l10n,
+          failure,
           resourceTitle: l10n.standingsDriversErrorTitle,
           onRetry: onRefresh,
         ),
@@ -316,14 +192,15 @@ class _DriversTable extends StatelessWidget {
         :final bool refreshing,
         :final StandingsFailure? refreshError,
       ) =>
-        _StandingsEmpty(
+        StandingsEmptyTable(
           title: l10n.standingsDriversEmptyTitle,
           message: l10n.standingsDriversEmptyMessage,
-          status: _TableStatus(
+          status: StandingsStatusBlock(
             lastSuccessAt: lastSuccessAt,
-            isStale: isStale,
+            stale: isStale,
             refreshing: refreshing,
-            failure: refreshError,
+            failed: refreshError != null,
+            showMock: showMock,
           ),
           onRefresh: onRefresh,
         ),
@@ -336,19 +213,21 @@ class _DriversTable extends StatelessWidget {
         :final bool refreshing,
         :final StandingsFailure? refreshError,
       ) =>
-        _StandingsList(
+        StandingsList(
           keyPrefix: 'driver-standing',
           storageKey: 'standings-drivers',
           controller: controller,
           onRefresh: onRefresh,
-          status: _TableStatus(
+          status: StandingsStatusBlock(
             lastSuccessAt: lastSuccessAt,
-            isStale: isStale,
+            stale: isStale,
             refreshing: refreshing,
-            failure: refreshError,
-            provisional: provisional,
+            failed: refreshError != null,
+            showMock: showMock,
+            provisional: provisional == StandingsProvisionalSummary.provisional,
           ),
           rows: _driverRowViews(context, rows, provisional),
+          pointsUnit: _formatter(context).pointsUnit,
           // The table's exact season travels with the entity, so a historical
           // route opens that season's profile rather than the current one.
           onOpen: (String id) =>
@@ -362,24 +241,26 @@ class _ConstructorsTable extends StatelessWidget {
   const _ConstructorsTable({
     required this.state,
     required this.controller,
+    required this.showMock,
     required this.onRefresh,
   });
 
   final StandingsTableState<ConstructorStandingEntry> state;
   final ScrollController controller;
+  final bool showMock;
   final Future<void> Function() onRefresh;
 
   @override
   Widget build(BuildContext context) {
     final AppLocalizations l10n = AppLocalizations.of(context);
     return switch (state) {
-      StandingsLoading<ConstructorStandingEntry>() =>
-        const _StandingsSkeleton(),
+      StandingsLoading<ConstructorStandingEntry>() => const StandingsSkeleton(),
       StandingsFirstLoadError<ConstructorStandingEntry>(
         :final StandingsFailure failure,
       ) =>
-        _StandingsError(
-          failure: failure,
+        _firstLoadError(
+          l10n,
+          failure,
           resourceTitle: l10n.standingsConstructorsErrorTitle,
           onRetry: onRefresh,
         ),
@@ -389,14 +270,15 @@ class _ConstructorsTable extends StatelessWidget {
         :final bool refreshing,
         :final StandingsFailure? refreshError,
       ) =>
-        _StandingsEmpty(
+        StandingsEmptyTable(
           title: l10n.standingsConstructorsEmptyTitle,
           message: l10n.standingsConstructorsEmptyMessage,
-          status: _TableStatus(
+          status: StandingsStatusBlock(
             lastSuccessAt: lastSuccessAt,
-            isStale: isStale,
+            stale: isStale,
             refreshing: refreshing,
-            failure: refreshError,
+            failed: refreshError != null,
+            showMock: showMock,
           ),
           onRefresh: onRefresh,
         ),
@@ -409,25 +291,46 @@ class _ConstructorsTable extends StatelessWidget {
         :final bool refreshing,
         :final StandingsFailure? refreshError,
       ) =>
-        _StandingsList(
+        StandingsList(
           keyPrefix: 'constructor-standing',
           storageKey: 'standings-constructors',
           controller: controller,
           onRefresh: onRefresh,
-          status: _TableStatus(
+          status: StandingsStatusBlock(
             lastSuccessAt: lastSuccessAt,
-            isStale: isStale,
+            stale: isStale,
             refreshing: refreshing,
-            failure: refreshError,
-            provisional: provisional,
+            failed: refreshError != null,
+            showMock: showMock,
+            provisional: provisional == StandingsProvisionalSummary.provisional,
           ),
           rows: _constructorRowViews(context, rows, provisional),
+          pointsUnit: _formatter(context).pointsUnit,
           onOpen: (String id) =>
               context.openEntity(RoutePaths.constructor(id), season: season),
         ),
     };
   }
 }
+
+/// The first-load error of one table: an unresolved season, or this table's
+/// own resource failing, with the retry targeting exactly that table.
+Widget _firstLoadError(
+  AppLocalizations l10n,
+  StandingsFailure failure, {
+  required String resourceTitle,
+  required Future<void> Function() onRetry,
+}) => StandingsErrorTable(
+  title: switch (failure.cause) {
+    StandingsFailureCause.seasonUnresolved =>
+      l10n.standingsSeasonUnavailableTitle,
+    StandingsFailureCause.resourceFailed => resourceTitle,
+  },
+  message: failure.failure == null
+      ? l10n.standingsSeasonUnavailableMessage
+      : failureMessage(l10n, failure.failure!),
+  onRetry: onRetry,
+);
 
 List<StandingsRowView> _driverRowViews(
   BuildContext context,
@@ -477,177 +380,3 @@ StandingsFormatter _formatter(BuildContext context) => StandingsFormatter(
   AppLocalizations.of(context),
   Localizations.localeOf(context).toLanguageTag(),
 );
-
-/// The championship table: a lazy, single-column list of already-formatted rows.
-class _StandingsList extends StatelessWidget {
-  const _StandingsList({
-    required this.keyPrefix,
-    required this.storageKey,
-    required this.controller,
-    required this.onRefresh,
-    required this.status,
-    required this.rows,
-    required this.onOpen,
-  });
-
-  final String keyPrefix;
-  final String storageKey;
-  final ScrollController controller;
-  final Future<void> Function() onRefresh;
-  final Widget status;
-  final List<StandingsRowView> rows;
-  final void Function(String entityId) onOpen;
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: <Widget>[
-        status,
-        Expanded(
-          child: RefreshIndicator(
-            onRefresh: onRefresh,
-            child: ListView.separated(
-              // Keeps this table's own position when the other one is shown and
-              // this list is rebuilt.
-              key: PageStorageKey<String>(storageKey),
-              controller: controller,
-              padding: const EdgeInsets.fromLTRB(
-                GvLayout.screenPaddingHorizontal,
-                0,
-                GvLayout.screenPaddingHorizontal,
-                GvSpacing.xxl,
-              ),
-              itemCount: rows.length,
-              separatorBuilder: (_, _) => const SizedBox(height: GvSpacing.xxs),
-              itemBuilder: (BuildContext context, int index) {
-                final StandingsRowView row = rows[index];
-                return GvStandingsRow(
-                  key: ValueKey<String>('$keyPrefix-${row.entityId}'),
-                  position: row.position,
-                  name: row.name,
-                  team: row.team,
-                  points: row.points,
-                  stat: row.stat,
-                  badgeLabel: row.badgeLabel,
-                  isLeader: row.isLeader,
-                  accentColor: row.accentColor,
-                  semanticLabel: row.semanticLabel,
-                  onTap: () => onOpen(row.entityId),
-                );
-              },
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-/// A materialized table that legitimately has no rows. A real state — not a
-/// loader and not an error — and still refreshable.
-class _StandingsEmpty extends StatelessWidget {
-  const _StandingsEmpty({
-    required this.title,
-    required this.message,
-    required this.status,
-    required this.onRefresh,
-  });
-
-  final String title;
-  final String message;
-  final Widget status;
-  final Future<void> Function() onRefresh;
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: <Widget>[
-        status,
-        Expanded(
-          child: RefreshIndicator(
-            onRefresh: onRefresh,
-            child: ListView(
-              physics: const AlwaysScrollableScrollPhysics(),
-              children: <Widget>[
-                SizedBox(height: MediaQuery.sizeOf(context).height * 0.08),
-                GvEmptyState(
-                  title: title,
-                  message: message,
-                  icon: Icons.emoji_events_outlined,
-                ),
-              ],
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-/// A section-level first-load error: the shell, the season context and the
-/// selector all stay usable, and retry targets exactly this table's resource.
-class _StandingsError extends StatelessWidget {
-  const _StandingsError({
-    required this.failure,
-    required this.resourceTitle,
-    required this.onRetry,
-  });
-
-  final StandingsFailure failure;
-  final String resourceTitle;
-  final Future<void> Function() onRetry;
-
-  @override
-  Widget build(BuildContext context) {
-    final AppLocalizations l10n = AppLocalizations.of(context);
-    return GvErrorState(
-      title: switch (failure.cause) {
-        StandingsFailureCause.seasonUnresolved =>
-          l10n.standingsSeasonUnavailableTitle,
-        StandingsFailureCause.resourceFailed => resourceTitle,
-      },
-      message: failure.failure == null
-          ? l10n.standingsSeasonUnavailableMessage
-          : failureMessage(l10n, failure.failure!),
-      icon: Icons.emoji_events_outlined,
-      retryLabel: l10n.retry,
-      onRetry: onRetry,
-    );
-  }
-}
-
-/// The structured loading placeholder, shown only while the selected table has
-/// no materialized local representation.
-class _StandingsSkeleton extends StatelessWidget {
-  const _StandingsSkeleton();
-
-  @override
-  Widget build(BuildContext context) {
-    return GvLoadingSemantics(
-      label: AppLocalizations.of(context).a11yLoading,
-      child: ListView(
-        padding: const EdgeInsets.fromLTRB(
-          GvLayout.screenPaddingHorizontal,
-          GvSpacing.xs,
-          GvLayout.screenPaddingHorizontal,
-          GvSpacing.xxl,
-        ),
-        children: const <Widget>[
-          GvSkeletonBlock(height: 56),
-          SizedBox(height: GvSpacing.xxs),
-          GvSkeletonBlock(height: 56),
-          SizedBox(height: GvSpacing.xxs),
-          GvSkeletonBlock(height: 56),
-          SizedBox(height: GvSpacing.xxs),
-          GvSkeletonBlock(height: 56),
-          SizedBox(height: GvSpacing.xxs),
-          GvSkeletonBlock(height: 56),
-          SizedBox(height: GvSpacing.xxs),
-          GvSkeletonBlock(height: 56),
-        ],
-      ),
-    );
-  }
-}

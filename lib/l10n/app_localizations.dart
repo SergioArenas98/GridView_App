@@ -674,6 +674,12 @@ abstract class AppLocalizations {
   /// **'This data may be out of date — showing the last saved version.'**
   String get offlineStaleNotice;
 
+  /// Combined notice (N-2, approved wording) shown instead of refreshFailedNotice and offlineStaleNotice only when the refresh failure and the stale data concern the same resource (the season calendar).
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn\'t refresh. Saved data may be out of date.'**
+  String get refreshFailedStaleNotice;
+
   /// Notice shown when a refresh failed but cached content is visible.
   ///
   /// In en, this message translates to:
@@ -853,6 +859,18 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Next'**
   String get calendarNextLabel;
+
+  /// Calendar action shown right after a refresh-failure or stale-data notice (XS-19, owner-approved wording). Scrolls the Calendar list to the next Grand Prix row; it does not open the Grand Prix.
+  ///
+  /// In en, this message translates to:
+  /// **'Go to next Grand Prix'**
+  String get calendarGoToNextAction;
+
+  /// Variant of calendarGoToNextAction when the relevant Grand Prix is in progress (XS-19, owner-approved wording). Scrolls the Calendar list to that row; it does not open the Grand Prix.
+  ///
+  /// In en, this message translates to:
+  /// **'Go to current Grand Prix'**
+  String get calendarGoToCurrentAction;
 
   /// Title for a valid but empty season calendar.
   ///
@@ -1783,6 +1801,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Update failed'**
   String get homeUpdateFailed;
+
+  /// Home notice (N-2, approved wording) shown instead of the separate failure and stale notices only when the failed Home refresh and the out-of-date saved data concern the same content.
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn\'t refresh. Saved data may be out of date.'**
+  String get homeUpdateFailedStale;
 
   /// Settings section for user preferences.
   ///

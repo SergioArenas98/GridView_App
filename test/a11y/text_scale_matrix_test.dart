@@ -112,7 +112,7 @@ void main() {
 
     // 3. The primary controls are still reachable and still meet the target.
     if (hasBottomNav) {
-      expect(find.byType(GvBottomNav), findsOneWidget);
+      expect(find.byType(GvPrimerBottomNav), findsOneWidget);
       for (final String destination in <String>[
         spanish ? 'Inicio' : 'Home',
         spanish ? 'Calendario' : 'Calendar',
@@ -120,7 +120,7 @@ void main() {
         final Finder target = find
             .ancestor(
               of: find.descendant(
-                of: find.byType(GvBottomNav),
+                of: find.byType(GvPrimerBottomNav),
                 matching: find.text(destination),
               ),
               matching: find.byType(ConstrainedBox),
@@ -209,9 +209,12 @@ void main() {
     String,
     Screen
   >{
+    // The relevant round: the screen opens positioned on it. (With the taller
+    // Primer V2 rows of Step 55C.2, round 11 sits beyond the cache extent
+    // above that position at 320dp / 200%, by scrolling, not by clipping.)
     'Calendar': (
       '/calendar',
-      (en: <String>['British Grand Prix'], es: <String>['British Grand Prix']),
+      (en: <String>['Belgian Grand Prix'], es: <String>['Belgian Grand Prix']),
       true,
     ),
     'Grand Prix': (

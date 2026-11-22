@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:intl/intl.dart';
 
 import '../../../app/router/entity_navigation.dart';
 import '../../../app/router/route_paths.dart';
+import '../../../core/media/media_image_loader.dart';
 import '../../../core/theme/theme.dart';
 import '../../../core/widgets/widgets.dart';
 import '../../../l10n/app_localizations.dart';
@@ -18,20 +20,38 @@ import '../../shared/domain/media/media_variant_selector.dart';
 import '../../shared/presentation/domain_status.dart';
 import '../../shared/presentation/entity_formatting.dart';
 import '../../shared/presentation/media_slot.dart';
-import '../../shared/presentation/widgets/entity_detail_scaffold.dart';
-import '../../shared/presentation/widgets/screen_sections.dart';
+import '../../shared/presentation/primer_status_kinds.dart';
+import '../../shared/presentation/widgets/primer_detail_app_bar.dart';
+import '../../shared/presentation/widgets/primer_detail_notices.dart';
+import '../../shared/presentation/widgets/primer_detail_states.dart';
 import '../application/circuit_detail_providers.dart';
+import '../application/circuit_event_association.dart';
+import 'widgets/circuit_detail_skeleton.dart';
+import 'widgets/circuit_event_row.dart';
+import 'widgets/circuit_facts.dart';
+import 'widgets/circuit_records.dart';
+import 'widgets/circuit_sheet.dart';
 
-/// Circuit detail for one exact season.
+/// Circuit detail for one exact season, in Primer V2 (Step 55C.11; Dark and
+/// Light; frozen reference `light-rollout-b2/cd-*`, the 54A dashed
+/// unknown-format correction, VS-4 notice icons, PD-13a–c).
 ///
-/// Circuit identity is **stable** and season-independent; only the related Grand
-/// Prix is season-specific. Event properties — the race distance and the event's
-/// lap count — belong to that event and deliberately never appear as circuit
-/// identity fields.
+/// Circuit identity is **stable** and season-independent; only the related
+/// Grand Prix is season-specific. Event properties — the race distance and
+/// the event's lap count — belong to that event and deliberately never
+/// appear as circuit identity fields.
 ///
-/// The screen stays useful without layout media, coordinates, physical facts, a
-/// lap record, a historical fact or a related current-season event: hosting no
-/// event in the selected season is a valid state, not an error.
+/// The screen stays useful without media, physical facts, a lap record or a
+/// related current-season event. State, providers, routing, refresh scope
+/// and the related-event read model are unchanged; this file only presents
+/// them.
+///
+/// **Related Grand Prix (CR-04 / PD-14 / CIR-02, Step 55C.11C; C-R1).** The
+/// section follows [circuitEventAssociationProvider]: a stored related event
+/// is shown (A); "No Grand Prix this season" only when that exact season's
+/// calendar is materialized (`hasMaterializedCalendar`, B); otherwise, and
+/// while it resolves, the whole section — heading, season line and
+/// statement — is omitted (C). No new copy.
 class CircuitDetailScreen extends ConsumerWidget {
   const CircuitDetailScreen({
     super.key,
@@ -52,237 +72,313 @@ class CircuitDetailScreen extends ConsumerWidget {
       entityId: circuitId,
       originSeason: originSeason,
     );
-
-    return EntityDetailScaffold<CircuitProfile>(
-      title: l10n.circuitTitle,
-      state: ref.watch(circuitDetailStateProvider(scope)),
-      onRetry: () =>
-          ref.read(circuitDetailControllerProvider(scope).notifier).retry(),
-      builder: _body,
+    final EntityDetailState<CircuitProfile> state = ref.watch(
+      circuitDetailStateProvider(scope),
     );
-  }
-
-  List<Widget> _body(
-    BuildContext context,
-    EntityDetailReady<CircuitProfile> ready,
-  ) {
-    final AppLocalizations l10n = AppLocalizations.of(context);
-    final EntityFormatter fmt = EntityFormatter(
-      Localizations.localeOf(context).toString(),
-      l10n,
+    final CircuitEventAssociation association = ref.watch(
+      circuitEventAssociationProvider(scope),
     );
-    return <Widget>[
-      _CircuitHero(profile: ready.profile),
-      const SizedBox(height: GvSpacing.xl),
-      ..._facts(context, ready.profile, fmt),
-      ..._lapRecord(context, ready.profile, fmt),
-      ..._relatedGrandPrix(context, ready, fmt),
-    ];
-  }
+    void retry() =>
+        ref.read(circuitDetailControllerProvider(scope).notifier).retry();
 
-  /// The circuit's physical facts. Rendered only when at least one is present,
-  /// so an empty facts card is never shown, and never with a false zero.
-  List<Widget> _facts(
-    BuildContext context,
-    CircuitProfile profile,
-    EntityFormatter fmt,
-  ) {
-    final AppLocalizations l10n = AppLocalizations.of(context);
-    if (!profile.hasPhysicalFacts) return const <Widget>[];
-    final Circuit circuit = profile.circuit;
-    return <Widget>[
-      GvScreenSection(
-        title: l10n.circuitFactsSection,
-        child: GvInfoCard(
+    return Scaffold(
+      backgroundColor: context.gvPrimer.surface.page,
+      body: SafeArea(
+        bottom: false,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: <Widget>[
-            // The stored metres are preserved; only the display is converted.
-            if (fmt.kilometres(circuit.lengthMeters) case final String length)
-              GvDetailField(label: l10n.fieldLength, value: length),
-            if (fmt.count(circuit.cornerCount) case final String corners)
-              GvDetailField(label: l10n.fieldCorners, value: corners),
-            if (circuit.direction != null)
-              GvDetailField(
-                label: l10n.fieldDirection,
-                value: fmt.direction(circuit.direction),
-              ),
-            if (fmt.year(circuit.firstGrandPrixYear) case final String first)
-              GvDetailField(label: l10n.fieldFirstGrandPrix, value: first),
-          ],
-        ),
-      ),
-      const SizedBox(height: GvSpacing.xl),
-    ];
-  }
-
-  /// The lap record. A missing holder name uses localized unavailable copy —
-  /// never the driver identifier.
-  List<Widget> _lapRecord(
-    BuildContext context,
-    CircuitProfile profile,
-    EntityFormatter fmt,
-  ) {
-    final AppLocalizations l10n = AppLocalizations.of(context);
-    if (!profile.hasLapRecord) return const <Widget>[];
-    final LapRecord record = profile.circuit.lapRecord!;
-    return <Widget>[
-      GvScreenSection(
-        title: l10n.circuitLapRecordSection,
-        child: GvInfoCard(
-          children: <Widget>[
-            if (fmt.lapTime(record.time) case final String time)
-              GvDetailField(label: l10n.fieldLapRecordTime, value: time),
-            if (record.driverId != null)
-              GvDetailField(
-                label: l10n.fieldLapRecordDriver,
-                value:
-                    profile.lapRecordDriverName ??
-                    l10n.circuitLapRecordDriverUnavailable,
-              ),
-            if (fmt.year(record.year) case final String year)
-              GvDetailField(label: l10n.fieldLapRecordYear, value: year),
-          ],
-        ),
-      ),
-      const SizedBox(height: GvSpacing.xl),
-    ];
-  }
-
-  /// The season's related event, taken from local data — never inferred from the
-  /// circuit's name and never borrowed from another season.
-  List<Widget> _relatedGrandPrix(
-    BuildContext context,
-    EntityDetailReady<CircuitProfile> ready,
-    EntityFormatter fmt,
-  ) {
-    final AppLocalizations l10n = AppLocalizations.of(context);
-    final RelatedGrandPrixSummary? event = ready.profile.relatedGrandPrix;
-    if (event == null) {
-      return <Widget>[
-        GvScreenSection(
-          title: l10n.circuitRelatedGrandPrix,
-          child: GvInfoCard(
-            children: <Widget>[
-              GvDetailField(
-                label: l10n.seasonLabel('${ready.season}'),
-                value: l10n.circuitNoRelatedGrandPrix,
-              ),
-            ],
-          ),
-        ),
-        const SizedBox(height: GvSpacing.xl),
-      ];
-    }
-
-    // A missing event name uses localized unavailable copy — never a skeleton
-    // placeholder string, and never a name derived from the identifier.
-    final String name = event.name ?? l10n.grandPrixNameUnavailable;
-    return <Widget>[
-      GvScreenSection(
-        title: l10n.circuitRelatedGrandPrix,
-        child: GvContentCard(
-          onTap: () => context.openEntity(
-            RoutePaths.grandPrix(season: event.season, round: event.round),
-            season: event.season,
-          ),
-          child: Semantics(
-            button: true,
-            label: l10n.circuitOpenGrandPrix(name),
-            child: ExcludeSemantics(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: <Widget>[
-                  Text(name, style: context.gvText.cardTitle),
-                  const SizedBox(height: GvSpacing.xxs),
-                  if (EntityFormatter.joinDetails(<String?>[
-                        l10n.roundLabel('${event.round}'),
-                        fmt.calendarDate(event.startDate),
-                      ])
-                      case final String line)
-                    Text(line, style: context.gvText.bodyM),
-                  const SizedBox(height: GvSpacing.xs),
-                  Wrap(
-                    spacing: GvSpacing.xs,
-                    children: <Widget>[
-                      if (event.status case final status?)
-                        GvStatusChip(
-                          label: requiredEventStatusLabel(l10n, status),
-                          tone: toneForEventStatus(status),
-                        ),
-                      if (event.format case final format?)
-                        GvStatusChip(label: weekendFormatLabel(l10n, format)),
-                    ],
-                  ),
-                ],
-              ),
+            PrimerDetailAppBar(
+              title: l10n.circuitTitle,
+              backKey: const ValueKey<String>('circuit-detail-back'),
             ),
-          ),
+            Expanded(
+              child: switch (state) {
+                EntityDetailLoading<CircuitProfile>() =>
+                  const CircuitDetailSkeleton(),
+                EntityDetailSeasonUnavailable<CircuitProfile>() =>
+                  PrimerDetailMessage(
+                    glyph: GvPrimerGlyph.alert,
+                    title: l10n.detailSeasonUnavailableTitle,
+                    message: l10n.detailSeasonUnavailableMessage,
+                    retryLabel: l10n.retry,
+                    onRetry: retry,
+                  ),
+                EntityDetailNotFound<CircuitProfile>() => PrimerDetailMessage(
+                  glyph: GvPrimerGlyph.help,
+                  title: l10n.detailNotFoundTitle,
+                  message: l10n.detailNotFoundMessage,
+                ),
+                EntityDetailFirstLoadError<CircuitProfile>() =>
+                  PrimerDetailMessage(
+                    glyph: GvPrimerGlyph.alert,
+                    title: l10n.detailLoadErrorTitle,
+                    message: l10n.errorGeneric,
+                    retryLabel: l10n.retry,
+                    onRetry: retry,
+                  ),
+                final EntityDetailReady<CircuitProfile> ready => _CircuitBody(
+                  ready: ready,
+                  association: association,
+                ),
+              },
+            ),
+          ],
         ),
       ),
-      const SizedBox(height: GvSpacing.xl),
-    ];
+    );
   }
 }
 
-/// The circuit hero: authoritative name and location over the circuit's own media
-/// when it is available locally. The identifier is never shown.
-///
-/// This is the one entity hero whose image can be **informative**. A track layout
-/// diagram conveys the shape of the circuit, which no adjacent text states, so it
-/// is labelled. An environmental photograph conveys nothing the name and location
-/// do not, so it is decorative and stays out of the semantics tree — the two are
-/// distinguished by the selected asset's own category rather than assumed.
-class _CircuitHero extends StatelessWidget {
-  const _CircuitHero({required this.profile});
+/// The ready profile: notices, the circuit sheet, then Lap record and This
+/// season's Grand Prix, 32px apart, ending 32px above the bottom inset. One
+/// primary scrollable.
+class _CircuitBody extends StatelessWidget {
+  const _CircuitBody({required this.ready, required this.association});
 
-  final CircuitProfile profile;
+  final EntityDetailReady<CircuitProfile> ready;
+
+  /// CR-04: what may be said about the season's Grand Prix.
+  final CircuitEventAssociation association;
 
   @override
   Widget build(BuildContext context) {
     final AppLocalizations l10n = AppLocalizations.of(context);
-    final String? location = EntityFormatter.joinDetails(<String?>[
-      profile.circuit.locality,
-      profile.circuit.country,
-    ], separator: ', ');
+    final String locale = Localizations.localeOf(context).toString();
+    final EntityFormatter fmt = EntityFormatter(locale, l10n);
+    final CircuitProfile profile = ready.profile;
+    return ListView(
+      key: const ValueKey<String>('circuit-detail-list'),
+      padding: EdgeInsets.only(
+        bottom: 32 + MediaQuery.paddingOf(context).bottom,
+      ),
+      children: <Widget>[
+        PrimerDetailNotices(
+          notices: detailNotices(ready, l10n),
+          blockKey: const ValueKey<String>('circuit-detail-notices'),
+        ),
+        CircuitSheet(
+          name: profile.circuit.name,
+          // Location exactly as before: locality and country, either
+          // omitted without a dangling separator.
+          location: EntityFormatter.joinDetails(<String?>[
+            profile.circuit.locality,
+            profile.circuit.country,
+          ], separator: ', '),
+          media: (BuildContext context, double width) =>
+              _media(context, l10n, profile, width),
+          facts: _facts(l10n, fmt, locale, profile),
+        ),
+        ..._lapRecord(l10n, fmt, profile),
+        ..._related(context, l10n, fmt, profile),
+      ],
+    );
+  }
 
-    final double width = MediaQuery.sizeOf(context).width;
+  /// The circuit's own media, only when an asset is selected
+  /// (`MediaSlotPolicy.circuitLayout`: layout diagram, then hero, then
+  /// thumbnail). A layout diagram is informative and labelled with the
+  /// circuit's name; a photograph is decorative. Never the media id, the
+  /// category token or the URL.
+  static CircuitSheetMedia? _media(
+    BuildContext context,
+    AppLocalizations l10n,
+    CircuitProfile profile,
+    double width,
+  ) {
     final MediaPresentation? asset = profile.media.preferred(
       MediaSlotPolicy.circuitLayout,
     );
-    final bool isLayoutDiagram = asset?.category == MediaCategory.circuitLayout;
+    if (asset == null) return null;
+    final MediaImageRequest? request = requestForAsset(
+      context,
+      asset: asset,
+      role: MediaDisplayRole.detail,
+      logicalWidth: width,
+    );
+    return CircuitSheetMedia(
+      request: request,
+      semanticLabel: asset.category == MediaCategory.circuitLayout
+          ? l10n.circuitLayoutImage(profile.circuit.name)
+          : null,
+    );
+  }
 
-    return GvHeroCard(
-      background: GvRemoteImage(
-        request: asset == null
-            ? null
-            : requestForAsset(
-                context,
-                asset: asset,
-                role: MediaDisplayRole.detail,
-                logicalWidth: width,
-              ),
-        aspectRatio: 16 / 9,
-        logicalWidth: width,
-        placeholderIcon: Icons.route_outlined,
-        borderRadius: BorderRadius.zero,
-        // A diagram is described; a photograph is not. The label names the
-        // circuit, never the media id, the category token or the URL.
-        decorative: !isLayoutDiagram,
-        semanticLabel: isLayoutDiagram
-            ? l10n.circuitLayoutImage(profile.circuit.name)
-            : null,
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisAlignment: MainAxisAlignment.end,
-        children: <Widget>[
-          Semantics(
-            header: true,
-            child: Text(profile.circuit.name, style: context.gvText.pageTitle),
+  /// The physical facts, only when at least one is present
+  /// (`hasPhysicalFacts`), never with a false zero. A null direction is
+  /// omitted; an explicit unknown direction is the unavailable word without
+  /// a glyph.
+  static CircuitFactsData? _facts(
+    AppLocalizations l10n,
+    EntityFormatter fmt,
+    String locale,
+    CircuitProfile profile,
+  ) {
+    if (!profile.hasPhysicalFacts) return null;
+    final Circuit circuit = profile.circuit;
+    final CircuitDirection? direction = circuit.direction;
+    return CircuitFactsData(
+      title: l10n.circuitFactsSection,
+      length: _length(l10n, fmt, locale, circuit.lengthMeters),
+      facts: <CircuitFact>[
+        if (fmt.count(circuit.cornerCount) case final String corners)
+          CircuitFact(label: l10n.fieldCorners, value: corners),
+        if (direction != null)
+          CircuitFact(
+            label: l10n.fieldDirection,
+            value: fmt.direction(direction),
+            kind: CircuitFactKind.word,
+            glyph: switch (direction) {
+              CircuitDirection.clockwise => GvPrimerGlyph.rotateCw,
+              CircuitDirection.counterClockwise => GvPrimerGlyph.rotateCcw,
+              CircuitDirection.unknown => null,
+            },
           ),
-          if (location != null) Text(location, style: context.gvText.bodyM),
+        if (fmt.year(circuit.firstGrandPrixYear) case final String first)
+          CircuitFact(label: l10n.fieldFirstGrandPrix, value: first),
+      ],
+    );
+  }
+
+  /// The length as the existing localized copy ("7.004 km" / "7,004 km"),
+  /// split around its number for the dimension line. The stored metres are
+  /// never modified.
+  static CircuitLength? _length(
+    AppLocalizations l10n,
+    EntityFormatter fmt,
+    String locale,
+    int? metres,
+  ) {
+    final String? spoken = fmt.kilometres(metres);
+    if (spoken == null || metres == null) return null;
+    final String figure = NumberFormat.decimalPattern(
+      locale,
+    ).format(metres / 1000);
+    final int at = spoken.indexOf(figure);
+    return CircuitLength(
+      label: l10n.fieldLength,
+      figure: at < 0 ? spoken : figure,
+      unit: at < 0 ? '' : spoken.substring(at + figure.length).trim(),
+      spoken: spoken,
+    );
+  }
+
+  /// The lap record, only when `hasLapRecord`. The holder appears only with
+  /// a driver id, as the resolved name or localized unavailable copy —
+  /// never the identifier — and is not a link.
+  List<Widget> _lapRecord(
+    AppLocalizations l10n,
+    EntityFormatter fmt,
+    CircuitProfile profile,
+  ) {
+    if (!profile.hasLapRecord) return const <Widget>[];
+    final LapRecord record = profile.circuit.lapRecord!;
+    final String? holder = profile.lapRecordDriverName;
+    return <Widget>[
+      _section(l10n.circuitLapRecordSection, 'lap-record'),
+      CircuitLapRecord(
+        timeLabel: l10n.fieldLapRecordTime,
+        time: fmt.lapTime(record.time),
+        attributes: <CircuitRecordAttribute>[
+          if (record.driverId != null)
+            CircuitRecordAttribute(
+              label: l10n.fieldLapRecordDriver,
+              value: holder ?? l10n.circuitLapRecordDriverUnavailable,
+              unavailable: holder == null,
+            ),
+          if (fmt.year(record.year) case final String year)
+            CircuitRecordAttribute(
+              label: l10n.fieldLapRecordYear,
+              value: year,
+              tabular: true,
+            ),
         ],
+      ),
+    ];
+  }
+
+  /// The season's related event, from local data — never inferred from the
+  /// circuit's name, never borrowed from another season — led by the
+  /// season line in both shown states (PD-13b).
+  ///
+  /// CR-04 (C-R1): the event row whenever an event is stored (A); the
+  /// absence statement only for a confirmed absence (B); nothing at all —
+  /// no heading, season line or statement — while the association is
+  /// unknown or still resolving (C), so a false absence is never shown.
+  List<Widget> _related(
+    BuildContext context,
+    AppLocalizations l10n,
+    EntityFormatter fmt,
+    CircuitProfile profile,
+  ) {
+    final RelatedGrandPrixSummary? event = profile.relatedGrandPrix;
+    final Widget? content = event != null
+        ? _eventRow(context, l10n, fmt, event)
+        : association == CircuitEventAssociation.confirmedNone
+        ? CircuitNoEvent(l10n.circuitNoRelatedGrandPrix)
+        : null;
+    if (content == null) return const <Widget>[];
+    return <Widget>[
+      _section(l10n.circuitRelatedGrandPrix, 'related'),
+      CircuitSeasonLine(l10n.seasonLabel('${ready.season}')),
+      content,
+    ];
+  }
+
+  Widget _eventRow(
+    BuildContext context,
+    AppLocalizations l10n,
+    EntityFormatter fmt,
+    RelatedGrandPrixSummary event,
+  ) {
+    // A missing name is localized unavailable copy — never a placeholder
+    // string, never a name derived from the identifier. Navigation is kept.
+    final String name = event.name ?? l10n.grandPrixNameUnavailable;
+    return CircuitEventRow(
+      roundWord: _roundWord(l10n),
+      round: '${event.round}',
+      name: name,
+      nameUnavailable: event.name == null,
+      date: fmt.calendarDate(event.startDate),
+      statuses: <GvPrimerStatusLabel>[
+        if (event.status case final EventStatus status)
+          GvPrimerStatusLabel(
+            requiredEventStatusLabel(l10n, status),
+            primerEventStatusKind(status),
+          ),
+        if (event.format case final WeekendFormat format)
+          GvPrimerStatusLabel(
+            weekendFormatLabel(l10n, format),
+            // The 54A correction: an explicit unknown format is dashed.
+            format == WeekendFormat.unknown
+                ? GvPrimerChipKind.unknown
+                : GvPrimerChipKind.context,
+          ),
+      ],
+      linkLabel: l10n.circuitOpenGrandPrix(name),
+      onOpen: () => context.openEntity(
+        RoutePaths.grandPrix(season: event.season, round: event.round),
+        season: event.season,
       ),
     );
   }
+
+  /// The word of `roundLabel` without its number ("Round" / "Ronda"),
+  /// whichever side of the number the locale puts it.
+  static String _roundWord(AppLocalizations l10n) {
+    const String marker = '\u0000';
+    return l10n.roundLabel(marker).replaceAll(marker, '').trim();
+  }
+
+  /// A section's 32px gap and its title on the gutter.
+  static Widget _section(String title, String id) => Padding(
+    key: ValueKey<String>('circuit-section-$id'),
+    padding: const EdgeInsets.fromLTRB(
+      GvPrimerLayout.gutter,
+      32,
+      GvPrimerLayout.gutter,
+      0,
+    ),
+    child: GvPrimerSectionTitle(title),
+  );
 }

@@ -1,0 +1,8 @@
+/* LT-16 COMPARISON (Step 53E), GP Detail only, not proposed by itself: the
+   detail skeleton's hero block drawn in the Graphite tones of the approved
+   heading band (light-bm.css scopes --tray #1F2125 and --raised #2A2D32
+   inside .gp), so the placeholder matches the band that replaces it. Same
+   block, size, position, role="progressbar" and label; colour only. The
+   label and row blocks below stay light, as the content they stand for.
+   (Selector outranks gpd.css ".skel span", which sets the gradient.) */
+.skel span.skel__hero { background: linear-gradient(90deg, #1F2125, #2A2D32, #1F2125); border-block-color: transparent; }

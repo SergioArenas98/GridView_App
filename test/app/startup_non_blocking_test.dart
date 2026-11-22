@@ -79,7 +79,7 @@ void main() {
       await tester.pump();
 
       expect(find.byType(HomeScreen), findsOneWidget);
-      expect(find.byType(GvBottomNav), findsOneWidget);
+      expect(find.byType(GvPrimerBottomNav), findsOneWidget);
       expect(find.text('Calendar'), findsOneWidget);
       await teardownApp(tester);
     },
@@ -95,7 +95,8 @@ void main() {
 
       // The Home branch renders its loading structure inside the real shell.
       expect(find.byType(HomeScreen), findsOneWidget);
-      expect(find.byType(GvSkeletonCard), findsWidgets);
+      // Primer V2 Home (Step 55C.1): static Primer placeholders.
+      expect(find.byType(GvPrimerSkeleton), findsWidgets);
       expect(find.byType(CircularProgressIndicator), findsNothing);
       await teardownApp(tester);
     },

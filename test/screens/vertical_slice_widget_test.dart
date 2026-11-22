@@ -109,7 +109,8 @@ void main() {
       );
 
       expect(find.text('Race'), findsWidgets);
-      expect(find.byType(GvOfflineNotice), findsOneWidget);
+      // The Primer V2 Grand Prix detail (Step 55C.12) uses GvPrimerNotice.
+      expect(find.byType(GvPrimerNotice), findsOneWidget);
     });
   });
 }

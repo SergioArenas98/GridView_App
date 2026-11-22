@@ -25,6 +25,15 @@ abstract final class GvTeamAccent {
   static bool prefersDarkForeground(Color background) =>
       _contrast(_pureBlack, background) >= _contrast(_pureWhite, background);
 
+  /// Whether a decorative [team] colour needs the Primer V2 contextual
+  /// boundary on the opaque [surface] it actually sits on: below 3:1 (XT-3,
+  /// XS-25). The team colour itself is never changed.
+  static bool needsBoundary(Color team, {required Color surface}) =>
+      _contrast(team, surface) < _boundaryThreshold;
+
+  /// The non-text contrast floor below which a team shape gets a boundary.
+  static const double _boundaryThreshold = 3;
+
   static const Color _pureBlack = Color(0xFF000000);
   static const Color _pureWhite = Color(0xFFFFFFFF);
 

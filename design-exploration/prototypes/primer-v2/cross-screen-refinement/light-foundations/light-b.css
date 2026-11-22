@@ -1,0 +1,45 @@
+/* EXPERIMENT (Step 53A), not an approved palette.
+   Direction B - Neutral Contrast: a neutral grey page with lighter tiles
+   raised above it (bands near-white, the editorial card white with a soft
+   shadow), slightly stronger hairlines, Graphite text, restrained Red Oxide.
+   Three new neutrals (page, band, raised) plus white for the one elevated
+   card. The text, accent, inverse and status roles are the same values as A.
+   Values only; the roles are mapped in light-roles.css. */
+:root {
+  /* Surfaces */
+  --lt-page: #EBECEE;                       /* NEW: neutral page */
+  --lt-band: #F7F7F8;                       /* NEW: near-white band, notice, selector container, rail */
+  --lt-card: #FFFFFF;                       /* white: the elevated editorial card only */
+  --lt-raised: #DCDDE1;                     /* NEW: pressed, context chip, skeleton */
+  --lt-nav: rgba(247, 247, 248, 0.96);      /* band 96%: raised bar */
+  --lt-nav-solid: #F7F7F8;
+  /* Text and accent */
+  --lt-text: #141518;
+  --lt-text-2: #4F525A;
+  --lt-accent: #A03E2B;
+  /* Lines (Graphite alphas, slightly stronger separation than A) */
+  --lt-hair: rgba(20, 21, 24, 0.14);
+  --lt-hair-strong: rgba(20, 21, 24, 0.26);
+  --lt-line-status: rgba(20, 21, 24, 0.55);
+  --lt-line-unknown: rgba(20, 21, 24, 0.70);
+  /* Focus */
+  --lt-focus: #141518;
+  /* Inverse plane */
+  --lt-inverse: #141518;
+  --lt-inverse-low: #1F2125;
+  --lt-on-inverse: #ECEAE5;
+  --lt-on-inverse-2: #A9ABB1;
+  --lt-inverse-accent: #F08A6C;
+  --lt-inverse-hair: rgba(236, 234, 229, 0.12);
+  --lt-inverse-line-status: rgba(236, 234, 229, 0.45);
+  --lt-live: #F08A6C;
+  /* States and effects */
+  --lt-hover: rgba(20, 21, 24, 0.03);
+  --lt-pressed-soft: rgba(20, 21, 24, 0.06);
+  --lt-facts: rgba(20, 21, 24, 0.04);
+  --lt-watermark: rgba(20, 21, 24, 0.10);
+  --lt-card-shadow: 0 1px 2px rgba(20, 21, 24, 0.06), 0 16px 30px -20px rgba(20, 21, 24, 0.30);
+  --lt-round-shadow: -10px 0 24px -14px rgba(20, 21, 24, 0.30);
+  --lt-inverse-shadow: 0 18px 30px -22px rgba(20, 21, 24, 0.60);
+  --lt-nav-shadow: 0 -10px 24px -14px rgba(20, 21, 24, 0.22);
+}

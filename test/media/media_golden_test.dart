@@ -392,8 +392,18 @@ void main() {
         AcknowledgementsScreen,
         AcknowledgementsScreen.creditsKey,
       );
+      // Captured from the app root, as the Settings goldens are, so the image
+      // is rendered at the test view's 3x density (1170 x 2532) instead of a
+      // 1x sub-tree capture: at 1x the platform anti-aliasing of the Primer
+      // text edges exceeded the cross-platform tolerance (Step 55C.13BF2, a
+      // test-stability correction). The screen fills the whole 390 x 844dp
+      // window, so the captured layout is the screen's own.
+      expect(
+        tester.getRect(find.byType(AcknowledgementsScreen)),
+        Offset.zero & _device,
+      );
       await expectLater(
-        find.byType(AcknowledgementsScreen),
+        find.byType(MaterialApp),
         matchesGoldenFile('goldens/acknowledgements_with_credits.png'),
       );
     });

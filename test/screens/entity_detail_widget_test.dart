@@ -24,6 +24,13 @@ const Size _tallSurface = Size(400, 2400);
 /// that is nonetheless present is a **partial**, collection-derived one.
 ResourceSyncState? _neverSynced(String key) => null;
 
+/// The circuit name as rendered. Step 55C.11: the Primer sheet keeps a
+/// short hyphenated word whole with a word joiner (U+2060) after its hyphen,
+/// so the visible text is compared with the joiner removed.
+Finder _circuitName(String name) => find.byWidgetPredicate(
+  (Widget w) => w is Text && w.data?.replaceAll('⁠', '') == name,
+);
+
 void main() {
   group('driver detail', () {
     testWidgets('renders a complete profile with no placeholder data', (
@@ -42,7 +49,11 @@ void main() {
       expect(find.text('Hasselt, Belgium'), findsOneWidget);
       // Fractional points survive.
       expect(find.text('402.5'), findsOneWidget);
-      expect(find.text('7'), findsWidgets);
+      // Wins: the inline label/value pair is one paragraph (Step 55C.9).
+      expect(
+        find.textContaining(RegExp(r'Wins.*7'), findRichText: true),
+        findsOneWidget,
+      );
 
       // The technical identifier field is gone.
       expect(find.text('Identifier'), findsNothing);
@@ -171,8 +182,10 @@ void main() {
 
       expect(find.text('BWT Alpine Formula One Team'), findsWidgets);
       expect(find.text('Williams Racing'), findsOneWidget);
-      expect(find.text('From round 7'), findsWidgets);
-      expect(find.text('Until round 6'), findsOneWidget);
+      // The space before a round number is non-breaking (Step 55C.9), so the
+      // number never wraps away from its words; the copy is unchanged.
+      expect(find.text('From round\u00A07'), findsWidgets);
+      expect(find.text('Until round\u00A06'), findsOneWidget);
     });
 
     testWidgets(
@@ -396,12 +409,14 @@ void main() {
       expect(find.text('Enstone, United Kingdom'), findsOneWidget);
       expect(find.text('A526'), findsOneWidget);
 
-      // The line-up, with both mid-season spans representable.
+      // The line-up, with both mid-season spans representable. The space
+      // before a round number is non-breaking (Step 55C.10, as Driver
+      // Detail), so the number never wraps away from its words.
       expect(find.text('Pierre Gasly'), findsOneWidget);
       expect(find.text('Jack Doohan'), findsOneWidget);
       expect(find.text('Franco Colapinto'), findsOneWidget);
-      expect(find.textContaining('Until round 6'), findsOneWidget);
-      expect(find.textContaining('From round 7'), findsOneWidget);
+      expect(find.textContaining('Until round\u00A06'), findsOneWidget);
+      expect(find.textContaining('From round\u00A07'), findsOneWidget);
 
       expect(find.text('Identifier'), findsNothing);
       expect(find.textContaining('alpine'), findsNothing);
@@ -485,8 +500,8 @@ void main() {
         find.byKey(const ValueKey<String>('team-lineup-2026-jack-doohan-12')),
         findsOneWidget,
       );
-      expect(find.textContaining('Until round 6'), findsOneWidget);
-      expect(find.textContaining('From round 12'), findsOneWidget);
+      expect(find.textContaining('Until round\u00A06'), findsOneWidget);
+      expect(find.textContaining('From round\u00A012'), findsOneWidget);
     });
 
     testWidgets('a line-up row opens the driver by stable id', (
@@ -532,9 +547,12 @@ void main() {
         surfaceSize: _tallSurface,
       );
 
-      expect(find.text('Circuit de Spa-Francorchamps'), findsWidgets);
+      expect(_circuitName('Circuit de Spa-Francorchamps'), findsWidgets);
       expect(find.text('Stavelot, Belgium'), findsOneWidget);
-      expect(find.text('7.004 km'), findsOneWidget);
+      // Step 55C.11: the dimension line sets the figure and the unit apart
+      // (still read as one "7.004 km" value).
+      expect(find.text('7.004'), findsOneWidget);
+      expect(find.text('km'), findsOneWidget);
       expect(find.text('19'), findsWidgets);
       expect(find.text('Clockwise'), findsOneWidget);
       expect(find.text('1950'), findsOneWidget);
@@ -646,7 +664,7 @@ void main() {
       expect(find.text('Circuit facts'), findsNothing);
       expect(find.text('Lap record'), findsNothing);
       // The circuit is still useful.
-      expect(find.text('Circuit de Spa-Francorchamps'), findsWidgets);
+      expect(_circuitName('Circuit de Spa-Francorchamps'), findsWidgets);
     });
 
     testWidgets('the related event opens the exact season and round', (

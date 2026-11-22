@@ -19,15 +19,26 @@ The routing behaviour described below — the four-branch state-preserving shell
 root-navigator detail routes, parameter validation, back behaviour and
 immediate-loop prevention — is current and unchanged.
 
+**Primer V2 (2026-11-22).** The shell now renders the Primer V2 bottom
+navigation (§1), and two recovery rules were added for invalid Standings
+routes (§1.1, NF-02 and NF-03). No route, route name, parameter rule or
+navigator assignment changed. Visual and accessibility details of the
+navigation bar: [GridView_Design_System.md](GridView_Design_System.md) §7 and
+[GridView_Primer_V2_Theme_Foundation.md](GridView_Primer_V2_Theme_Foundation.md)
+§6b, §6c and §6q.
+
 Source of truth for the intended flows: `../product/GridView_App_Flow.md`.
 
 ## 1. Shell and branches
 
 The app is a state-preserving `IndexedStack` of four primary branches, each with
-its own `Navigator`. The shell (`lib/app/router/app_shell.dart`) renders a
-floating elevated pill bottom navigation (`GvBottomNav`) placed as the scaffold's
-`bottomNavigationBar` so it reserves layout space — scrollable content is never
-hidden behind it.
+its own `Navigator`. The shell (`lib/app/router/app_shell.dart`, `AppShell`)
+renders the Primer V2 bottom navigation (`GvPrimerBottomNav`) on
+`surface.page`, placed as the scaffold's `bottomNavigationBar` so it reserves
+layout space — scrollable content is never hidden behind it. The bar is 68dp
+plus the system inset; at large text it becomes a 2 × 2 grid (155dp at 320dp
+@200%) and the content area shrinks accordingly. (The earlier floating pill,
+`GvBottomNav`, was removed in Step 55C.15.)
 
 | # | Branch | Root location | Owns |
 |---|---|---|---|
@@ -43,11 +54,51 @@ hidden behind it.
   resolves the active season **from the local database** (Phase 7B). The
   `/standings/drivers/:season` and `/standings/constructors/:season` routes
   remain for season-specific deep links and render their exact season.
-- **Re-selecting the active branch** returns it to its branch root
-  (`goBranch(index, initialLocation: index == currentIndex)`); repeated taps do
-  not stack duplicate routes.
-- The **selected state** is conveyed by icon/label weight and a selected
-  semantics flag, not by colour alone.
+- **Re-selecting the active branch** returns it to its branch root; repeated
+  taps do not stack duplicate routes. `AppShell._onSelect` calls
+  `goBranch(index, initialLocation: reset)`, where `reset` is true for the
+  active branch and for a branch that must recover from an invalid page
+  (§1.1).
+- The **selected state** is conveyed by the oxide slab behind the icon, a bold
+  label and a `selected` semantics flag, not by colour alone.
+
+### 1.1 Branch restoration and invalid-route recovery (NF-02, NF-03)
+
+Selecting a branch normally restores its last location, stack and scroll
+offset. An invalid Standings season (`/standings/drivers/abc`) is rendered
+**inside the Standings branch**, so without extra handling the branch would
+keep that invalid location and show "Invalid link" again on the next
+Standings selection. go_router has no public API to rewrite a branch's stored
+location without navigating to it, so the shell decides at selection time.
+
+`ShellBranchResets` (`lib/app/router/shell_branch_resets.dart`, one instance
+per router) makes the shell open a branch at its initial location when either:
+
+- **NF-02:** the user left through the invalid page's "Go to Home" action.
+  `NotFoundScreen.onGoHome` records a reset request for the branch it is
+  shown in (read from `StatefulNavigationShell`, never a hard-coded index) and
+  then navigates Home; or
+- **NF-03:** the branch is still showing an invalid page. The invalid
+  Standings `NotFoundScreen` is wrapped in `ShellBranchInvalidPage`, which
+  reports itself to `ShellBranchResets` while mounted (a count, not a flag,
+  because a replacing invalid page mounts before the old one is disposed).
+  Leaving through another tab and coming back therefore reopens Standings at
+  `/standings`.
+
+A pending request is dropped when the branch is activated by another
+navigation (a deep link or an in-app `go`), because that already replaced the
+stored location. Every valid location, and every other branch, keeps the
+normal restoration. Invalid parameters on root-navigator routes (Grand Prix,
+driver, team, circuit) render above the shell and do not affect any branch.
+
+Tests: `test/navigation/nf02_branch_recovery_test.dart` and
+`test/navigation/nf03_branch_reentry_test.dart`.
+
+**Known, deferred (NF-04).** After leaving an invalid Grand Prix with `go`,
+go_router 17.3.0 keeps the old URI in its scoped match list. Nothing observable
+depends on it today: the app has no router refresh, `refreshListenable`, state
+restoration, route observers or web build. Reopen NF-04 if any of those is
+introduced.
 
 ## 2. Route inventory
 
@@ -121,6 +172,11 @@ Rules (implemented in `lib/app/router/entity_navigation.dart`):
   `handlePopRoute()` and `pageBack()`).
 - Popping at a branch root follows normal Android expectations.
 - Settings does not reset the primary-navigation destination.
+- `NotFoundScreen` shows Back only when there is something to pop: it is
+  absent when the not-found page is the only route (an unmatched deep link)
+  and present when the page was pushed. An invalid Grand Prix returns to
+  Calendar. "Go to Home" always lands on exactly one Home shell with nothing
+  left to pop (`test/screens/not_found_primer_test.dart`).
 
 ## 6. Deep-link readiness
 

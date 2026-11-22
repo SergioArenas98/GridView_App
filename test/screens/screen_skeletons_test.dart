@@ -93,7 +93,9 @@ void main() {
         final SemanticsHandle handle = tester.ensureSemantics();
         await pumpLoading(tester, location);
 
-        expect(find.byType(GvLoadingSemantics), findsOneWidget);
+        // Every screen is Primer V2: one GvPrimerLoading region (the legacy
+        // GvLoadingSemantics was retired in Step 55C.15).
+        expect(find.byType(GvPrimerLoading), findsOneWidget);
         expect(
           labelOccurrences(tester, 'Loading'),
           1,
@@ -120,9 +122,10 @@ void main() {
       final SemanticsHandle handle = tester.ensureSemantics();
       await pumpLoading(tester, '/standings');
 
-      // Six identical blocks; the announcement is the loading frame's, and the
-      // blocks themselves are excluded rather than merely unlabelled.
-      expect(find.byType(GvSkeletonBlock), findsWidgets);
+      // Six identical blocks (Primer V2 since Step 55C.5); the announcement is
+      // the loading frame's, and the blocks themselves are excluded rather
+      // than merely unlabelled.
+      expect(find.byType(GvPrimerSkeleton), findsNWidgets(6));
       expect(
         renderedLabels(tester).where((String l) => l.contains('Loading')),
         hasLength(1),

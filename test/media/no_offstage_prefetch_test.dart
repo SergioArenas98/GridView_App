@@ -382,8 +382,11 @@ final Finder _rowImage = find.descendant(
 Future<void> _selectCategory(WidgetTester tester, String label) async {
   await tester.tap(
     find.descendant(
-      of: find.byType(GvSegmentedControl),
-      matching: find.text(label),
+      of: find.byType(GvPrimerSegmentedControl),
+      matching: find.descendant(
+        of: find.byType(GvPrimerFocusTarget),
+        matching: find.text(label),
+      ),
     ),
   );
   await tester.pumpAndSettle();

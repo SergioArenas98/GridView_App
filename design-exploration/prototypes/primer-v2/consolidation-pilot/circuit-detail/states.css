@@ -1,0 +1,42 @@
+/* Circuit Detail: copied from ../team-detail/states.css (itself from Driver
+   Detail and Grand Prix Detail); the last block targets the circuit sheet
+   and its media slot instead of the team banner. */
+/* Development-only fixture gallery (states.html). Copied from ../standings/states.css, plus the time-only and chip-row frames at the end. Not part of the app design:
+   captions use a dashed, annotation style so they cannot be mistaken for UI. */
+.dev-head { padding: max(16px, env(safe-area-inset-top)) var(--gutter) 8px; }
+.dev-head__flag {
+  display: inline-block; margin-bottom: 8px; padding: 4px 10px;
+  border: 1px dashed var(--hair-strong); border-radius: var(--radius-sm);
+  color: var(--text-2); font-size: 0.8125rem; font-weight: 600;
+  text-wrap: balance;
+}
+.dev-head__title { font-size: min(1.5rem, 34px); font-weight: 800; font-variation-settings: "wdth" 118; line-height: 1.1; }
+.dev-head__note { margin-top: 6px; color: var(--text-2); font-size: 0.875rem; text-wrap: pretty; }
+.dev-head__note a { color: var(--ember); text-decoration: underline; text-underline-offset: 3px; display: inline-block; min-height: 24px; }
+
+.specs { padding: 8px 0 48px; display: flex; flex-direction: column; gap: 28px; }
+.spec__cap { margin: 0 var(--gutter) 8px; padding: 8px 12px; border: 1px dashed var(--hair-strong); border-radius: var(--radius-sm); }
+.spec__title { font-size: 0.9375rem; font-weight: 700; line-height: 1.3; text-wrap: balance; }
+.spec__src { margin-top: 2px; color: var(--text-2); font-size: 0.8125rem; overflow-wrap: anywhere; text-wrap: pretty; }
+.spec__frame { padding: 4px 0; border-block: 1px solid var(--hair); }
+.spec__frame > .status { margin: 4px var(--gutter) 8px; }
+.spec__frame > .sec { margin-top: 12px; }
+.spec__frame > .gp { margin-top: 0; }
+.spec__frame > .page-notice { padding-bottom: 0; }
+.spec__frame > .page-notice + .gp { margin-top: 12px; }
+.spec__frame .dbar { position: static; }
+.time-only { padding: 12px var(--gutter); }
+.time-only__day { margin-bottom: 4px; font-weight: 700; color: var(--text-2); font-size: 0.8125rem; }
+.chip-row { padding: 12px var(--gutter); }
+/* Gallery links: full 48px targets (annotation chrome, but still tappable). */
+.dev-head__links { display: flex; flex-wrap: wrap; column-gap: 16px; margin-top: 4px; }
+.dev-head__links a { display: inline-flex; align-items: center; min-height: 48px; color: var(--ember); font-size: 0.875rem; font-weight: 600; text-decoration: underline; text-underline-offset: 3px; }
+/* Caption titles one clear step above body text (Impeccable flat-type-hierarchy advisory). */
+.spec__title { font-size: 1.1875rem; line-height: 1.25; overflow-wrap: break-word; hyphens: auto; }
+/* Media slot geometry (frames 15, 16): an annotation outline in the gallery's
+   dashed language. No image, no texture: no cleared media exists. */
+.ch__media--dev { outline: 1.5px dashed var(--text-2); outline-offset: -6px; }
+.spec__frame > .ch { margin-top: 0; }
+.spec__frame > .ch + .ch { margin-top: 4px; }
+.spec__frame > .sec.rel, .spec__frame > .sec { margin-top: 12px; }
+.spec--vocab { padding: 0 var(--gutter) 12px; }

@@ -1,0 +1,228 @@
+/* GridView — Primer V2: Standings, CONSOLIDATION PILOT copy of
+   ../../standings/standings.css. Loads after the shared foundation
+   (../../shared/: tokens, base, app bar, chips, navigation, notice, empty
+   state, selector) and only adds to it. Differences from the approved file:
+   the [hidden] guard, `.notice .icon`, the `.notice` base declarations,
+   `.empty`, `.empty__msg`, `.btn` and the common selector rules moved to
+   ../../shared/ verbatim; `.notice` keeps only its local extension
+   (text-wrap: pretty) and `.seg` / `.seg__btn` only Standings' geometry
+   (column count, padding). Everything else is unchanged.
+
+   Conventions as Home and Calendar: text in rem, layout in px, display
+   figures capped with min().
+
+   Composition: a timing-sheet ranking. Positions and points form two
+   numeric rails, left and right; names sit between them. Rows are flat on the
+   ground with full-width hairlines (Calendar's are inset: there the number
+   column stays open; here the row reads straight across, like a table line).
+   A confirmed leader is the only row on Chalk — the colour Home gives the
+   championship — with a 12° Red Oxide seam between position and holder. */
+
+/* ---------- Shared with calendar.css (copied, candidates for the core) ----------
+   [hidden] guard: moved to ../../shared/base.css. The pinned header below is
+   identical in explore.css but stays here: header budget and title fit are
+   pending decisions (S-1, S-2, XS-06, XS-07). */
+/* Fixed header in two pinned parts: app bar (+ season) and the selector bar.
+   standings.js sets --appbar-h, and data-header="scroll" on <html> when the
+   pinned area would exceed a quarter of the viewport (large text): then the
+   app bar row scrolls away and only the selector bar stays pinned. */
+.appbar--pinned {
+  position: sticky; top: 0; z-index: 6;
+  padding-bottom: 4px;
+  background: var(--ground);   /* opaque: rows must not show through */
+}
+.appbar--pinned .season { grid-column: 1 / -1; margin-top: -4px; }
+.appbar--pinned .appbar__brand { min-width: 0; }
+/* One unbreakable word ("Clasificaciones"): standings.js narrows the width
+   axis (118 → 100 → 84 → 72) before scaling it down to its column. */
+.appbar--pinned .wordmark { max-width: 100%; white-space: nowrap; }
+.appbar--pinned .wordmark[data-fit="w100"] { font-variation-settings: "wdth" 100; }
+.appbar--pinned .wordmark[data-fit="w84"] { font-variation-settings: "wdth" 84; }
+.appbar--pinned .wordmark[data-fit="w72"], .appbar--pinned .wordmark[data-fit="scaled"] { font-variation-settings: "wdth" 72; }
+.pinbar {
+  position: sticky; top: var(--appbar-h, 0px); z-index: 5;
+  padding: 8px var(--gutter) 12px;
+  background: var(--ground);
+  border-bottom: 1px solid var(--hair);
+}
+[data-header="scroll"] .appbar--pinned { position: static; }
+[data-header="scroll"] .pinbar { top: 0; }
+/* Notice: base rules in ../../shared/components/notice.css. Local extension,
+   as in the approved Standings (and Explore, GP, Driver, Team, Circuit); not
+   in Calendar. Unresolved, see the notice.css header. */
+.notice { text-wrap: pretty; }
+
+/* ---------- Championship selector (ST02) ----------
+   Selection = Red Oxide slab cut at 12° + Chalk bold label + aria-pressed:
+   the same selection vocabulary as the bottom navigation's selected tab.
+   Common rules (slab, states, adaptive fit) in
+   ../../shared/components/selector.css since the Explore pilot; Standings'
+   geometry stays here (local extension). */
+.seg { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.seg__btn { padding: 8px 12px; }
+
+/* ---------- Table status (ST15–ST18): caption lines and notice ---------- */
+.status { display: flex; flex-direction: column; gap: 4px; margin-top: 10px; }
+.status__line { color: var(--text-2); font-size: 0.8125rem; text-wrap: pretty; }
+.status .notice { margin-top: 6px; }
+
+/* ---------- Page ---------- */
+.stand {
+  padding: 8px 0 calc(var(--nav-space, calc(var(--nav-min) + env(safe-area-inset-bottom))) + 24px);
+}
+
+/* ---------- Ranking ---------- */
+.table {
+  container: table / inline-size;
+  --pos-col: min(2.75rem, 46px);
+  --col-gap: 12px;
+}
+.st { position: relative; }
+.st + .st::before {
+  content: "";
+  position: absolute; top: 0; height: 1px;
+  left: var(--gutter); right: var(--gutter);
+  background: var(--hair);
+}
+.st__link {
+  display: grid;
+  grid-template-columns: var(--pos-col) minmax(0, 1fr) auto auto;
+  grid-template-areas: "pos who pts go";
+  column-gap: var(--col-gap);
+  align-items: baseline;   /* position, name and points share one baseline */
+  min-height: 64px;
+  padding: 12px var(--gutter) 13px;
+}
+.st__link:hover { background: rgba(236, 234, 229, 0.03); }
+.st__link:active { background: var(--tray); }
+.st__link:focus-visible { outline-offset: -3px; border-radius: 4px; }
+
+.st__pos {
+  grid-area: pos; justify-self: end; text-align: right;
+  font-size: min(1.75rem, 32px);    /* 28 */
+  font-weight: 800;
+  font-variation-settings: "wdth" 112;
+  font-variant-numeric: tabular-nums lining-nums;
+  letter-spacing: -0.03em;
+  line-height: 1;
+  color: var(--text-2);
+}
+.st__who { grid-area: who; min-width: 0; display: flex; flex-direction: column; align-items: flex-start; }
+.st__name {
+  font-size: 1.0625rem;             /* 17 */
+  font-weight: 750;
+  font-variation-settings: "wdth" 86;
+  line-height: 1.2;
+  letter-spacing: -0.005em;
+  overflow-wrap: break-word; hyphens: auto;
+  max-width: 100%;
+}
+.st__meta {
+  display: flex; flex-wrap: wrap; align-items: center; column-gap: 8px; row-gap: 4px;
+  margin-top: 2px;
+  color: var(--text-2); font-size: 0.875rem; line-height: 1.3;
+}
+.st__stat { white-space: nowrap; }
+.st__pts {
+  grid-area: pts; justify-self: end; text-align: right;
+  font-size: min(1.5rem, 30px);     /* 24 */
+  font-weight: 800;
+  font-variation-settings: "wdth" 112;
+  font-variant-numeric: tabular-nums lining-nums;
+  letter-spacing: -0.02em;
+  line-height: 1;
+  white-space: nowrap;
+}
+.st__go { grid-area: go; align-self: center; width: 16px; height: 16px; stroke-width: 2.25; color: var(--text-2); margin-right: -4px; }
+.st__link:hover .st__go { color: var(--text); }
+
+/* Provisional row marker (ST15, mixed tables only): word + dagger, outline.
+   Distinct from the dashed "unknown" chip and the filled "Final" chip. */
+.chip--provisional {
+  min-height: 24px; padding: 2px 8px;
+  border: 1.5px solid var(--hair-strong);
+  color: var(--text); font-size: 0.8125rem;
+}
+.chip--provisional .dagger { font-weight: 800; }
+
+/* ---------- Confirmed leader (ST14) ----------
+   Chalk strip: Home's championship colour, as one ranked row. Oxide position
+   and kicker (text on Chalk only), 12° seam between position and holder,
+   unit "pts" on the leader's figure only. Every confirmed position 1 gets it;
+   tied leaders each get it with the tied wording. */
+.st--leader { margin: 4px 8px 6px; }
+.st--leader::before, .st--leader + .st::before { display: none; }
+.st--leader + .st--leader { margin-top: 0; }
+.st--leader .st__link {
+  padding: 14px calc(var(--gutter) - 8px) 15px;
+  border-radius: var(--radius-md);
+  background: linear-gradient(170deg, var(--chalk) 0%, var(--chalk-low) 100%);
+  color: var(--on-chalk);
+  box-shadow: 0 16px 28px -22px rgba(0, 0, 0, 0.9);
+}
+.st--leader .st__link:hover { background: var(--chalk); }
+.st--leader .st__link:focus-visible { outline-color: var(--oxide); outline-offset: 2px; border-radius: var(--radius-md); }
+.st--leader ::selection { background: var(--on-chalk); color: var(--chalk); }
+.st--leader .st__pos { color: var(--oxide); font-size: min(2.25rem, 40px); }
+.st--leader .st__who { position: relative; padding-left: 14px; margin-left: -2px; }
+.st--leader .st__who::before {
+  content: "";
+  position: absolute; left: 0; top: -4px; bottom: -2px;
+  width: 3px;
+  background: var(--oxide);
+  transform: skewX(var(--cut));
+  transform-origin: top left;
+}
+.st__kicker { color: var(--oxide); font-size: 0.8125rem; font-weight: 700; margin-bottom: 2px; }
+.st--leader .st__name { font-size: min(1.25rem, 36px); font-weight: 800; font-variation-settings: "wdth" 84; line-height: 1.1; }
+.st--leader .st__meta { color: var(--on-chalk-2); }
+.st--leader .st__pts {
+  display: flex; flex-direction: column; align-items: flex-end;
+  font-size: min(2rem, 40px); font-weight: 850; letter-spacing: -0.04em;
+}
+.st__unit { margin-top: 2px; font-size: 0.8125rem; font-weight: 700; letter-spacing: 0; color: var(--on-chalk-2); }
+.st--leader .st__go { color: var(--on-chalk-2); }
+.st--leader .chip--provisional { border-color: rgba(20, 21, 24, 0.35); color: var(--on-chalk); }
+
+/* Accommodated, not rendered (no team colour in the staging data or test
+   fixtures): ST08/ST13 team accent as a decorative 12° tick in the gutter,
+   set per row with style="--accent: #rrggbb". Never the only identity cue. */
+.st--accent .st__link { position: relative; }
+.st--accent .st__link::after {
+  content: ""; position: absolute; left: 6px; top: 16px; bottom: 16px; width: 3px;
+  background: var(--accent); transform: skewX(var(--cut));
+}
+
+/* ---------- Narrow container / large text ----------
+   Points move under the name block, left-aligned with it, so names keep the
+   full width; position and chevron stay on the first line. */
+@container table (max-width: 20em) {
+  .st__link {
+    grid-template-columns: var(--pos-col) minmax(0, 1fr) auto;
+    grid-template-areas: "pos who go" ". pts .";
+    row-gap: 6px;
+  }
+  .st__pts { justify-self: start; text-align: left; }
+  .st--leader .st__pts { flex-direction: row; align-items: baseline; gap: 4px; }
+  .st__go { align-self: start; margin-top: 4px; }
+}
+
+/* ---------- Empty, error, loading (ST19) ---------- */
+/* .empty, .empty__msg and .btn: ../../shared/components/empty-state.css.
+   The list-screen icon and title sizes stay here (detail screens differ). */
+.empty .icon { width: 32px; height: 32px; color: var(--text-2); margin-bottom: 4px; }
+.empty__title { font-size: min(1.25rem, 30px); font-weight: 750; font-variation-settings: "wdth" 96; line-height: 1.2; text-wrap: balance; }
+.skeleton { display: flex; flex-direction: column; gap: 4px; padding: 8px var(--gutter); }
+.skeleton__row { height: 56px; border-radius: var(--radius-sm); background: linear-gradient(90deg, var(--tray), var(--raised), var(--tray)); }
+
+/* ---------- Navigation: long selected label (Standings-only override) ----------
+   "Clasificaciones" in the selected tab's bold weight does not fit a quarter
+   of a 320dp bar, so the nav stacked at normal text; at 200% it overflowed
+   even stacked. When the nav is condensed or stacked, the selected label
+   drops to wdth 62 and weight 700. Still distinguished by the oxide slab,
+   Chalk colour and aria-current. Proposed for primer-core; not applied to
+   Home or Calendar. */
+.tabbar[data-fit="condensed"] .tab.is-selected .tab__label,
+.tabbar[data-fit="stacked"] .tab.is-selected .tab__label { font-variation-settings: "wdth" 62; }
+.tabbar[data-fit="condensed"] .tab.is-selected,
+.tabbar[data-fit="stacked"] .tab.is-selected { font-weight: 700; }

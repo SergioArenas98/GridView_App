@@ -1,4 +1,11 @@
 export 'gridview_theme.dart';
+export 'gv_font_licenses.dart';
+export 'gv_primer_components.dart';
+export 'gv_primer_effects.dart';
+export 'gv_primer_role_groups.dart';
+export 'gv_primer_roles.dart';
+export 'gv_primer_surface.dart';
+export 'gv_primer_system_overlay.dart';
 export 'gv_semantic_colors.dart';
 export 'gv_team_accent.dart';
 export 'gv_text_styles.dart';

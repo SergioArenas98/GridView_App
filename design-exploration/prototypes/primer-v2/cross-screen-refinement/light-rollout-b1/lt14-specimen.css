@@ -1,0 +1,7 @@
+/* LT-14 COMPARISON SPECIMEN (Step 53C.1), loaded on the lt14 pages only,
+   before the Dark and Light chains. The completed chip is the Grand Prix
+   Detail pilot's vocabulary (consolidation-pilot/grand-prix-detail/gpd.css,
+   verbatim): Calendar's own sheets never rendered it, so they lack its
+   outline. DK-1 (candidate.css) then sets the status boundary colour, as on
+   GP Detail, in both themes. No new treatment. */
+.chip--done { border: 1.5px solid var(--hair-strong); }

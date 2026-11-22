@@ -1,0 +1,44 @@
+/* EXPERIMENT (Step 53A), not an approved palette.
+   Direction A - Warm Editorial: a warm paper page with Chalk panels set into
+   it (tonal, inset bands; almost no drop shadow), Graphite text, restrained
+   Red Oxide. One new colour: Paper #F5F4F0. Everything else is an existing
+   Primer V2 colour or an alpha of Graphite / Chalk. Values only; the roles
+   are mapped in light-roles.css. */
+:root {
+  /* Surfaces */
+  --lt-page: #F5F4F0;                       /* NEW: Paper */
+  --lt-band: #ECEAE5;                       /* Chalk: bands, notices, selector container, rail */
+  --lt-card: #ECEAE5;                       /* Chalk: editorial card (Home hero) */
+  --lt-raised: #E2DFD8;                     /* chalk-low: pressed, context chip, skeleton */
+  --lt-nav: rgba(236, 234, 229, 0.96);      /* Chalk 96%: sunken bar, as in Dark */
+  --lt-nav-solid: #ECEAE5;
+  /* Text and accent */
+  --lt-text: #141518;                       /* Graphite (= on-chalk) */
+  --lt-text-2: #4F525A;                     /* on-chalk-2 */
+  --lt-accent: #A03E2B;                     /* Red Oxide: accent text, icons, links */
+  /* Lines (Graphite alphas) */
+  --lt-hair: rgba(20, 21, 24, 0.12);
+  --lt-hair-strong: rgba(20, 21, 24, 0.22);
+  --lt-line-status: rgba(20, 21, 24, 0.55); /* solid known status */
+  --lt-line-unknown: rgba(20, 21, 24, 0.70);/* dashed unknown, stronger */
+  /* Focus */
+  --lt-focus: #141518;                      /* Graphite ring on light surfaces */
+  /* Inverse plane (dark editorial element kept in Light) */
+  --lt-inverse: #141518;                    /* Dark ground */
+  --lt-inverse-low: #1F2125;                /* Dark tray */
+  --lt-on-inverse: #ECEAE5;                 /* Chalk */
+  --lt-on-inverse-2: #A9ABB1;               /* Dark text-2 */
+  --lt-inverse-accent: #F08A6C;             /* Ember: accent and focus on graphite only */
+  --lt-inverse-hair: rgba(236, 234, 229, 0.12);
+  --lt-inverse-line-status: rgba(236, 234, 229, 0.45);
+  --lt-live: #F08A6C;
+  /* States and effects (no information) */
+  --lt-hover: rgba(20, 21, 24, 0.03);
+  --lt-pressed-soft: rgba(20, 21, 24, 0.06);
+  --lt-facts: rgba(20, 21, 24, 0.04);
+  --lt-watermark: rgba(20, 21, 24, 0.10);
+  --lt-card-shadow: inset 0 0 0 1px rgba(20, 21, 24, 0.05);
+  --lt-round-shadow: -10px 0 24px -14px rgba(20, 21, 24, 0.30);
+  --lt-inverse-shadow: 0 18px 30px -24px rgba(20, 21, 24, 0.55);
+  --lt-nav-shadow: 0 -10px 22px -16px rgba(20, 21, 24, 0.20);
+}

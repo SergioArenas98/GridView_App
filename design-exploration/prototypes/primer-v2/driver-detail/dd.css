@@ -1,0 +1,384 @@
+/* GridView — Primer V2: Driver Detail. Loads after primer-core.css
+   (byte-identical copy of the shared foundation) and only adds to it.
+   Conventions as the other screens: text in rem, layout in px, display
+   figures capped with min() (Android-like non-linear scaling).
+
+   Composition: a driver plate, then the season record.
+   - The plate is Explore's driver row (name left; number and code right)
+     at hero scale: condensed name, and the competition number on a Red
+     Oxide board that runs off the right edge with a 12° cut. It is the
+     mirror of Grand Prix Detail's figure-left band.
+   - Season participation folds Flutter's "Team" section into the span list:
+     the relevant span is the one team link; every span leads with its
+     boundary, so nothing reads as a full season.
+   - Championship uses Standings' position | seam | points grammar.
+
+   Detail screens open on the root navigator in Flutter: no bottom
+   navigation, only the app bar's back action. */
+
+[hidden] { display: none !important; }
+.nw { white-space: nowrap; }
+
+/* ---------- Copied from ../grand-prix-detail/gpd.css (candidates for the core) ---------- */
+.dbar {
+  position: sticky; top: 0; z-index: 6;
+  display: grid; grid-template-columns: 48px minmax(0, 1fr);
+  align-items: center; column-gap: 4px;
+  min-height: 56px;
+  padding: max(4px, env(safe-area-inset-top)) var(--gutter) 4px 6px;
+  background: var(--ground);
+  border-bottom: 1px solid var(--hair);
+}
+.dbar__title {
+  min-width: 0;
+  font-size: min(1.125rem, 26px);
+  font-weight: 800;
+  font-variation-settings: "wdth" 88;
+  line-height: 1.25;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.page { padding: 0 0 calc(32px + env(safe-area-inset-bottom)); }
+.page-notice { padding: 12px var(--gutter); }
+.notice {
+  display: flex; align-items: flex-start; gap: 10px;
+  padding: 10px 12px;
+  border-radius: var(--radius-sm);
+  background: var(--tray);
+  border: 1px solid var(--hair-strong);
+  font-size: 0.875rem; line-height: 1.35;
+  text-wrap: pretty;
+}
+.notice .icon { width: 20px; height: 20px; color: var(--ember); margin-top: -1px; }
+.chip--outline { border: 1.5px solid var(--hair-strong); }
+.disc {
+  flex: none; display: grid; place-items: center;
+  width: 44px; height: 44px; border-radius: 50%;
+  background: var(--chalk); color: var(--on-chalk);
+  transition: transform 220ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+.empty { padding: 40px var(--gutter) 24px; display: flex; flex-direction: column; align-items: flex-start; gap: 8px; }
+.empty .icon { width: 28px; height: 28px; color: var(--text-2); margin-bottom: 2px; }
+.empty__title { font-size: min(1.125rem, 28px); font-weight: 750; font-variation-settings: "wdth" 96; line-height: 1.25; text-wrap: balance; }
+.empty__msg { color: var(--text-2); max-width: 36em; text-wrap: pretty; }
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  min-height: 48px; margin-top: 8px; padding: 0 20px;
+  border: 0; border-radius: 999px;
+  background: var(--chalk); color: var(--on-chalk);
+  font-weight: 700; cursor: pointer;
+}
+.btn:hover { background: var(--chalk-low); }
+
+/* ---------- Driver plate (D01–D06) ----------
+   Full-bleed band, square, like Grand Prix Detail's. The grid lives on an
+   inner element so the band itself can be the size container. */
+.dp {
+  container: dp / inline-size;
+  position: relative; isolation: isolate; overflow: hidden;
+  background:
+    linear-gradient(168deg, rgba(255, 255, 255, 0.045) 0%, rgba(255, 255, 255, 0) 46%),
+    var(--tray);
+  /* No bottom hairline: the board runs off the band's lower edge cleanly
+     (a hairline drew a line across its base; Impeccable cramped-padding). */
+}
+.dp__grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-areas: "season plate" "name plate" "nat plate";
+  grid-template-rows: 1fr auto auto;
+  column-gap: 18px;
+  min-height: 176px;
+}
+/* Season context (refinement, DD-01): seasonLabel with the ready state's
+   season. Same type as Grand Prix Detail's .gp__season: secondary, small,
+   directly above the name. Placed after the heading in the DOM. */
+.dp__season {
+  grid-area: season; align-self: end;
+  padding: 24px 0 0 var(--gutter);
+  color: var(--text-2); font-size: 0.8125rem; font-weight: 600; line-height: 1.2;
+}
+.dp__name {
+  grid-area: name; align-self: end;
+  padding: 8px 0 0 var(--gutter);
+  font-size: min(2.5rem, 44px);    /* 40 */
+  font-weight: 800;
+  font-variation-settings: "wdth" 78;
+  line-height: 0.98;
+  letter-spacing: -0.015em;
+  overflow-wrap: break-word;
+  text-wrap: balance;
+}
+/* No nationality line below: the name carries the band's bottom inset
+   itself (Impeccable cramped-padding finding: Scenario B's descenders sat on
+   the hairline). */
+.dp__grid:not(:has(.dp__nat)) .dp__name { padding-bottom: 24px; }
+.dp__nat {
+  grid-area: nat; align-self: start;
+  padding: 10px 0 22px var(--gutter);
+  color: var(--text-2);
+  font-size: 0.9375rem; font-weight: 600; line-height: 1.3;
+  overflow-wrap: break-word;
+}
+/* Number board: the season race number, else the permanent number (D02),
+   and the short code (D03). Red Oxide is an identity surface here, as the
+   round block on Home and the seam on Grand Prix Detail. The 12° edge is a
+   skewed layer, so the angle holds at any height (unlike a clip-path run). */
+.dp__plate {
+  grid-area: plate; align-self: stretch;
+  position: relative; z-index: 0;
+  display: flex; flex-direction: column; justify-content: flex-end; align-items: flex-end;
+  min-width: 96px;
+  padding: 18px var(--gutter) 20px 40px;
+  color: var(--chalk);
+}
+.dp__plate::before {
+  content: ""; position: absolute; inset: 0 -48px 0 0; z-index: -1;
+  background: linear-gradient(165deg, #B04633 0%, var(--oxide) 55%, var(--oxide-deep) 100%);
+  transform: skewX(var(--cut));
+  transform-origin: 0 100%;
+}
+.dp__plate-in { display: flex; flex-direction: column; align-items: flex-end; }
+/* Number source (refinement, DD-03): the existing field label for the
+   number the board shows, "Race number" (season) or "Permanent number"
+   (Flutter's fallback). Narrow measure so it wraps rather than widening the
+   board; screen readers get the same words in the board's text alternative. */
+.dp__lab {
+  max-width: 6.5em; min-width: min-content;   /* a long word never spills */
+  margin-bottom: 10px;
+  font-size: 0.8125rem; font-weight: 700; line-height: 1.2;
+  text-align: right; text-wrap: balance;
+}
+.dp__num { display: flex; align-items: flex-start; }
+.dp__hash {
+  margin: 0.2em 0.18em 0 0;
+  font-size: min(1.375rem, 26px);
+  font-weight: 800;
+  line-height: 1;
+}
+.dp__fig {
+  font-size: min(6rem, 104px);     /* 96 */
+  font-weight: 850;
+  font-variation-settings: "wdth" 125;
+  letter-spacing: -0.04em;
+  line-height: 0.8;
+}
+.dp__code {
+  margin-top: 14px;
+  font-size: 0.9375rem; font-weight: 800;
+  font-variation-settings: "wdth" 112;
+  letter-spacing: 0.14em;
+  line-height: 1;
+  margin-right: -0.14em;   /* optical: tracking after the last letter */
+}
+/* Code only (no number): the code becomes the board's figure. */
+.dp__plate--code .dp__code {
+  margin: 0 -0.04em 0 0;
+  font-size: min(2.25rem, 40px);
+  letter-spacing: 0.04em;
+}
+/* Neither number nor code: no board; the name holds the band alone. */
+.dp--bare .dp__grid { grid-template-columns: minmax(0, 1fr); grid-template-areas: "season" "name" "nat"; grid-template-rows: auto auto auto; min-height: 0; }
+.dp--bare .dp__name { padding-right: var(--gutter); }
+
+/* Portrait (D06): driver-owned media only, decorative, behind everything.
+   No cleared media exists, so this layer is never filled on the scenario
+   pages; the states page shows its geometry. Absent, loading and failed all
+   render the plate exactly as without it (no icon, no layout change). */
+.dp__media { position: absolute; inset: 0; z-index: -1; }
+.dp__media::after {
+  content: ""; position: absolute; inset: 0;
+  background: linear-gradient(90deg, var(--tray) 0%, rgba(31, 33, 37, 0.86) 45%, rgba(31, 33, 37, 0.2) 100%);
+}
+
+/* Stacked plate: the name takes the full width; nationality and the board
+   share the lower row. Used for any plate under 23em (320dp, large text),
+   and for a two-or-more-digit board under 30em, so a wide number never
+   squeezes the name into a mid-word break (found with "#33" at 390dp).
+   The two queries carry identical rules.
+   The lower row is a wrapping flex row (refinement): nationality never
+   shrinks below its longest word; if it and the labelled board cannot share
+   the row, the board drops to its own line, still right-aligned. The
+   board's left inset grows with text size: a taller board moves its 12° edge
+   further right at the top, where the label's first line sits. */
+.dp__foot { display: contents; }
+@container dp (max-width: 23em) {
+  .dp__grid { grid-template-columns: minmax(0, 1fr); grid-template-areas: "season" "name" "foot"; grid-template-rows: auto auto 1fr; min-height: 0; }
+  .dp__foot { grid-area: foot; display: flex; flex-wrap: wrap; align-items: flex-end; column-gap: 18px; }
+  .dp__season { padding: 20px var(--gutter) 0; }
+  .dp__name { padding: 8px var(--gutter) 0; }
+  .dp__lab { max-width: 5em; margin-bottom: 8px; }
+  .dp__nat { flex: 1 1 auto; align-self: flex-end; padding: 14px 0 20px var(--gutter); }
+  .dp__plate { margin: 14px 0 0 auto; padding: 14px var(--gutter) 16px max(30px, 1.5em); min-width: 80px; }
+  .dp__fig { font-size: min(4rem, 72px); }
+  .dp__hash { font-size: min(1.125rem, 22px); }
+  .dp__code { margin-top: 10px; }
+  .dp--bare .dp__grid { grid-template-areas: "season" "name" "foot"; grid-template-rows: auto auto auto; }
+}
+@container dp (max-width: 30em) {
+  .dp--wide .dp__grid { grid-template-columns: minmax(0, 1fr); grid-template-areas: "season" "name" "foot"; grid-template-rows: auto auto 1fr; min-height: 0; }
+  .dp--wide .dp__foot { grid-area: foot; display: flex; flex-wrap: wrap; align-items: flex-end; column-gap: 18px; }
+  .dp--wide .dp__season { padding: 20px var(--gutter) 0; }
+  .dp--wide .dp__name { padding: 8px var(--gutter) 0; }
+  .dp--wide .dp__lab { max-width: 5em; margin-bottom: 8px; }
+  .dp--wide .dp__nat { flex: 1 1 auto; align-self: flex-end; padding: 14px 0 20px var(--gutter); }
+  .dp--wide .dp__plate { margin: 14px 0 0 auto; padding: 14px var(--gutter) 16px max(30px, 1.5em); min-width: 80px; }
+  .dp--wide .dp__fig { font-size: min(4rem, 72px); }
+  .dp--wide .dp__hash { font-size: min(1.125rem, 22px); }
+  .dp--wide .dp__code { margin-top: 10px; }
+}
+
+/* ---------- Sections ---------- */
+.sec { margin-top: 32px; }
+.sec__title { padding: 0 var(--gutter); }
+
+/* ---------- Season participation + team link (D07–D09, D15–D18) ----------
+   One row per span, relevance order (open span first, then latest start:
+   participation_span.dart). The first row is the relevant span; it is the
+   only team link, and only when its team name resolves. */
+.stints { margin-top: 10px; }
+.st {
+  position: relative;
+  display: grid;
+  grid-template-columns: 4px minmax(0, 1fr) auto;
+  column-gap: 14px; align-items: center;
+  min-height: 72px;
+  padding: 14px var(--gutter);
+}
+.st + .st::before {
+  content: ""; position: absolute; top: 0; height: 1px;
+  left: calc(var(--gutter) + 18px); right: var(--gutter);
+  background: var(--hair);
+}
+/* Capped height: a stretched skewed tick would lean past the gutter on the
+   tall rows large text produces (64px × tan 12° / 2 ≈ 7px < 16px gutter). */
+.st__tick {
+  align-self: stretch; width: 4px; min-height: 40px; max-height: 64px;
+  background: var(--team, transparent);
+  transform: skewX(var(--cut));
+}
+.st__body { min-width: 0; pointer-events: none; }
+.st__team {
+  font-size: min(1.1875rem, 30px);   /* 19 */
+  font-weight: 800;
+  font-variation-settings: "wdth" 84;
+  line-height: 1.15;
+  overflow-wrap: break-word;
+}
+.st__team--fallback { font-style: italic; font-weight: 600; font-variation-settings: "wdth" 100; color: var(--text-2); }
+.st__facts {
+  display: flex; flex-wrap: wrap; align-items: baseline;
+  gap: 2px 16px;
+  margin-top: 4px;
+  color: var(--text-2); font-size: 0.875rem; line-height: 1.35;
+}
+.st__facts div { display: flex; flex-wrap: wrap; column-gap: 6px; }
+.st__facts dd { margin: 0; }
+.st__span { color: var(--text); font-weight: 650; }
+.st__facts .st__v { color: var(--text); font-weight: 700; font-variant-numeric: tabular-nums; }
+.st__hit { position: absolute; inset: 0; z-index: 1; }
+.st__hit:hover { background: rgba(236, 234, 229, 0.03); }
+.st__hit:active { background: var(--tray); }
+.st__hit:focus-visible { outline-offset: -3px; border-radius: 4px; }
+.st--link:hover .disc { transform: translateX(3px); }
+.st .disc { pointer-events: none; }
+
+/* ---------- Championship (D10–D14, D24) ---------- */
+.ch { container: ch / inline-size; margin-top: 14px; }
+.ch__main {
+  display: grid;
+  grid-template-columns: auto 2px minmax(0, 1fr);
+  grid-template-areas: "pos seam pts";
+  column-gap: 18px;
+  padding: 0 var(--gutter);
+}
+.ch__cell { min-width: 0; display: flex; flex-direction: column; }
+.ch__cell dt { color: var(--text-2); font-size: 0.8125rem; font-weight: 700; line-height: 1.2; }
+.ch__cell dd { margin: 0; }
+.ch__pos { grid-area: pos; }
+.ch__pos dd {
+  margin: 8px 0 0 -3px;
+  font-size: min(4.5rem, 80px);    /* 72 */
+  font-weight: 850;
+  font-variation-settings: "wdth" 125;
+  letter-spacing: -0.04em;
+  line-height: 0.8;
+}
+.ch__pos--word dd {
+  margin: 10px 0 0;
+  font-size: min(1.75rem, 34px);
+  font-weight: 800;
+  font-variation-settings: "wdth" 82;
+  letter-spacing: 0;
+  line-height: 1.05;
+  overflow-wrap: break-word;
+}
+.ch__seam { grid-area: seam; width: 2px; background: var(--hair-strong); transform: skewX(var(--cut)); }
+.ch__pts { grid-area: pts; justify-content: flex-end; }
+.ch__pts dd {
+  margin-top: 6px;
+  font-size: min(2.5rem, 48px);    /* 40 */
+  font-weight: 800;
+  font-variation-settings: "wdth" 112;
+  letter-spacing: -0.03em;
+  line-height: 0.9;
+  overflow-wrap: anywhere;
+}
+.ch__more {
+  display: flex; flex-wrap: wrap; gap: 6px 28px;
+  margin: 18px var(--gutter) 0; padding-top: 12px;
+  border-top: 1px solid var(--hair);
+}
+.ch__more div { display: flex; align-items: baseline; gap: 8px; }
+.ch__more dt { color: var(--text-2); font-size: 0.875rem; font-weight: 600; }
+.ch__more dd {
+  margin: 0;
+  font-size: min(1.25rem, 28px);
+  font-weight: 800;
+  font-variation-settings: "wdth" 112;
+  line-height: 1.1;
+}
+.ch__prov { margin: 14px var(--gutter) 0; }
+/* Standings link: an arrow, not the Chalk disc (the disc is kept for
+   entities; this is the championship's own page). */
+.ch__link {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  min-height: 56px; margin-top: 16px;
+  padding: 8px var(--gutter);
+  border-block: 1px solid var(--hair);
+  font-weight: 700; line-height: 1.3;
+}
+.ch__link:hover { background: rgba(236, 234, 229, 0.03); }
+.ch__link:active { background: var(--tray); }
+.ch__link:focus-visible { outline-offset: -3px; border-radius: 4px; }
+.ch__link .icon { transition: transform 220ms cubic-bezier(0.16, 1, 0.3, 1); }
+.ch__link:hover .icon { transform: translateX(3px); }
+
+/* Narrow championship: points under the position, seam dropped. */
+@container ch (max-width: 19em) {
+  .ch__main { grid-template-columns: minmax(0, 1fr); grid-template-areas: "pos" "pts"; row-gap: 16px; }
+  .ch__seam { display: none; }
+}
+
+/* ---------- Profile facts (D19–D21) and About (D22) ---------- */
+.facts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 9.5em), 1fr));
+  gap: 14px 20px;
+  margin: 12px var(--gutter) 0;
+}
+.fact { min-width: 0; }
+.fact dt { color: var(--text-2); font-size: 0.8125rem; line-height: 1.3; }
+.fact dd { margin: 2px 0 0; font-size: 1rem; font-weight: 650; line-height: 1.3; overflow-wrap: break-word; }
+.about {
+  margin: 10px var(--gutter) 0;
+  max-width: 38em;
+  font-size: 1rem; line-height: 1.55;
+  text-wrap: pretty;
+}
+
+/* ---------- Loading (_DetailSkeleton) ---------- */
+.skel { display: flex; flex-direction: column; gap: 8px; padding: 0 0 8px; }
+.skel span { display: block; background: linear-gradient(90deg, var(--tray), var(--raised), var(--tray)); }
+.skel__plate { height: 176px; border-bottom: 1px solid var(--hair); margin-bottom: 24px; }
+.skel__label { width: 140px; height: 18px; margin: 0 var(--gutter) 6px; border-radius: 4px; }
+.skel__row { height: 72px; margin: 0 var(--gutter); border-radius: var(--radius-sm); }

@@ -1,0 +1,6 @@
+/* LT-7 LIVE COMPARISON (Step 53E), specimen only, not proposed: the
+   alternative named in LIGHT-THEME-FOUNDATIONS.md §9, a Red Oxide fill with
+   Chalk text (5.43:1). It would share the fill of the Winner tag and of
+   selection. The current Light role (light-roles.css 3) keeps Ember with
+   Graphite text. */
+.chip--live { background: var(--oxide); color: var(--chalk); }
