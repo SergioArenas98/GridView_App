@@ -1840,3 +1840,90 @@ acceptance at 6,443 / 11 / 0 (log `f9bb922f…`). Evidence:
   Remove them only on the owner's decision.
 - Optional-driver activation (P3) and production (P4) are separately
   confirmed and not started.
+
+---
+
+## Addendum O - 2026-11-22: catalog R1 (Rafael Câmara) activated on staging
+
+Owner decision: option (c), R1 for Rafael Câmara before optional drivers.
+Every remote step was confirmed live by the owner (Phase A, Phase B, and the
+corrected B2). Evidence: `~/.gridview/evidence/identity-r1-camara-2026-11-22/`
+(manifest `0140b5bc…`, 76 files).
+
+### O1. Identity evidence
+
+- **Jolpica** (public API, 3 + 3 GETs from the operator machine, bodies
+  hashed): `driverId rafael_camara`, Rafael / Camara, born 2005-05-05,
+  Brazilian, #51, code CAM. Round 20 (São Paulo, 2026-11-08) P20 Haas;
+  round 21 (Las Vegas, 2026-11-22) P16 Haas. `gabriele_mini`,
+  `freddie_slater` and `nikola_tsolov` have **no** 2026 race results
+  (inventory-only).
+- **Official F1:** driver page (Haas, #51, Brazil, born 05/05/2005,
+  Recife), the São Paulo race result (P20, No. 51, CAM, Haas, +2 laps), and
+  the 2026-11-22 Haas confirmation article.
+- **Spelling:** both primary sources write "Camara". The owner chose
+  "Rafael Câmara" (GridView keeps diacritics, as in Hülkenberg and Pérez),
+  supported by Wikipedia, which is the URL in the Jolpica record. Profile:
+  `fullName` only, every other fact null, like all 33 R0 drivers.
+
+### O2. Blocker found and route chosen
+
+`create-driver` requires a discovery candidate. Staging had 0 candidates
+(discovery `off` since G1), and base import refuses driver creation
+(`base-import-driver-creation-forbidden`). Owner-chosen route: a temporary
+config with discovery `shadow` plus admin `review`, and one genuine sync
+(D9 run 2, justified by the new Las Vegas data).
+
+### O3. Remote steps
+
+| Step                                  | Time (UTC)  | Result                                                                                                                                                                     |
+| ------------------------------------- | ----------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Pre-check (reads)                     | 21:03-21:05 | state 0 differences vs post-G5, 14 ETags and G0 identical; bookmarks catalog `00000004-…`, ledger `00000020-…`, sequencer `0000009b-…`; KV snapshot 3,982 keys `df568003…` |
+| A1 deploy temporary config            | 21:05:51    | version `a7785c1a` (#33); only admin `review` and discovery `shadow` changed; bundle `f714253a…` = `4595219f…` after path-label normalization                              |
+| A2 sync (D9 run 2)                    | 21:06:44    | observed, 26 requests, committed; withheld `classification-unavailable`, 0 publish calls; candidates for all 4 keys (Câmara: 4 real proxy observations)                    |
+| B1 dossier (reviewer)                 | ~21:10      | evidence `67ef0399…`, receipt committed                                                                                                                                    |
+| B2 approve-new, first attempt         | ~21:11      | **rejected** 404 `REVISION_NOT_FOUND`, no state change: `support.evidenceIds` listed provider-evidence digests; only dossiers are allowed (`catalog-record-missing`)       |
+| B2 approve-new (corrected, new op ID) | 21:12:58    | proposal `8723d5ec-…`, catalog `d95ad634…`, dataset `2026.11.22.1` reserved; receipt committed                                                                             |
+| B3 validate (activator)               | 21:13:55    | valid, no issues, report `1a99b24d…`                                                                                                                                       |
+| B4 activate (activator)               | 21:14:12    | **R1 active, sequence 2**                                                                                                                                                  |
+| B5 restore committed config `7ded2d9` | 21:14:22    | version `a504c946`; bundle `4595219f…` again; admin `read-only`, discovery `off`; A3 403 `IDENTITY_WRITES_DISABLED`                                                        |
+
+R1 delta (preview, validation and activation all agree): +1 driver
+`rafael-camara` (origin `reviewed-new`), +1 binding
+`jolpica/2026/driverId/rafael_camara → rafael-camara`, its review decision
+and dossier, dataset `2026.10.07.1 → 2026.11.22.1`, and `rafael_camara`
+removed from unresolved. Totals: 34 drivers, 95 bindings, 6 unresolved.
+
+### O4. Verification and recovery baseline
+
+- After B5: Cloudflare state differs from the pre-check only in version
+  IDs; 14 ETags identical; KV unchanged (`df568003…`). **Nothing published.**
+- G0 `Inspect` differs only by the A2 observation commit (record versions,
+  lease time, `reconciledAt`); no hold, no settlement change.
+- **R1 export:** `exportHash 50defe36…`, file sha `4d78ace9…`, 1,682,489
+  bytes; offline `verifyCatalogFile` passed (sequence 2, parent R0, creators
+  include `reviewer`). Custody: `staging-r1-export-20261122.*` beside the
+  untouched R0 files. Offline GnuPG copy of R1: pending (the owner's step).
+  A seed-based S3 reconstruction does not apply to R1 (a seed cannot create a
+  reviewed driver); PITR is the R1 restore path.
+- **Post-R1 bookmarks:** catalog `00000006-0000004f-0000512b-9c43…`, ledger
+  `00000022-00000000-0000512b-8c9d…`, sequencer
+  `0000009e-00000000-0000512b-e365…`; KV snapshot `post-r1-…` (3,982 keys).
+
+### O5. Lessons
+
+- The admin layer maps `catalog-record-missing` to `REVISION_NOT_FOUND`,
+  which misleads for a missing dossier.
+- PowerShell 5.1 `Get-Content`/`Set-Content` re-encoding mangled "Câmara"
+  into mojibake in a regenerated file; the live preview caught it before
+  submission. Generate review files with Node or byte-safe tools only.
+
+### O6. Status
+
+- Staging `a504c946` (code `7ded2d9`), runtime-strict, catalog R1 active,
+  admin read-only, discovery off, no hold, crons `[]`.
+- The next run will still withhold under strict inventory: Mini, Slater and
+  Tsolov stay unmapped in season participants. They appear in no race
+  classification, so the optional-driver policy (P3) can unblock
+  publication while race and standings guards stay strict.
+- Candidates remain for those three keys (unresolved, not quarantined).
