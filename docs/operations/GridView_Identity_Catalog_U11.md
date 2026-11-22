@@ -1795,3 +1795,48 @@ Restoring the KV snapshot onto staging itself was refused by the tool
 3. Live owner confirmation for: G5-0 (deploy the recovery-capable code with
    the bundled config, then capture bookmarks and a KV snapshot), the hold,
    S6 on R-4, the runtime-strict cutover, S7, and the hold release.
+
+---
+
+## Addendum N - 2026-11-22: G5 runtime-strict cutover executed on staging
+
+Each step was confirmed live by the owner (A1): steps 1-5 at about 16:51Z,
+then the S6 hold release and the S7 hold release. Code `7ded2d9` passed
+acceptance at 6,443 / 11 / 0 (log `f9bb922f…`). Evidence:
+`~/.gridview/evidence/identity-u11-g5-2026-11-22/`.
+
+| Step                                      | Time (UTC)        | Result                                                                                                                                                                                                                                                  |
+| ----------------------------------------- | ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Pre-check                                 | 16:48-16:53       | state unchanged since P1; only the drill Worker's namespaces were new in the account list. G0 identical, 14 ETags identical. Pre-cutover KV snapshot `df568003…` (3,982 keys)                                                                           |
+| Hold                                      | 16:53:34          | operation `3b5da7d4-…`, record v12. Drain check: drained, with unobservable items listed                                                                                                                                                                |
+| S6: deploy R-4                            | 16:53:50          | version `1e22f172`: runtime, catalog binding removed, four exports kept, nothing else changed                                                                                                                                                           |
+| S6: run under hold                        | 16:54:48          | `nothing-due / publication-stopped`, 0 provider requests. **The hold stops a run before identity admission, so S6 was not exercised** (a design error in the plan)                                                                                      |
+| S6: owner-confirmed release, run, re-hold | 16:58:16-16:58:19 | **`failed / identity / catalog-unavailable`, 0 provider requests, lease released**; hold re-applied (v14). Nothing published                                                                                                                            |
+| Cutover: deploy `7ded2d9`                 | 16:58:48          | version **`a379d30d`**, bundle `4595219f…`; catalog runtime, admin read-only; exports, secrets, KV, namespaces, E2E and production unchanged                                                                                                            |
+| S1/S2                                     | 16:59             | catalog R0 active at sequence 1 (`8a2a62d8…`), mode read-only; A3 403 `IDENTITY_WRITES_DISABLED`, A4R 404, A1 401                                                                                                                                       |
+| Pre-S7 bookmarks                          | 16:59             | catalog `00000001-00000002-0000512b-456b…`, ledger `0000001d-00000000-0000512b-aea5…`, sequencer `00000098-00000000-0000512b-4682…`                                                                                                                     |
+| S7 under hold                             | 20:25:20          | `publication-stopped`, 0 requests (same limitation as S6)                                                                                                                                                                                               |
+| Hold release (owner confirmed)            | 20:28:03          | record v15; no hold                                                                                                                                                                                                                                     |
+| **S7: first runtime run**                 | 20:28:04-20:29:36 | **`observed`, coordination completed, 26 provider requests, observations committed, 92 s**. Events: unchanged 2, overwrite 1, refresh.failed 2, classification.check-failed 2. **Publication withheld (`classification-unavailable`), 0 publish calls** |
+
+**State after G5:**
+
+- Staging is on `a379d30d`, runtime-strict, with no hold and crons `[]`.
+- Ledger rounds: 1-17 published; 18 and 19 unsettled; 20 and 21 absent and
+  not yet classifiable.
+- 14 ETags identical, active version still `pm1-…1d`. **No runtime-derived
+  content has been published yet**, so no runtime-only fact exists.
+- Recovery: R-4 or PITR to the bookmarks above, plus the KV snapshot. R-1 and
+  R-2 stop being valid once runtime content is first published.
+
+**Open items:**
+
+- S7 latency per request, and the two `refresh.failed` causes (429 or
+  missing data), need the Worker logs.
+- D9 stability: this is the first of three genuine runtime runs. Further
+  runs only when data changes, each authorized individually.
+- The offline GnuPG copy of the export is still pending (the owner's step).
+- The drill Worker `gridview-recovery-drill` and its KV namespace remain.
+  Remove them only on the owner's decision.
+- Optional-driver activation (P3) and production (P4) are separately
+  confirmed and not started.
