@@ -1636,3 +1636,69 @@ Under owner decisions D0-D11. Nothing remote was changed. Staging stays on
 - **Next:** the owner signs P1 (`GridView_Identity_Catalog_U11_P1_Packet.md`
   §9), then the 8-hour wait, then the supervised session. P2-P4 remain
   separate.
+
+---
+
+## Addendum L - 2026-11-22: P1 executed (G2, G3) and G4 completed
+
+Executed under owner amendment A1 (`ed034b7`), with the owner available
+throughout. Evidence: `~/.gridview/evidence/identity-u11-p1-2026-11-22/`
+(manifest `84f14724…`).
+
+### L1. Remote mutations (8, each once, each verified)
+
+| Step                                  | Time (UTC) | Result                                                                                                            |
+| ------------------------------------- | ---------- | ----------------------------------------------------------------------------------------------------------------- |
+| M1 secret V3 (`b6de09a8…`)            | 15:49:22   | version `3ab185f4` (secret); only the `IDENTITY_REVIEWER_CREDENTIALS` secret added                                |
+| M2 deploy G2a `2ad2427`               | 15:50:11   | version `88548205`; bundle `fb60cc64…`; no export reconciliation; only admin → `read-only`                        |
+| M3 deploy G2b `faa9113`               | 15:51:29   | version `83d77cc2`; only admin → `review`                                                                         |
+| M4a secret V4 (`f43640c2…`)           | 15:52:34   | version `2c8ba6fb` (secret); bootstrap authenticates after propagation                                            |
+| M4 seed (bootstrap, file `afba0282…`) | 15:53:33   | proposal `3bc0c7b8-9300-4076-99d2-12ec677e167d`, catalog `8a2a62d8…`, receipt `committed`                         |
+| M4r secret V3 (revocation)            | 15:54:32   | version `59a882a0` (secret); bootstrap 401, reader/reviewer/activator 200; local bootstrap token deleted 15:55:12 |
+| M5 validate (activator)               | 15:55:28   | `valid: true`, no issues, report `bb01e0c8…`, receipt `committed`                                                 |
+| M6 activate (activator)               | 15:55:57   | active sequence 1, revision `3bc0c7b8-…`, projection `ab953da8…`, dataset `2026.10.07.1`, receipt `committed`     |
+
+### L2. Verification
+
+- Preflight: state identical to G1v, G0 identical, 14 ETags identical.
+- Authorization checks:
+  - G2a: A1 401, A2 200, A3 403 `IDENTITY_WRITES_DISABLED`, A4R 404, A5
+    refused locally, A7 unchanged.
+  - G2b: A6 403 `ROLE_REQUIRED`, and A1/A4/A4R 401.
+- After every step: code `fb60cc64…`, exports, KV (3,982 keys,
+  `59624265…`), settings, schedules `[]` x3, E2E and production unchanged.
+  G0 bodies and 14 ETags identical throughout.
+- **Nothing was published.**
+- Export: `sha256 732f905e…`, `exportHash 9b6f2e69…`, 1,611,640 bytes.
+  - S3 restore passed: exact R0 and identical snapshot in a new
+    installation; 94 bindings, 101 evidence, 7 unresolved; dossier
+    non-synthetic, created by a credential holding `reviewer`.
+  - Custody: `~/.gridview/custody/identity-staging` (ACL, owner,
+    protected), with a DPAPI copy.
+  - **Offline GnuPG copy: pending (the owner's step).**
+- G4 against the real export, from the clean RC `6a60954`:
+  - parity 0 findings on 2026-10-07, 2026-10-13 and 2026-10-19 (116, 117,
+    117 documents), both sides deterministic;
+  - accounting 3/3 identical (22/23/23 requests, Jolpica reservations
+    equal, reference equals the verified export).
+
+### L3. Deviations (expectation corrections; no state deviation)
+
+- **A1 with admin `off`** returns 503 `CATALOG_UNAVAILABLE` (the
+  `configured()` check), not 404 as the packet and a `wrangler.toml`
+  comment said.
+- **A4 in `read-only`:** the shared `ADMIN_TOKEN` reaches the U2
+  discovery-health compatibility read (GET only, `identity-routes.ts`).
+  Catalog routes stay unreachable (A4R 404), and in `review` it gets 401.
+- **Secret propagation:** the first bootstrap read about 1 s after M4a
+  returned 401. After propagation it returned 200. Later checks waited for
+  the new version.
+- The CLI output was summarized, so no seed payload was printed or kept.
+
+### L4. Status
+
+- Staging is on `59a882a0`: admin `review`, catalog R0 active, authority
+  `bundled`.
+- G3 complete. G4 comparisons pass. **G4 acceptance waits only for the
+  offline-copy evidence.**
+- G5 stays blocked (recovery, Recovery proposals §2.3).
