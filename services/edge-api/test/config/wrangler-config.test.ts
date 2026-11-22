@@ -42,9 +42,9 @@ describe('wrangler staging configuration', () => {
     expect(config).toMatch(/\[env\.staging\.triggers\]\ncrons = \[\]\n/);
   });
 
-  it('requires both staging secrets without committing their values', () => {
+  it('requires the staging secrets without committing their values', () => {
     expect(config).toMatch(
-      /\[env\.staging\.secrets\]\nrequired = \["ADMIN_TOKEN", "JOLPICA_PROXY_TOKEN"\]/,
+      /\[env\.staging\.secrets\]\nrequired = \["ADMIN_TOKEN", "JOLPICA_PROXY_TOKEN", "IDENTITY_REVIEWER_CREDENTIALS"\]/,
     );
     expect(config).not.toContain('Bearer ');
     expect(config).not.toContain('replace-with-disposable-local-token');
@@ -148,7 +148,7 @@ describe('season 2026 activation-phase configuration (ADR 0025 D12)', () => {
       'IDENTITY_INSTALLATION_ID = "c45d60b8-a723-4b6e-8530-750592af2b94"',
       'IDENTITY_CATALOG_MODE = "bundled"',
       'IDENTITY_DISCOVERY_MODE = "off"',
-      'IDENTITY_ADMIN_MODE = "off"',
+      'IDENTITY_ADMIN_MODE = "read-only"',
     ]);
     // The seed phase is no longer configured anywhere.
     expect(config).not.toMatch(/^[^#\n]*"seed:/m);
@@ -233,7 +233,7 @@ describe('season 2026 activation-phase configuration (ADR 0025 D12)', () => {
       /\[\[env\.staging\.kv_namespaces\]\]\nbinding = "GRIDVIEW_DATA"\nid = "1d0fb55486a745a1ad12e03d9f04942b"/,
     );
     expect(config).toMatch(
-      /\[env\.staging\.secrets\]\nrequired = \["ADMIN_TOKEN", "JOLPICA_PROXY_TOKEN"\]/,
+      /\[env\.staging\.secrets\]\nrequired = \["ADMIN_TOKEN", "JOLPICA_PROXY_TOKEN", "IDENTITY_REVIEWER_CREDENTIALS"\]/,
     );
     expect(config).toMatch(/\[env\.staging\.triggers\]\ncrons = \[\]\n/);
     expect(config).toMatch(

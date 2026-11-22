@@ -1,11 +1,13 @@
 /**
- * Identity U11: the proposed staging identity catalog is staging-only and
- * inert as committed (ADR 0031 D5; design §11.1-11.2).
+ * Identity U11: the staging identity catalog is staging-only and, as
+ * committed for G2a, keeps bundled authority with read-only administration
+ * (ADR 0031 D5; design §11.1-11.2).
  *
  * The committed staging declaration is a proposal awaiting the owner's
  * deployment approval. These assertions pin what that proposal may contain:
- * one fresh installation UUID, bundled/off/off modes, no inventory-mode
- * variable (absent = strict), no reviewer credentials, one named SQLite
+ * one fresh installation UUID, bundled/off/read-only modes, no inventory-mode
+ * variable (absent = strict), the reviewer credentials secret required by
+ * name but never committed, one named SQLite
  * export and Worker-local binding, and nothing at all in production, the
  * demonstration Worker or development.
  */
@@ -49,7 +51,7 @@ describe('the proposed staging identity catalog (identity U11)', () => {
       IDENTITY_INSTALLATION_ID: 'c45d60b8-a723-4b6e-8530-750592af2b94',
       IDENTITY_CATALOG_MODE: 'bundled',
       IDENTITY_DISCOVERY_MODE: 'off',
-      IDENTITY_ADMIN_MODE: 'off',
+      IDENTITY_ADMIN_MODE: 'read-only',
     });
     expect(vars.IDENTITY_INSTALLATION_ID).toMatch(uuidV4);
   });
@@ -66,10 +68,15 @@ describe('the proposed staging identity catalog (identity U11)', () => {
     ).toBe('strict');
   });
 
-  it('commits no reviewer credentials and no legacy-v1 compatibility gate', () => {
+  it('requires the reviewer credentials secret by name, commits no value and no legacy-v1 compatibility gate', () => {
     expect(resolved('staging').secrets).toEqual({
-      required: ['ADMIN_TOKEN', 'JOLPICA_PROXY_TOKEN'],
+      required: [
+        'ADMIN_TOKEN',
+        'JOLPICA_PROXY_TOKEN',
+        'IDENTITY_REVIEWER_CREDENTIALS',
+      ],
     });
+    expect(rawConfig).not.toMatch(/tokenSha256/);
     expect(rawConfig).not.toMatch(/^\s*IDENTITY_REVIEWER_CREDENTIALS\s*=/m);
     expect(rawConfig).not.toMatch(
       /^\s*IDENTITY_BATCH_V1_COMPATIBILITY_INSTALLATION_ID\s*=/m,

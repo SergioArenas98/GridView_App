@@ -160,12 +160,16 @@ SEASON_PUBLICATION_AUTHORITY = "sequencer"
 # ingest"). Development and production do not set it.
 SEASON_BATCH_INGEST = "2026"
 
-# Identity catalog (ADRs 0029-0031; identity U11). PROPOSED, NOT PROVISIONED,
-# NOT DEPLOYED. Deploying this configuration needs the owner's explicit U11
-# approval (docs/operations/GridView_Identity_Catalog_U11.md).
+# Identity catalog (ADRs 0029-0031; identity U11). G1 (bundled/off/off) is
+# deployed to staging as 13c3a90c (2026-11-22). This commit is the G2a
+# proposal: deploying it needs the owner's signed U11 P1 approval
+# (docs/operations/GridView_Identity_Catalog_U11_P1_Packet.md).
 #
-# Inert: catalog `bundled` keeps the bundled mappings authoritative; discovery
-# `off` builds no collector; admin `off` answers every identity route 404.
+# Catalog `bundled` keeps the bundled mappings authoritative; discovery `off`
+# builds no collector. Admin `read-only` (G2a) serves the authenticated GET
+# identity routes to individual credentials and refuses every identity write
+# (`IDENTITY_WRITES_DISABLED`); without a valid credentials secret every
+# identity route still answers 404.
 # The inventory-mode variable is deliberately absent, which resolves to
 # `strict`; no committed configuration may name it (inventory-policy
 # acceptance 37), so the optional-driver policy cannot be selected here.
@@ -177,7 +181,7 @@ SEASON_BATCH_INGEST = "2026"
 IDENTITY_INSTALLATION_ID = "c45d60b8-a723-4b6e-8530-750592af2b94"
 IDENTITY_CATALOG_MODE = "bundled"
 IDENTITY_DISCOVERY_MODE = "off"
-IDENTITY_ADMIN_MODE = "off"
+IDENTITY_ADMIN_MODE = "read-only"
 
 # Bindings are not inherited by named environments, so each one redeclares it.
 [[env.staging.durable_objects.bindings]]
@@ -230,7 +234,9 @@ storage = "sqlite"
 name = "RECONCILIATION_LEDGER"
 class_name = "ReconciliationLedger"
 
-# The identity catalog class (identity U11). PROPOSED, NOT PROVISIONED.
+# The identity catalog class (identity U11). LIVE IN STAGING since G1
+# (2026-11-22, version 13c3a90c): namespace
+# `541e9043dfeb4e46aa9362fd198bae5a`, empty until a separately approved seed.
 #
 # Staging only: production and E2E declare nothing for it, and the top-level
 # exports table is unchanged. All three exports above are kept.
@@ -250,8 +256,11 @@ storage = "sqlite"
 name = "IDENTITY_CATALOG"
 class_name = "IdentityCatalog"
 
+# IDENTITY_REVIEWER_CREDENTIALS (U11 G2) is the closed JSON array of
+# individual identity credentials: digests, roles and expiry only, never a
+# token. It is put before the first deploy that requires it.
 [env.staging.secrets]
-required = ["ADMIN_TOKEN", "JOLPICA_PROXY_TOKEN"]
+required = ["ADMIN_TOKEN", "JOLPICA_PROXY_TOKEN", "IDENTITY_REVIEWER_CREDENTIALS"]
 
 [[env.staging.kv_namespaces]]
 binding = "GRIDVIEW_DATA"

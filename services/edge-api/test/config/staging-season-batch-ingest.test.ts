@@ -123,12 +123,12 @@ describe('the resolved configuration', () => {
       SEASON_PUBLICATION_CUTOVER_CONTROL: 'activate:2026',
       SEASON_PUBLICATION_AUTHORITY: 'sequencer',
       SEASON_BATCH_INGEST: '2026',
-      // Identity U11: proposed staging installation, inert (bundled/off/off;
-      // inventory mode absent = strict).
+      // Identity U11: staging installation, bundled authority with read-only
+      // administration (G2a; inventory mode absent = strict).
       IDENTITY_INSTALLATION_ID: 'c45d60b8-a723-4b6e-8530-750592af2b94',
       IDENTITY_CATALOG_MODE: 'bundled',
       IDENTITY_DISCOVERY_MODE: 'off',
-      IDENTITY_ADMIN_MODE: 'off',
+      IDENTITY_ADMIN_MODE: 'read-only',
     });
     // Assigned only in staging and production (W1), never in development.
     expect(rawConfig.match(/^\s*SEASON_BATCH_INGEST\s*=/gm)).toHaveLength(2);
