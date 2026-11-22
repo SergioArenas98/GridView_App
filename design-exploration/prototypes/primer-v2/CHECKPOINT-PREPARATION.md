@@ -1,5 +1,15 @@
 # Checkpoint preparation: Step 42A
 
+<!-- primer-v2-status-notice -->
+> **Historical record.** This document records a step of the Primer V2 design process. It is not current guidance: Primer V2 is
+> implemented in Flutter. Current guidance:
+> [GridView_Design_System.md](../../../docs/technical/GridView_Design_System.md); decisions:
+> [DESIGN-DECISIONS.md](DESIGN-DECISIONS.md); open work:
+> [DESIGN-BACKLOG.md](DESIGN-BACKLOG.md). Statements about status, next steps or
+> what is not yet implemented describe the date it was written. Validation
+> folders it names (`validation-*/`) are not part of the published
+> repository; see [Validation output](README.md#validation-output).
+
 Prepared 2026-11-09 (Step 42A). **Step 42B, same day:** the owner approved
 Option A. The Appendix A block was then appended to
 `design-exploration/.gitignore` and the checkpoint was staged with explicit

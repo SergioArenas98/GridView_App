@@ -1,5 +1,14 @@
 # Primer V2 Light: visual role freeze (Step 53F)
 
+<!-- primer-v2-status-notice -->
+> **Implemented (2026-11-22).** This document remains authoritative for
+> design intent. It is implemented in Flutter (`lib/core/theme/`,
+> `lib/core/widgets/gv_primer_*.dart`); accepted implementation
+> exceptions are recorded in [GridView_Primer_V2_Theme_Foundation.md](../../../docs/technical/GridView_Primer_V2_Theme_Foundation.md),
+> and the current overview is [GridView_Design_System.md](../../../docs/technical/GridView_Design_System.md).
+> Validation folders cited as evidence (`validation-*/`) are not part of the
+> published repository; see [Validation output](README.md#validation-output).
+
 **Status: frozen, 2026-11-13 (Step 53F, formal Primer V2 Light visual
 closure, LT-18).** It records the approved Light roles (decision log LT-1 to
 LT-17). Primer V2 Light, in the approved **B Motorsport** direction, is the

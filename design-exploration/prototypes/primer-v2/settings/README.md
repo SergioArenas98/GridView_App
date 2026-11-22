@@ -1,5 +1,15 @@
 # GridView — Primer V2: Settings and preferences (part 1 of 2)
 
+<!-- primer-v2-status-notice -->
+> **Historical record.** This document describes an early per-screen prototype that the approved Dark and Light references replaced. It is not current guidance: Primer V2 is
+> implemented in Flutter. Current guidance:
+> [GridView_Design_System.md](../../../../docs/technical/GridView_Design_System.md); decisions:
+> [DESIGN-DECISIONS.md](../DESIGN-DECISIONS.md); open work:
+> [DESIGN-BACKLOG.md](../DESIGN-BACKLOG.md). Statements about status, next steps or
+> what is not yet implemented describe the date it was written. Validation
+> folders it names (`validation-*/`) are not part of the published
+> repository; see [Validation output](../README.md#validation-output).
+
 Hand-built HTML/CSS prototype of the **Settings root** and the three
 **preference selection screens** (Language, Theme, Time display), dark-first,
 English and Spanish. Not a Flutter implementation. Delivered 2026-11-08,

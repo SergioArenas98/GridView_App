@@ -1,9 +1,22 @@
 # GridView Primer V2 theme foundation (Step 55A)
 
-Status: **foundation installed (Step 55A) plus the first shared components and
-Archivo (Step 55B.1); not activated.** No production screen uses Primer V2.
-XS-28 stays open until every screen has migrated and the legacy palette is
-retired.
+Status: **migration complete (2026-11-22, Step 55C.16R).** Every production
+screen, the app shell, the environment strip and the fixture banner render
+with Primer V2 in Dark and Light. The current overview and the guidance for
+new screens are in
+[GridView_Design_System.md](GridView_Design_System.md), the primary entry
+point; this document is the **implementation record**: the per-screen
+contracts, owner decisions, exceptions and tests, kept in the order the
+migration happened (§6a–§6r, §7). Statements in earlier sections that
+describe a then-current state ("not activated", "the app shell still uses
+the legacy bar", "no widget reads `GvPrimerRoles`") are correct for the step
+that wrote them and are superseded by the later sections; §1 and §8 carry
+dated notes where that matters. What is still open: the legacy Material layer
+(SF-19 remainder, XS-33), NF-04, SETT-18 and all device validation (§6r, §8).
+
+The original Step 55A status read: foundation installed (Step 55A) plus the
+first shared components and Archivo (Step 55B.1); not activated; XS-28 stays
+open until every screen has migrated and the legacy palette is retired.
 
 Authority, highest first (see `CROSS-THEME-CONSOLIDATION.md` §0):
 `design-exploration/prototypes/primer-v2/DESIGN-DECISIONS.md` (XT-1 to XT-6,
@@ -12,6 +25,13 @@ LT-1 to LT-18, DK-1 to DK-6), then `CROSS-THEME-CONSOLIDATION.md` and
 `LIGHT-THEME-ROLES.md`. Prototypes and pilots are evidence only.
 
 ## 1. How it fits the existing theme
+
+> **Current state (2026-11-22).** Every production widget now reads
+> `GvPrimerRoles`; the legacy extensions and the `ColorScheme` built from them
+> remain only as the Material layer (`MaterialApp`, `Scaffold`, tooltip and
+> snackbar defaults, the ambient text style) and for the development
+> catalogue, and were not replaced from the Primer roles (SF-19 remainder,
+> XS-33; see §6q and §6r). The paragraphs below record the Step 55A design.
 
 There is still one theme system. `buildGridViewDarkTheme()` and
 `buildGridViewLightTheme()` (one builder, `gridview_theme.dart`) install a third
@@ -1807,6 +1827,16 @@ motion, disabled targets, catalogue rendering). Step 55A tests:
   `ThemeMode.system` in the real app; `context.gvPrimer` fallback.
 
 ## 8. Compatibility limitations
+
+> **Current state (2026-11-22).** The migration is complete. The first and
+> the last two bullets below were written during it: the legacy palette now
+> survives only in the Material layer and the catalogue (SF-19 remainder);
+> `primary_shell_nav.png` was re-baselined with the Primer navigation shell in
+> Step 55C.15F and is no longer temporary; its Windows rasterization exception
+> is still accepted, together with `explore_drivers_no_media` and
+> `explore_teams_media_dark` (current figures in
+> [`../testing/README.md`](../testing/README.md) "Canonical goldens
+> (Primer V2)").
 
 - Two palettes coexist until the migration completes; widgets must not mix
   them inside one component.

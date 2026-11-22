@@ -1,5 +1,15 @@
 # Primer V2 Light: readiness review (Steps 53E and 53F)
 
+<!-- primer-v2-status-notice -->
+> **Historical record.** This document records a step of the Primer V2 design process. It is not current guidance: Primer V2 is
+> implemented in Flutter. Current guidance:
+> [GridView_Design_System.md](../../../docs/technical/GridView_Design_System.md); decisions:
+> [DESIGN-DECISIONS.md](DESIGN-DECISIONS.md); open work:
+> [DESIGN-BACKLOG.md](DESIGN-BACKLOG.md). Statements about status, next steps or
+> what is not yet implemented describe the date it was written. Validation
+> folders it names (`validation-*/`) are not part of the published
+> repository; see [Validation output](README.md#validation-output).
+
 **Status: final. Primer V2 Light is formally approved at the visual-design
 level (LT-18, Step 53F, 2026-11-13)**, after the owner reviewed the six
 Step 53E screenshots; no visual blocker remains. Roles are frozen in

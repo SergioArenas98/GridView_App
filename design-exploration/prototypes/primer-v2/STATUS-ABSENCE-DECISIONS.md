@@ -1,5 +1,14 @@
 # Event-absence decisions: Circuit Detail and Home (Step 49B)
 
+<!-- primer-v2-status-notice -->
+> **Decision record.** The outcomes below are recorded in
+> [DESIGN-DECISIONS.md](DESIGN-DECISIONS.md) and implemented in Flutter (see
+> [GridView_Primer_V2_Theme_Foundation.md](../../../docs/technical/GridView_Primer_V2_Theme_Foundation.md)). Statements that
+> nothing is implemented, or that a step is pending, describe the date the
+> record was written. Validation folders it names (`validation-*/`) are not
+> part of the published repository; see
+> [Validation output](README.md#validation-output).
+
 **Status: decision document, 2026-11-11. Two directions accepted by the
 owner (Step 49B.1) and visually approved for future implementation (Step
 49B.2, §7); pending Flutter behaviour and test validation; nothing

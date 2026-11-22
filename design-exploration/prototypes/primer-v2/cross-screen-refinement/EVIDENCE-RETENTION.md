@@ -1,5 +1,15 @@
 # Evidence retention proposal (Steps 48B–48F)
 
+<!-- primer-v2-status-notice -->
+> **Historical record.** This document records which validation evidence
+> was kept in Git during the design process. Since the 2026-11 history
+> consolidation no validation output folder (`validation-*/`) is part of
+> the published repository, so the retention rules below no longer
+> describe what is tracked; the historical runs are retained in the
+> owner's backup of the original development history. See
+> [Validation output](../README.md#validation-output). Current guidance:
+> [GridView_Design_System.md](../../../../docs/technical/GridView_Design_System.md).
+
 **Status: proposal, 2026-11-11. Not applied.** `design-exploration/.gitignore`
 is unchanged, and nothing has been deleted, staged or committed.
 

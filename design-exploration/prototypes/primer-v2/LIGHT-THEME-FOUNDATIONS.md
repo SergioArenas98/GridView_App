@@ -1,5 +1,15 @@
 # Primer V2 Light: foundations and palette exploration (Step 53A)
 
+<!-- primer-v2-status-notice -->
+> **Historical record.** This document records a step of the Primer V2 design process. It is not current guidance: Primer V2 is
+> implemented in Flutter. Current guidance:
+> [GridView_Design_System.md](../../../docs/technical/GridView_Design_System.md); decisions:
+> [DESIGN-DECISIONS.md](DESIGN-DECISIONS.md); open work:
+> [DESIGN-BACKLOG.md](DESIGN-BACKLOG.md). Statements about status, next steps or
+> what is not yet implemented describe the date it was written. Validation
+> folders it names (`validation-*/`) are not part of the published
+> repository; see [Validation output](README.md#validation-output).
+
 **Status: exploration, 2026-11-12. Neither direction is approved.** Nothing
 here is a decision until the owner answers §9. This is a palette, surface and
 semantic-role exploration on representative components only. It is not a

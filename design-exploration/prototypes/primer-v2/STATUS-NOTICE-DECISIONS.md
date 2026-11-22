@@ -1,5 +1,14 @@
 # Concurrent status notices (Step 49D)
 
+<!-- primer-v2-status-notice -->
+> **Decision record.** The outcomes below are recorded in
+> [DESIGN-DECISIONS.md](DESIGN-DECISIONS.md) and implemented in Flutter (see
+> [GridView_Primer_V2_Theme_Foundation.md](../../../docs/technical/GridView_Primer_V2_Theme_Foundation.md)). Statements that
+> nothing is implemented, or that a step is pending, describe the date the
+> record was written. Validation folders it names (`validation-*/`) are not
+> part of the published repository; see
+> [Validation output](README.md#validation-output).
+
 **Status: decision document, closed as an exploration 2026-11-11 (Step 49D.3,
 §12).** N-1, N-3 approved; N-2 wording approved for future implementation (no
 ARB change yet); N-4 approved direction; N-5 rejected; N-6 provisionally

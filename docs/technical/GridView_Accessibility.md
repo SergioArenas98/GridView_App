@@ -7,6 +7,12 @@
 - Status: **Phase 8C-3 automated hardening implemented; one populated TalkBack
   review executed; further manual screen-reader polish deferred by product
   decision.** No accessibility certification is claimed.
+- **Primer V2 (2026-11-22):** every production screen was re-implemented in
+  Primer V2 with its own accessibility contracts, recorded in §2a. Those
+  contracts are proven at Level 1 (Flutter semantics, `flutter_tester`) only;
+  no TalkBack, Switch Access or physical-device pass has been made on the
+  Primer V2 screens. The §3 review and the §4 findings were made on the
+  pre-Primer interface; §4 notes which components the migration replaced.
 - Related documents:
   - `GridView_TRD.md` §28 (accessibility requirements)
   - `GridView_Design_System.md` (component-level semantics)
@@ -123,6 +129,79 @@ These prove the Flutter semantics and interaction layer. **They do not prove
 spoken behaviour**, and no count above should be cited as evidence that a screen
 reader behaves correctly.
 
+The table records the Phase 8C-3 baseline. At the end of the Primer V2
+migration (2026-11-22) the full Flutter suite was 3,445 passed and 1 skipped on
+the canonical Linux platform, with 90 goldens in six suites and zero drift; the
+`test/a11y` suite is retained and runs in it. The same limit applies to those
+numbers.
+
+## 2a. Primer V2 accessibility contracts
+
+The Primer V2 screens add the contracts below on top of the §2 baseline. Each
+is asserted by the screen's Primer test file (`test/screens/*_primer_test.dart`,
+`test/app/*_primer_test.dart`, `test/design_system/primer_*_test.dart`); the
+per-screen detail is in
+[GridView_Primer_V2_Theme_Foundation.md](GridView_Primer_V2_Theme_Foundation.md).
+**Evidence level: 1 only.** Every statement here was verified with
+`flutter_tester` semantics, geometry and key events, plus Chrome measurements of
+the approved prototypes. None was verified with TalkBack, Switch Access, a
+hardware keyboard on a device, or Android font scaling on a phone (backlog
+XS-02, XS-05, XS-16).
+
+- **Targets.** Every interactive element has a hit area of at least 48 × 48dp
+  (`GvPrimerLayout.minTarget`), including the Back button, navigation tabs,
+  segmented options, rows, link rows and team links. Two actions in one row
+  are separate targets, never nested.
+- **Headings.** The pinned screen title and every section title expose
+  heading semantics. Full-page states (loading, not found, error) have one
+  heading.
+- **Live regions.** Each page state has exactly one live region: the loading
+  announcement, the empty or error title, or the status notice
+  (`GvPrimerNotice`). The message under a title is its own node and is neither
+  a heading nor a live region (GPD-13, NF-6). Failed preference writes
+  announce through the Primer snackbar in a live region.
+- **Keyboard focus.** `GvPrimerFocusTarget` draws a 2px ring above the element,
+  never clipped by an ancestor, with no layout change and no animation. Ring
+  colour depends on the surface: Ember on the Dark page, Graphite on the Light
+  page, Chalk on oxide; in Light a 5px band of the host surface backs the ring
+  where it crosses an edge. Enter and Space activate. Traversal follows
+  reading order; pinned headers and lists are separate traversal groups, and
+  a focused block taller than its viewport is scrolled so its top and ring
+  are visible (XS-34). Navigation tab rings sit 2px inside the tab, so they
+  are 100% visible in every measured case. In Settings, keyboard and system
+  Back restore focus to the originating row; touch does not move focus.
+- **Text scaling.** Text scales with the platform text scaler, including
+  Android's non-linear curve. Display figures are capped where the
+  specification caps them. Every screen is tested in Dark and Light × English
+  and Spanish × 390dp @100% and 320dp @200%, for no overflow, no clipped or
+  mid-word-broken text and 48dp targets. Long titles use a measured fit
+  (condensed, then stacked) instead of truncation. Blocks taller than the
+  visible area are reachable line by line.
+- **Navigation labels.** The four destinations always show their full label
+  under the icon, with `selected` semantics on the current tab. At large text
+  the bar becomes a 2 × 2 grid (155dp at 320dp @200%, owner-approved) instead
+  of capping or truncating the labels.
+- **Meaning without colour.** Status is a word plus an outline pattern (solid
+  known, dashed unknown, filled Final and Live); the selected state also
+  changes label weight and exposes `selected` or `checked`.
+- **Contrast** (computed WCAG ratios, alpha composited in sRGB, in
+  `test/design_system/primer_roles_test.dart`): text ≥ 4.5:1, labels on fills
+  ≥ 4.5:1, focus rings and solid status outlines ≥ 3:1; navigation focus ring
+  against its surroundings at least 7.70:1 (Dark) and 17.05:1 (Light).
+  **Recorded exception:** the Dark segmented-control slab is 2.47:1 against
+  its container. It is accepted as a limit, not a compliance claim: the bold
+  label and `selected` semantics carry the state.
+- **System bars.** `GvPrimerSystemOverlay` requests theme-matched status-bar
+  icons and a navigation-bar colour equal to the Primer navigation in every
+  environment (XS-35). Widget tests verify the request only; actual rendering
+  on Android 14 and on 15+ edge-to-edge is unverified.
+
+Known Primer V2 limitations: the ambient 0.25px letter spacing (XS-33); the
+2 × 2 navigation takes 155dp at 320dp @200%, so lists keep less vertical space
+(content stays reachable); the device checks listed above. Open items are
+tracked in
+[`DESIGN-BACKLOG.md`](../../design-exploration/prototypes/primer-v2/DESIGN-BACKLOG.md).
+
 ---
 
 ## 3. Device and TalkBack evidence
@@ -193,6 +272,23 @@ findings: it is a visible contrast shortfall established by source inspection
 and deterministic token calculation, not by a screen-reader pass. It does change
 what is displayed, so it carries its own rationale rather than the common one
 above.
+
+**Primer V2 note (2026-11-22).** These findings were made on the pre-Primer
+interface, and the human-heard ones have **not** been re-tested since. The
+migration replaced some of the components involved; that is recorded here
+without changing any item's status:
+
+- §4.1: the Primer Settings choice screens drop the `", Selected"` suffix and
+  carry the state in the `checked` flag only (SF-6); asserted at Level 1 in
+  `test/screens/settings_primer_test.dart`.
+- §4.5: the Settings screens now restore keyboard focus to the originating
+  row after keyboard or system Back; asserted at Level 1 only, and only for
+  Settings.
+- §4.11: no production screen uses the legacy `GvSegmentedControl` any more;
+  Standings and Explore use `GvPrimerSegmentedControl`, whose selected label
+  on the oxide slab is covered by the ≥ 4.5:1 label-on-fill assertion. The
+  legacy control and its 3.55:1 pairing remain in the development catalogue
+  only.
 
 ### 4.1 Selected Settings options can announce the selected state twice
 

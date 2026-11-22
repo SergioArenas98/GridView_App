@@ -1,5 +1,14 @@
 # Primer V2 Light rollout, Batch 1 (Step 53C): Calendar, Driver Detail, Team Detail
 
+<!-- primer-v2-status-notice -->
+> **Decision record.** The outcomes below are recorded in
+> [DESIGN-DECISIONS.md](DESIGN-DECISIONS.md) and implemented in Flutter (see
+> [GridView_Primer_V2_Theme_Foundation.md](../../../docs/technical/GridView_Primer_V2_Theme_Foundation.md)). Statements that
+> nothing is implemented, or that a step is pending, describe the date the
+> record was written. Validation folders it names (`validation-*/`) are not
+> part of the published repository; see
+> [Validation output](README.md#validation-output).
+
 **Primer V2 Light formally closed at the visual-design level (LT-18, Step
 53F, 2026-11-13); roles frozen in `LIGHT-THEME-ROLES.md`.**
 

@@ -1,5 +1,14 @@
 # Visual consistency of information states (Step 49E)
 
+<!-- primer-v2-status-notice -->
+> **Decision record.** The outcomes below are recorded in
+> [DESIGN-DECISIONS.md](DESIGN-DECISIONS.md) and implemented in Flutter (see
+> [GridView_Primer_V2_Theme_Foundation.md](../../../docs/technical/GridView_Primer_V2_Theme_Foundation.md)). Statements that
+> nothing is implemented, or that a step is pending, describe the date the
+> record was written. Validation folders it names (`validation-*/`) are not
+> part of the published repository; see
+> [Validation output](README.md#validation-output).
+
 **Status: closed, 2026-11-12 (Step 49E.2, §15).** All seven owner decisions
 are recorded; the visual exploration is complete.
 - **Approved:** VS-1 (dashed outline for every unknown value, including the

@@ -1,5 +1,15 @@
 # Calendar sticky split: status notifications and extreme viewports (Step 48D)
 
+<!-- primer-v2-status-notice -->
+> **Historical record.** This document records a cross-screen experiment of the Primer V2 design process. It is not current guidance: Primer V2 is
+> implemented in Flutter. Current guidance:
+> [GridView_Design_System.md](../../../../../docs/technical/GridView_Design_System.md); decisions:
+> [DESIGN-DECISIONS.md](../../DESIGN-DECISIONS.md); open work:
+> [DESIGN-BACKLOG.md](../../DESIGN-BACKLOG.md). Statements about status, next steps or
+> what is not yet implemented describe the date it was written. Validation
+> folders it names (`validation-*/`) are not part of the published
+> repository; see [Validation output](../../README.md#validation-output).
+
 **Status: decision report, 2026-11-10.** Recommendations only. Nothing here
 is implemented, and nothing changes the experiment, the approved
 `../../calendar/`, Flutter or ARB files.
@@ -24,9 +34,10 @@ How sure each finding is:
 
 Evidence:
 
-- [`validation-20261110-211120-step48d/`](validation-20261110-211120-step48d/),
-  produced by [`step48d-checks.mjs`](step48d-checks.mjs). A second run was
-  byte-identical.
+- `validation-20261110-211120-step48d/`, produced by
+  [`step48d-checks.mjs`](step48d-checks.mjs). A second run was
+  byte-identical. That output folder is not part of the published repository
+  (see the notice above); it is retained in the original-history backup.
 - The Step 48C evidence ([`REPORT.md`](REPORT.md)), kept unchanged.
 
 ## 1. Recommended notification behaviour

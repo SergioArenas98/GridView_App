@@ -1,5 +1,15 @@
 # Annual home-light-v1 — mobile rendering QA
 
+<!-- primer-v2-status-notice -->
+> **Historical record.** This document records an exploration that preceded Primer V2. It is not current guidance: Primer V2 is
+> implemented in Flutter. Current guidance:
+> [GridView_Design_System.md](../../../../../docs/technical/GridView_Design_System.md); decisions:
+> [DESIGN-DECISIONS.md](../../../../prototypes/primer-v2/DESIGN-DECISIONS.md); open work:
+> [DESIGN-BACKLOG.md](../../../../prototypes/primer-v2/DESIGN-BACKLOG.md). Statements about status, next steps or
+> what is not yet implemented describe the date it was written. Validation
+> folders it names (`validation-*/`) are not part of the published
+> repository; see [Validation output](../../../../prototypes/primer-v2/README.md#validation-output).
+
 Source: `../home-light-v1.html`, unmodified. Captured 2026-11-07 with the same
 method as Primer (`../../../primer/stitch/mobile-qa/README.md`): Chrome 157
 headless via the DevTools Protocol, `mobile: true`, DPR 2, viewport-only

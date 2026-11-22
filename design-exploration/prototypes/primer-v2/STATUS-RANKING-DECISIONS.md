@@ -1,5 +1,14 @@
 # Ranking and missing-value semantics (Step 49C)
 
+<!-- primer-v2-status-notice -->
+> **Decision record.** The outcomes below are recorded in
+> [DESIGN-DECISIONS.md](DESIGN-DECISIONS.md) and implemented in Flutter (see
+> [GridView_Primer_V2_Theme_Foundation.md](../../../docs/technical/GridView_Primer_V2_Theme_Foundation.md)). Statements that
+> nothing is implemented, or that a step is pending, describe the date the
+> record was written. Validation folders it names (`validation-*/`) are not
+> part of the published repository; see
+> [Validation output](README.md#validation-output).
+
 **Status: decision document, 2026-11-11. RK-1 to RK-5 accepted by the owner
 (§9); RK-4 provisionally, with conditions.** Nothing implemented: Flutter,
 the tests, ARB files, the contract, the backend, the importer, the prototypes

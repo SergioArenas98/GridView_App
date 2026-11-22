@@ -1,5 +1,15 @@
 # Primer V2: screen titles, large-text header and section headings (Step 48A)
 
+<!-- primer-v2-status-notice -->
+> **Historical record.** This document records a step of the Primer V2 design process. It is not current guidance: Primer V2 is
+> implemented in Flutter. Current guidance:
+> [GridView_Design_System.md](../../../docs/technical/GridView_Design_System.md); decisions:
+> [DESIGN-DECISIONS.md](DESIGN-DECISIONS.md); open work:
+> [DESIGN-BACKLOG.md](DESIGN-BACKLOG.md). Statements about status, next steps or
+> what is not yet implemented describe the date it was written. Validation
+> folders it names (`validation-*/`) are not part of the published
+> repository; see [Validation output](README.md#validation-output).
+
 **Status: decision preparation, 2026-11-10, at `e3e9f88`.** Nothing here is
 approved, applied or closed. Scope is limited to XS-07 (titles), XS-06
 (large-text header) and XS-29 (section headings). `DESIGN-DECISIONS.md` and

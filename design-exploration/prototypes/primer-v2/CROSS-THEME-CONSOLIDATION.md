@@ -1,5 +1,14 @@
 # Primer V2: cross-theme visual specification (Steps 54B and 54C)
 
+<!-- primer-v2-status-notice -->
+> **Implemented (2026-11-22).** This document remains authoritative for
+> design intent. It is implemented in Flutter (`lib/core/theme/`,
+> `lib/core/widgets/gv_primer_*.dart`); accepted implementation
+> exceptions are recorded in [GridView_Primer_V2_Theme_Foundation.md](../../../docs/technical/GridView_Primer_V2_Theme_Foundation.md),
+> and the current overview is [GridView_Design_System.md](../../../docs/technical/GridView_Design_System.md).
+> Validation folders cited as evidence (`validation-*/`) are not part of the
+> published repository; see [Validation output](README.md#validation-output).
+
 **Status: frozen for implementation, 2026-11-13 (Step 54C, DD XT-6).** It
 consolidates the approved Primer V2 Dark (DK-1 to DK-6, closed DK-5) and
 Light (LT-1 to LT-18, closed LT-18; coverage completed in Step 54A) into one

@@ -178,6 +178,98 @@ threshold can accept the platform noise while rejecting the colour change, so
 per-channel tolerance, platform-specific expected images and per-platform skips
 are all ruled out.
 
+## Canonical goldens (Primer V2)
+
+This section is the current reference for golden tests. The phase sections
+below record how the set grew.
+
+### Suites and baselines
+
+**90** committed baselines from **six** suites, each the only owner of a
+`matchesGoldenFile` assertion in the repository:
+
+| Suite | File | Baselines | Directory |
+|---|---|---:|---|
+| Design system (legacy components, catalogue) | `test/design_system/golden_test.dart` | 5 | `test/design_system/goldens/` |
+| Screens | `test/screens/screen_golden_test.dart` | 40 | `test/screens/goldens/` |
+| Light theme | `test/screens/light_theme_golden_test.dart` | 8 | `test/screens/goldens/` |
+| Global UI (navigation, environment strip, fixture banner, cropped) | `test/screens/global_ui_golden_test.dart` | 10 | `test/screens/goldens/` |
+| Settings | `test/settings/settings_golden_test.dart` | 20 | `test/settings/goldens/` |
+| Media | `test/media/media_golden_test.dart` | 7 | `test/media/goldens/` |
+
+Both workflows that run goldens list exactly these six files in this order:
+the golden-freshness job in `.github/workflows/pull_request.yml` and the
+manual `.github/workflows/render-canonical-goldens.yml`. A new golden suite
+must be added to both.
+
+### Environment
+
+- **Canonical platform:** Linux, Flutter **3.44.0** (pinned in `.fvmrc`; the
+  workflows read it from there).
+- **Comparator:** `test/flutter_test_config.dart`, 2% differing-pixel
+  tolerance for ordinary runs (unchanged; see "Golden tolerance" above).
+- **Test font: Ahem.** Golden tests do not load Archivo. Ahem draws each glyph
+  as a 1em square and Material icons as hollow squares, so a golden pins
+  layout, colour, geometry and the presence and order of text, **not** real
+  typography. Ahem labels are wider than Archivo, so, for example, every golden
+  that shows the app shell renders the 2 × 2 navigation even at 390dp @100%,
+  where the app shows one row (owner decision D2, GI-9).
+- **Real-font verification is elsewhere:** layout tests that load Archivo
+  (`test/support/primer_fonts.dart`, `loadArchivo`) assert real widths, line
+  counts and fits; and the `tool/primer_review/` capture scripts render the
+  Flutter screens with Archivo next to the approved HTML prototypes into
+  `build/primer-review/` for visual review. Those captures are evidence for
+  people; they are never committed and are not goldens.
+
+### Gates
+
+| Gate | Where | Allowance |
+|---|---|---|
+| `flutter test` (all suites) | every platform | 2% |
+| Canonical golden freshness (`golden-freshness` job) | Linux CI | zero: regenerates the six suites with `--update-goldens`, requires `git diff --exit-code` over the four golden directories, and self-tests by corrupting `test/screens/goldens/home_pre_event.png` |
+
+### Accepted Windows exceptions
+
+Three Linux baselines exceed the 2% tolerance on Windows by font
+anti-aliasing at glyph edges only (no layout change). They pass on Linux. The
+owner accepted them as Windows-only rasterization exceptions; the tolerance
+stays at 2%, the baselines are unchanged and the tests are not skipped:
+
+| Golden | Windows difference (2026-11-22, at the publication candidate) |
+|---|---:|
+| `test/screens/goldens/primary_shell_nav.png` | 2.26% |
+| `test/media/goldens/explore_drivers_no_media.png` | 2.10% |
+| `test/media/goldens/explore_teams_media_dark.png` | 2.16% |
+
+A full Windows run therefore reports exactly these three failures and no
+other. Any other Windows golden failure is a real regression.
+
+### Regenerating baselines (zero drift)
+
+Only when the appearance changes intentionally, and only on Linux with
+Flutter 3.44.0. Never author a baseline on Windows or macOS.
+
+1. Make the change and run `flutter test` locally (the 2% gate).
+2. Render on the canonical platform, either:
+   - **Render canonical goldens** workflow (manual dispatch on the branch or
+     commit), then download the `canonical-goldens` artifact; or
+   - a local Linux container with the same SDK, as the Primer V2 migration
+     did: `ghcr.io/cirruslabs/flutter:3.44.0`, on a copy of the tree made with
+     `git ls-files -co --exclude-standard` (no build output), with
+     `flutter pub get` in the fresh container, then the same six-suite
+     command with `--update-goldens`.
+3. Inspect every changed image. Copy only the approved baselines; compare
+   the rest by SHA-256 and expect them to be byte-identical to the base
+   commit.
+4. Run the same regeneration a second time on the result and require zero
+   drift (no file changes), as the freshness job does.
+5. Commit the approved baselines with the change. CI then checks both the
+   2% gate and zero-drift freshness.
+
+Every Primer V2 baseline was rendered in that container; until the branch
+first runs in GitHub Actions, the container, not a hosted runner, is the
+recorded canonical evidence.
+
 ## Navigation & screen skeletons (Phase 3B)
 
 Router and screens are covered end-to-end through the real `GoRouter` via
@@ -308,7 +400,10 @@ flutter test test/observability
 
 ## Canonical golden status
 
-**No golden is pending regeneration.**
+**No golden is pending regeneration** (2026-11-22, end of the Primer V2
+migration: 90/90 on canonical Linux, zero drift). Current suites, counts and
+procedure: "Canonical goldens (Primer V2)" above. The paragraphs below record
+the Phase 8C-1 status.
 
 The Phase 8C-1 Privacy-screen copy change (live status plus the diagnostics
 disclosure) legitimately changed three baselines:
@@ -2102,32 +2197,27 @@ none may be described as passed.
 
 ### Golden accounting
 
-Three quantities that are easy to run together. They currently coincide at 71,
-but they are different measurements:
+Three quantities that are easy to run together. They currently coincide at
+**90** (2026-11-22; they were 71 at Phase 8C-3), but they are different
+measurements:
 
 | Quantity | Value |
 |---|---|
-| Committed golden PNG baselines under `test/**/goldens/` | **71** |
-| Golden test declarations | **71** |
-| Golden cases executed and passing | **71** |
+| Committed golden PNG baselines under `test/**/goldens/` | **90** |
+| Golden test declarations | **90** |
+| Golden cases executed and passing (canonical Linux) | **90** |
 
-Across **five** suites:
-
-| Suite | File | Cases |
-|---|---|---:|
-| Design system | `test/design_system/golden_test.dart` | 5 |
-| Screens | `test/screens/screen_golden_test.dart` | 35 |
-| Light theme | `test/screens/light_theme_golden_test.dart` | 8 |
-| Settings | `test/settings/settings_golden_test.dart` | 16 |
-| Media | `test/media/media_golden_test.dart` | 7 |
+Across **six** suites; the per-suite table is in "Canonical goldens
+(Primer V2)" above (5 + 40 + 8 + 10 + 20 + 7).
 
 Counting `matchesGoldenFile` **call sites** gives a different and misleading
-number (45), because three suites route through a shared helper. Count
+number (53), because several suites route through a shared helper. Count
 declarations, or run the suites.
 
 The repository also contains 20 Android launcher-icon PNGs under
 `android/app/src/main/res/mipmap-*`. Those are **not** goldens and must not be
 included in a golden count.
 
-**Goldens are never regenerated locally** — see "Linux is the canonical golden
-environment" above.
+**Goldens are never regenerated on Windows or macOS.** They are rendered only
+on Linux with Flutter 3.44.0, through the manual workflow or the canonical
+container; see "Canonical goldens (Primer V2)" above.

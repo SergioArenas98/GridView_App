@@ -1,5 +1,14 @@
 # Primer V2 Dark: visual role freeze (Step 51D)
 
+<!-- primer-v2-status-notice -->
+> **Implemented (2026-11-22).** This document remains authoritative for
+> design intent. It is implemented in Flutter (`lib/core/theme/`,
+> `lib/core/widgets/gv_primer_*.dart`); accepted implementation
+> exceptions are recorded in [GridView_Primer_V2_Theme_Foundation.md](../../../docs/technical/GridView_Primer_V2_Theme_Foundation.md),
+> and the current overview is [GridView_Design_System.md](../../../docs/technical/GridView_Design_System.md).
+> Validation folders cited as evidence (`validation-*/`) are not part of the
+> published repository; see [Validation output](README.md#validation-output).
+
 **Status: frozen, 2026-11-12 (Step 51E, formal Primer V2 Dark visual
 closure).** It records the approved dark roles (decision log DK-1 to DK-6).
 **DK-5 (approved):** Primer V2 Dark is the visual design reference for

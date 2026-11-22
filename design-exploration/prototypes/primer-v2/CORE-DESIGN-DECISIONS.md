@@ -1,5 +1,15 @@
 # Primer V2: core design-system decisions for owner review
 
+<!-- primer-v2-status-notice -->
+> **Historical record.** This document records a step of the Primer V2 design process. It is not current guidance: Primer V2 is
+> implemented in Flutter. Current guidance:
+> [GridView_Design_System.md](../../../docs/technical/GridView_Design_System.md); decisions:
+> [DESIGN-DECISIONS.md](DESIGN-DECISIONS.md); open work:
+> [DESIGN-BACKLOG.md](DESIGN-BACKLOG.md). Statements about status, next steps or
+> what is not yet implemented describe the date it was written. Validation
+> folders it names (`validation-*/`) are not part of the published
+> repository; see [Validation output](README.md#validation-output).
+
 **Status: refined proposals, 2026-11-08 (Step 38B).** The owner accepted the
 general direction of all three for further consolidation. **This is not final
 approval:** none of the policies is approved, and XS-28, XS-03, XS-04, XS-07

@@ -1,5 +1,14 @@
 # Primer V2: design backlog
 
+<!-- primer-v2-status-notice -->
+> **Implemented (2026-11-22).** This document remains authoritative for
+> design intent. It is implemented in Flutter (`lib/core/theme/`,
+> `lib/core/widgets/gv_primer_*.dart`); accepted implementation
+> exceptions are recorded in [GridView_Primer_V2_Theme_Foundation.md](../../../docs/technical/GridView_Primer_V2_Theme_Foundation.md),
+> and the current overview is [GridView_Design_System.md](../../../docs/technical/GridView_Design_System.md).
+> Validation folders cited as evidence (`validation-*/`) are not part of the
+> published repository; see [Validation output](README.md#validation-output).
+
 Central list of **unresolved** work from the Primer V2 exploration (Home,
 Calendar, Standings, Explore, Grand Prix Detail, Driver Detail, Team Detail,
 Circuit Detail, Settings). Decisions live in

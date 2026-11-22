@@ -1,5 +1,15 @@
 # GridView — Pre-Redesign UI/UX Audit
 
+<!-- primer-v2-status-notice -->
+> **Historical record.** This document records the audit of the pre-redesign interface that preceded Primer V2. It is not current guidance: Primer V2 is
+> implemented in Flutter. Current guidance:
+> [GridView_Design_System.md](../docs/technical/GridView_Design_System.md); decisions:
+> [DESIGN-DECISIONS.md](prototypes/primer-v2/DESIGN-DECISIONS.md); open work:
+> [DESIGN-BACKLOG.md](prototypes/primer-v2/DESIGN-BACKLOG.md). Statements about status, next steps or
+> what is not yet implemented describe the date it was written. Validation
+> folders it names (`validation-*/`) are not part of the published
+> repository; see [Validation output](prototypes/primer-v2/README.md#validation-output).
+
 ## 1. Executive Summary
 
 GridView’s presentation can be substantially redesigned without replacing its application architecture. Its existing Flutter implementation separates domain data, presentation states, formatting, navigation, media handling, and reusable widgets. Those boundaries provide a useful foundation for changing the visual identity while preserving information and behavior.

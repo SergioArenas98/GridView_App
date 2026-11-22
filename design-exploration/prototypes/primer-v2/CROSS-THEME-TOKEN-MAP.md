@@ -1,5 +1,14 @@
 # Primer V2: cross-theme token and component map (Steps 54B and 54C)
 
+<!-- primer-v2-status-notice -->
+> **Implemented (2026-11-22).** This document remains authoritative for
+> design intent. It is implemented in Flutter (`lib/core/theme/`,
+> `lib/core/widgets/gv_primer_*.dart`); accepted implementation
+> exceptions are recorded in [GridView_Primer_V2_Theme_Foundation.md](../../../docs/technical/GridView_Primer_V2_Theme_Foundation.md),
+> and the current overview is [GridView_Design_System.md](../../../docs/technical/GridView_Design_System.md).
+> Validation folders cited as evidence (`validation-*/`) are not part of the
+> published repository; see [Validation output](README.md#validation-output).
+
 **Status: frozen for implementation, 2026-11-13 (Step 54C, DD XT-6). Not a
 Flutter token file** (XS-28 open). Companion to [`CROSS-THEME-CONSOLIDATION.md`](CROSS-THEME-CONSOLIDATION.md),
 which holds the findings, decisions and acceptance criteria. Every value
