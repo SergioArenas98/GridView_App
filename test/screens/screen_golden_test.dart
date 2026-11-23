@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:gridview/app/environment/app_environment.dart';
 import 'package:gridview/core/api/errors/api_failure.dart';
+import 'package:gridview/core/preferences/preference_values.dart';
 import 'package:gridview/core/widgets/widgets.dart';
 import 'package:gridview/features/shared/domain/entities/calendar_entry.dart';
 import 'package:gridview/features/shared/domain/entities/circuit.dart';
@@ -16,6 +17,8 @@ import 'package:gridview/features/shared/domain/entities/session.dart';
 import 'package:gridview/features/shared/domain/entities/standing_entry.dart';
 import 'package:gridview/features/shared/domain/entities/sync_state.dart';
 import 'package:gridview/features/shared/domain/refresh_result.dart';
+import 'package:gridview/features/shared/presentation/not_found_screen.dart';
+import 'package:gridview/features/shared/presentation/widgets/primer_detail_app_bar.dart';
 
 import '../support/domain_fixtures.dart';
 import '../support/entity_fixtures.dart';
@@ -41,13 +44,19 @@ Future<void> _pump(WidgetTester tester, String location) async {
 void main() {
   _phase7cGoldens();
   _phase7dHomeGoldens();
+  _notFoundGoldens();
 
+  // The app-shell navigation over Home (Step 55C.15: the Primer V2
+  // GvPrimerBottomNav replaced the legacy pill). The baseline is re-recorded
+  // only in the canonical validation pass after owner approval. Material
+  // icons render as hollow squares in the test font; that is a
+  // test-rendering limitation, not the production design.
   testWidgets('golden: primary shell pill navigation', (
     WidgetTester tester,
   ) async {
     await _pump(tester, '/');
     await expectLater(
-      find.byType(GvBottomNav),
+      find.byType(GvPrimerBottomNav),
       matchesGoldenFile('goldens/primary_shell_nav.png'),
     );
   });
@@ -896,6 +905,111 @@ void _phase7dHomeGoldens() {
     await expectLater(
       find.byType(MaterialApp),
       matchesGoldenFile('goldens/home_large_text_narrow.png'),
+    );
+  });
+}
+
+// --- Step 55C.14F: NotFoundScreen in Primer V2 (DD NF-8) --------------------
+//
+// The four owner-approved baselines, each through the real router, with
+// theme, language, platform brightness, surface size and text scale pinned.
+// The Back context is the router's own:
+// - unknown route, a direct entry (`errorBuilder`): nothing to pop, no Back;
+// - invalid Grand Prix season, a deep link: Calendar below, Back present;
+// - invalid driver id, a direct entry: nothing to pop, no Back.
+// The Ahem test font draws text as blocks and the Material icons as hollow
+// squares, as in every screen golden. Copy and icons are covered by
+// `not_found_primer_test.dart`.
+void _notFoundGoldens() {
+  Future<void> pumpNotFound(
+    WidgetTester tester, {
+    required String location,
+    required AppThemePreference theme,
+    AppLanguagePreference language = AppLanguagePreference.english,
+    Size surfaceSize = _device,
+    double textScale = 1.0,
+  }) async {
+    await pumpApp(
+      tester,
+      initialLocation: location,
+      surfaceSize: surfaceSize,
+      textScale: textScale,
+      disableAnimations: true,
+      preferences: AppPreferences(
+        language: language,
+        theme: theme,
+        timeDisplay: TimeDisplayPreference.device,
+      ),
+      // The explicit theme preference must win over the platform.
+      platformBrightness: theme == AppThemePreference.dark
+          ? Brightness.light
+          : Brightness.dark,
+    );
+    expect(find.byType(NotFoundScreen), findsOneWidget);
+  }
+
+  Finder back() => find.byType(PrimerDetailBackButton);
+
+  testWidgets('golden: not found, unknown route, dark', (
+    WidgetTester tester,
+  ) async {
+    await pumpNotFound(
+      tester,
+      location: '/totally/unknown',
+      theme: AppThemePreference.dark,
+    );
+    expect(back(), findsNothing);
+    await expectLater(
+      find.byType(MaterialApp),
+      matchesGoldenFile('goldens/not_found_unknown_dark.png'),
+    );
+  });
+
+  testWidgets('golden: not found, unknown route, light', (
+    WidgetTester tester,
+  ) async {
+    await pumpNotFound(
+      tester,
+      location: '/totally/unknown',
+      theme: AppThemePreference.light,
+    );
+    expect(back(), findsNothing);
+    await expectLater(
+      find.byType(MaterialApp),
+      matchesGoldenFile('goldens/not_found_unknown_light.png'),
+    );
+  });
+
+  testWidgets('golden: not found, invalid parameters, dark, Back present', (
+    WidgetTester tester,
+  ) async {
+    await pumpNotFound(
+      tester,
+      location: '/calendar/notyear/3',
+      theme: AppThemePreference.dark,
+    );
+    expect(back(), findsOneWidget);
+    await expectLater(
+      find.byType(MaterialApp),
+      matchesGoldenFile('goldens/not_found_invalid_dark.png'),
+    );
+  });
+
+  testWidgets('golden: not found, invalid parameters, light, Spanish, '
+      '320dp at 200%', (WidgetTester tester) async {
+    await pumpNotFound(
+      tester,
+      location: '/drivers/BAD_ID',
+      theme: AppThemePreference.light,
+      language: AppLanguagePreference.spanish,
+      surfaceSize: const Size(320, 693),
+      textScale: 2.0,
+    );
+    expect(back(), findsNothing);
+    expect(tester.takeException(), isNull);
+    await expectLater(
+      find.byType(MaterialApp),
+      matchesGoldenFile('goldens/not_found_invalid_light_large_text.png'),
     );
   });
 }

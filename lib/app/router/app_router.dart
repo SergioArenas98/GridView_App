@@ -21,6 +21,7 @@ import 'entity_navigation.dart';
 import 'route_names.dart';
 import 'route_params.dart';
 import 'route_paths.dart';
+import 'shell_branch_resets.dart';
 
 /// Builds the GridView router.
 ///
@@ -49,6 +50,7 @@ GoRouter buildGridViewRouter({String initialLocation = RoutePaths.home}) {
       GlobalKey<NavigatorState>(debugLabel: 'gv-standings');
   final GlobalKey<NavigatorState> exploreNavigatorKey =
       GlobalKey<NavigatorState>(debugLabel: 'gv-explore');
+  final ShellBranchResets branchResets = ShellBranchResets();
 
   return GoRouter(
     initialLocation: initialLocation,
@@ -62,7 +64,10 @@ GoRouter buildGridViewRouter({String initialLocation = RoutePaths.home}) {
               BuildContext context,
               GoRouterState state,
               StatefulNavigationShell navigationShell,
-            ) => AppShell(navigationShell: navigationShell),
+            ) => AppShell(
+              navigationShell: navigationShell,
+              branchResets: branchResets,
+            ),
         branches: <StatefulShellBranch>[
           // --- Home branch ---
           StatefulShellBranch(
@@ -133,13 +138,23 @@ GoRouter buildGridViewRouter({String initialLocation = RoutePaths.home}) {
                 path: RoutePaths.standingsDriversPattern,
                 name: RouteNames.standingsDrivers,
                 builder: (BuildContext context, GoRouterState state) =>
-                    _standings(state, StandingsChampionship.drivers),
+                    _standings(
+                      context,
+                      state,
+                      StandingsChampionship.drivers,
+                      branchResets,
+                    ),
               ),
               GoRoute(
                 path: RoutePaths.standingsConstructorsPattern,
                 name: RouteNames.standingsConstructors,
                 builder: (BuildContext context, GoRouterState state) =>
-                    _standings(state, StandingsChampionship.constructors),
+                    _standings(
+                      context,
+                      state,
+                      StandingsChampionship.constructors,
+                      branchResets,
+                    ),
               ),
             ],
           ),
@@ -303,10 +318,35 @@ int? _originSeason(GoRouterState state) {
   return extra is EntityNavigationOrigin ? extra.season : null;
 }
 
-Widget _standings(GoRouterState state, StandingsChampionship championship) {
+Widget _standings(
+  BuildContext context,
+  GoRouterState state,
+  StandingsChampionship championship,
+  ShellBranchResets branchResets,
+) {
   final int? season = RouteParams.season(state.pathParameters['season']);
   if (season == null) {
-    return const NotFoundScreen(kind: NotFoundKind.invalidParameters);
+    // The invalid route is shown inside the Standings branch, which would
+    // keep it as the branch's location. While it is mounted the page reports
+    // itself to the shell, so leaving through another tab and coming back
+    // opens Standings at its initial location (NF-03). "Go to Home" also
+    // asks for that reset explicitly (NF-02).
+    return ShellBranchInvalidPage(
+      resets: branchResets,
+      child: NotFoundScreen(
+        kind: NotFoundKind.invalidParameters,
+        onGoHome: () {
+          // The branch the screen is shown in, read from the shell rather
+          // than duplicated as a constant, so a branch reorder cannot reset
+          // the wrong one.
+          final int? branch = StatefulNavigationShell.maybeOf(
+            context,
+          )?.currentIndex;
+          if (branch != null) branchResets.request(branch);
+          GoRouter.of(context).go(RoutePaths.home);
+        },
+      ),
+    );
   }
   return StandingsScreen(championship: championship, season: season);
 }

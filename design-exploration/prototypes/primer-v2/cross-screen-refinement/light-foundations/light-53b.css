@@ -1,0 +1,52 @@
+/* EXPERIMENT (Step 53B), not an approved design: Light focus and
+   team-colour corrections on top of the approved B Motorsport (LT-1).
+   Loaded after light-roles.css, light-b.css and light-bm.css.
+
+   Nothing here changes the resting composition except item 5 (team ticks
+   below 3:1). Items 1-4 apply only while an element shows keyboard focus.
+   No colour is new: the mask bands use the surface the control already sits
+   on (--tray, --ground); the edge uses the surface's primary text colour.
+   No size, offset of content, target, order or semantics changes.
+
+   Principle (extends DK-3, "the ring is painted above decoration"): where a
+   focus ring would cross a decorative or selected fill of another colour,
+   the ring keeps its own surface under it, as a narrow band of that surface
+   colour painted between the ring and the fill. The ring then contrasts with
+   what is actually next to it, on its whole perimeter. */
+
+/* 1. LT-4. Segmented selector, focused UNSELECTED option: the selected slab's
+      12-degree tip runs under this option's inset ring (-3px, 2px wide).
+      A 5px inset band of the selector surface (--tray) covers the tip
+      locally, so the Graphite ring sits on tray. The selected option keeps
+      its Chalk ring on oxide (unchanged); selection stays the filled slab. */
+.seg__btn[aria-pressed="false"]:focus-visible { box-shadow: inset 0 0 0 5px var(--tray); }
+
+/* 2. LT-5. GP winner row: refine-focus.css already paints the row's ring
+      above the retained gradient cell (DK-6). A 5px inset band of the row's
+      surface (--ground) now separates the Graphite ring from the gradient
+      locally while the row is focused. The gradient itself is unchanged;
+      ordinary and non-finisher rows are unchanged. */
+.cl--winner .cl__hit:focus-visible { box-shadow: inset 0 0 0 5px var(--ground); }
+
+/* 3. GP Detail back button: the ring (offset 3px + 2px) ended exactly on the
+      app bar's lower edge, where the Graphite band starts (1.27:1). Offset
+      1px keeps a 1px page gap and the bar's hairline between ring and band.
+      Ring colour, width, shape and the button are unchanged. */
+.dbar .icon-btn:focus-visible { outline-offset: 1px; }
+
+/* 4. Home hero: base.css gives every :focus-visible element a 6px radius.
+      On the B Motorsport strip that rounded the strip's top corners while
+      focused, cutting two white notches into the approved strip. The card's
+      own clip keeps the bottom corners rounded. The ring (on .hero) is
+      unchanged. */
+.hero__action:focus-visible { border-radius: 0; }
+
+/* 5. LT-6 / XS-25. Team-colour tick below 3:1 against its surface gets a
+      1px edge in the surface's primary text colour (Graphite on Light),
+      outside the 3px tick. The supplied colour is never changed. Mirrors
+      Team Detail TM-03 (Chalk edge in Dark). The selection by colour value
+      stands in for the runtime contrast test Flutter would make
+      (GvTeamAccent); on this Light page: #FF8000 2.13, #0093CC 2.94 get the
+      edge, #1E41FF 5.46 does not. */
+.ent[style*="#FF8000"] .ent__link::before,
+.ent[style*="#0093CC"] .ent__link::before { box-shadow: 0 0 0 1px var(--text); }

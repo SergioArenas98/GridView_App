@@ -1,0 +1,378 @@
+/* GridView — Primer V2: Grand Prix Detail. Loads after primer-core.css
+   (byte-identical copy of the shared foundation) and only adds to it.
+   Conventions as the other screens: text in rem, layout in px, display
+   figures capped with min() (Android-like non-linear scaling).
+
+   Composition: a race-control sheet. The identity band is full-bleed (not a
+   card, not Home's lit panel): round figure | 12° oxide seam | event name,
+   with a fact rail underneath. The schedule is a timetable read down a time
+   column, grouped by day. The classification hangs off a timing-tower rail:
+   positions sit in a continuous tray strip at the screen edge, the confirmed
+   winner's cell is the one Red Oxide block in it.
+
+   Detail screens open on the root navigator in Flutter: no bottom
+   navigation here, only the app bar's back action. */
+
+/* CONSOLIDATION PILOT copy of ../../grand-prix-detail/gpd.css (2026-11-10).
+   Loads after the shared foundation in ../../shared/ instead of
+   primer-core.css. Only these rules were removed, each moved verbatim to a
+   shared file: [hidden] (base.css); .dbar, .dbar__title
+   (components/detail-app-bar.css); .notice, .notice .icon
+   (components/notice.css, common subset); .empty, .empty__msg, .btn
+   (components/empty-state.css); .empty .icon, .empty__title
+   (components/empty-state-detail.css); .page, .sec, .sec__title
+   (components/detail-page.css). `.notice` keeps its local extension
+   (text-wrap: pretty). .page-notice, .empty--inline, the chip additions and
+   every composition rule stay here, unchanged, in their original order. */
+
+.nw { white-space: nowrap; }
+
+/* ---------- Detail app bar (GP01) ----------
+   Back + the event's own name, always (Flutter's grandPrixScreenTitle). One
+   line with ellipsis as in Flutter's AppBar; the full name is the hero's
+   heading, so nothing is lost. Sticky and opaque.
+   In the pilot: .dbar and .dbar__title are in
+   ../../shared/components/detail-app-bar.css, .page in detail-page.css. */
+
+.page-notice { padding: 12px var(--gutter) 0; }
+
+/* Notice (copied from standings.css, candidate for the core). In the pilot:
+   base rules in ../../shared/components/notice.css; local extension only. */
+.notice { text-wrap: pretty; }
+
+/* ---------- Chips: additions to the core vocabulary ---------- */
+.chip--done { border: 1.5px solid var(--hair-strong); }
+.chip--alert { border: 1.5px solid rgba(236, 234, 229, 0.6); }
+.chip--outline { border: 1.5px solid var(--hair-strong); }
+.chip--fastest { background: var(--raised); }
+.chip--sm { min-height: 24px; padding: 3px 8px; gap: 4px; }
+.chip .icon--sm { width: 14px; height: 14px; }
+
+/* ---------- Identity band (GP02–GP09) ---------- */
+.gp {
+  container: gp / inline-size;
+  margin-top: 12px;
+  padding: 16px var(--gutter) 0;
+  background:
+    linear-gradient(168deg, rgba(255, 255, 255, 0.045) 0%, rgba(255, 255, 255, 0) 46%),
+    var(--tray);
+  border-block: 1px solid var(--hair);
+}
+.page > .gp:first-child { margin-top: 0; border-top: 0; }
+.page-notice + .gp { margin-top: 12px; }
+.gp__chips { margin-bottom: 16px; }
+.gp__id {
+  display: grid;
+  grid-template-columns: auto 4px minmax(0, 1fr);
+  grid-template-areas:
+    "lab seam season"
+    "num seam name"
+    "num seam official";
+  grid-template-rows: auto auto 1fr;
+  column-gap: 16px;
+}
+.gp__round, .gp__who { display: contents; }
+.gp__round-label {
+  grid-area: lab; align-self: end;
+  color: var(--text-2); font-size: 0.8125rem; font-weight: 700; line-height: 1.2;
+}
+.gp__round-num {
+  grid-area: num; align-self: start;
+  margin: 6px 0 0 -3px;
+  font-size: min(5.5rem, 104px);   /* 88 */
+  font-weight: 850;
+  font-variation-settings: "wdth" 125;
+  letter-spacing: -0.05em;
+  line-height: 0.82;
+}
+.gp__seam {
+  grid-area: seam;
+  width: 4px; margin: 2px 0 4px;
+  background: var(--oxide);
+  transform: skewX(var(--cut));
+}
+.gp__season {
+  grid-area: season; align-self: end;
+  color: var(--text-2); font-size: 0.8125rem; font-weight: 600; line-height: 1.2;
+}
+.gp__name {
+  grid-area: name;
+  margin-top: 6px;
+  font-size: min(2rem, 40px);      /* 32 */
+  font-weight: 800;
+  font-variation-settings: "wdth" 78;
+  line-height: 1;
+  letter-spacing: -0.01em;
+  overflow-wrap: break-word;
+  text-wrap: balance;
+}
+.gp__official {
+  grid-area: official; align-self: start;
+  margin-top: 8px;
+  color: var(--text-2); font-size: 0.875rem; line-height: 1.35;
+  overflow-wrap: break-word;
+  text-wrap: pretty;
+}
+/* Fact rail: dates and location, labelled. Spans the band edge to edge. */
+.gp__facts {
+  margin: 16px calc(-1 * var(--gutter)) 0;
+  padding: 12px var(--gutter) 14px;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 10em), 1fr));
+  gap: 10px 20px;
+  border-top: 1px solid var(--hair);
+  background: rgba(0, 0, 0, 0.16);
+}
+.fact { min-width: 0; }
+.fact dt { color: var(--text-2); font-size: 0.8125rem; line-height: 1.3; }
+.fact dd { margin: 2px 0 0; font-size: 0.9375rem; font-weight: 650; line-height: 1.3; overflow-wrap: break-word; }
+.gp__id:last-child { padding-bottom: 18px; }
+
+/* Narrow band (320dp, or any band at large text): the figure keeps its seam
+   and the round/season labels beside it; the name takes the full width. */
+@container gp (max-width: 20em) {
+  .gp__id {
+    grid-template-areas:
+      "num seam lab"
+      "num seam season"
+      "name name name"
+      "official official official";
+    grid-template-rows: auto auto auto auto;
+    column-gap: 14px;
+  }
+  .gp__round-num { font-size: min(4rem, 72px); margin-top: 0; }
+  .gp__round-label { align-self: end; }
+  .gp__season { align-self: start; margin-top: 2px; }
+  .gp__name { margin-top: 14px; }
+}
+
+/* ---------- Circuit navigation (GP11 + GP17) ----------
+   One ruled row; the whole row is the action. Same affordance as Home's
+   "View Grand Prix" row: Chalk disc with an arrow = opens an entity. */
+.cx {
+  display: flex; align-items: center; gap: 16px;
+  min-height: 72px;
+  padding: 14px var(--gutter);
+  border-bottom: 1px solid var(--hair);
+}
+.cx:hover { background: rgba(236, 234, 229, 0.03); }
+.cx:active { background: var(--tray); }
+.cx:focus-visible { outline-offset: -3px; border-radius: 4px; }
+.cx__text { flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: flex-start; }
+.cx__kicker { color: var(--text-2); font-size: 0.8125rem; font-weight: 600; line-height: 1.3; }
+.cx__name {
+  margin-top: 2px;
+  font-size: min(1.1875rem, 30px);   /* 19 */
+  font-weight: 800;
+  font-variation-settings: "wdth" 84;
+  line-height: 1.15;
+  overflow-wrap: break-word;
+  max-width: 100%;
+}
+.cx__action { margin-top: 4px; color: var(--ember); font-size: 0.875rem; font-weight: 700; line-height: 1.3; }
+.cx__disc {
+  flex: none; display: grid; place-items: center;
+  width: 44px; height: 44px; border-radius: 50%;
+  background: var(--chalk); color: var(--on-chalk);
+  transition: transform 220ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+.cx:hover .cx__disc { transform: translateX(3px); }
+
+/* ---------- Sections (.sec, .sec__title: ../../shared/components/detail-page.css) ---------- */
+.sec__head {
+  display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between;
+  gap: 8px 12px;
+  padding: 0 var(--gutter);
+}
+.sec__notice { padding: 12px var(--gutter) 0; }
+
+/* Time zones (GP12, GP13): read with the schedule they explain. */
+.zones {
+  display: flex; flex-wrap: wrap; gap: 4px 20px;
+  margin: 6px 0 4px; padding: 0 var(--gutter);
+  font-size: 0.8125rem; line-height: 1.35;
+}
+.zones div { display: flex; flex-wrap: wrap; column-gap: 6px; }
+.zones dt { color: var(--text-2); }
+.zones dd { margin: 0; font-weight: 650; }
+
+/* ---------- Weekend schedule (GP14, S01–S05) ----------
+   A timetable. Time first, in a fixed column, so a weekend scans downward.
+   Day headers come from the primary clock's day label; consecutive sessions
+   on the same day share one, so delivered order is never changed. */
+.sched { display: none; container: sched / inline-size; }
+html:not([data-time]) .sched[data-mode="device"],
+html[data-time="device"] .sched[data-mode="device"],
+html[data-time="event"] .sched[data-mode="event"],
+html[data-time="both"] .sched[data-mode="both"],
+.states .sched { display: block; }
+.day__label {
+  display: flex; align-items: center; gap: 12px;
+  padding: 16px var(--gutter) 2px;
+  font-size: 0.875rem; font-weight: 700; line-height: 1.3;
+  color: var(--text-2);
+}
+.day__label::after { content: ""; flex: 1; height: 1px; background: var(--hair); }
+.sess {
+  display: grid;
+  grid-template-columns: var(--time-col, 7.5rem) minmax(0, 1fr);
+  column-gap: 14px;
+  align-items: baseline;
+  min-height: 56px;
+  padding: 10px var(--gutter);
+}
+.sess { position: relative; }
+.sess + .sess::before {
+  content: ""; position: absolute; top: 0; height: 1px;
+  left: calc(var(--gutter) + var(--time-col, 7.5rem) + 14px); right: var(--gutter);
+  background: var(--hair);
+}
+.sess__time { display: flex; flex-direction: column; align-items: flex-start; }
+.sess__t1 { white-space: nowrap; }
+.sess__hm {
+  font-size: min(1.375rem, 28px);   /* 22 */
+  font-weight: 800;
+  font-variation-settings: "wdth" 112;
+  letter-spacing: -0.02em;
+  line-height: 1.1;
+}
+.sess__zone { color: var(--text-2); font-size: 0.8125rem; font-weight: 700; }
+.sess__t2 { margin-top: 2px; color: var(--text-2); font-size: 0.8125rem; line-height: 1.3; }
+.sess__who { min-width: 0; }
+.sess__name {
+  font-size: 1.0625rem;              /* 17 */
+  font-weight: 750;
+  font-variation-settings: "wdth" 86;
+  line-height: 1.25;
+  overflow-wrap: break-word;
+}
+.sess__status { margin-top: 2px; color: var(--text-2); font-size: 0.8125rem; line-height: 1.3; }
+.sess__status .chip { vertical-align: middle; }
+
+/* Narrow schedule (large text): time above the name, full width each. */
+@container sched (max-width: 22em) {
+  .sess { grid-template-columns: minmax(0, 1fr); row-gap: 4px; }
+  .sess + .sess::before { left: var(--gutter); }
+}
+
+/* ---------- Classification (R01–R14) ----------
+   Timing tower: the position rail is a continuous tray strip at the screen
+   edge. Points are the right-hand value column (as in Standings), each with
+   its unit, timing under them. The whole row opens the driver; the team line
+   is its own 48px action above the row link. */
+.cls { container: cls / inline-size; margin-top: 12px; --rail: calc(var(--gutter) + min(2.5rem, 44px)); }
+.cl {
+  position: relative;
+  display: grid;
+  grid-template-columns: var(--rail) minmax(0, 1fr) auto;
+  grid-template-areas: "pos who val";
+  column-gap: 14px;
+  padding-right: var(--gutter);
+}
+.cl + .cl::before {
+  content: ""; position: absolute; top: 0; height: 1px;
+  left: calc(var(--rail) + 14px); right: var(--gutter);
+  background: var(--hair);
+}
+.cl__hit { position: absolute; inset: 0; z-index: 0; }
+.cl__hit:hover { background: rgba(236, 234, 229, 0.03); }
+.cl__hit:active { background: rgba(236, 234, 229, 0.06); }
+.cl__hit:focus-visible { outline-offset: -3px; border-radius: 4px; }
+.cl__pos {
+  grid-area: pos;
+  position: relative;
+  display: flex; justify-content: flex-end;
+  padding: 13px 10px 0 0;
+  background: var(--tray);
+  box-shadow: inset 0 -1px 0 var(--ground);
+  font-size: min(1.5rem, 30px);     /* 24 */
+  font-weight: 800;
+  font-variation-settings: "wdth" 112;
+  letter-spacing: -0.03em;
+  line-height: 1;
+  pointer-events: none;
+}
+.cl__who { grid-area: who; min-width: 0; padding-top: 12px; pointer-events: none; display: flex; flex-direction: column; align-items: flex-start; }
+.cl__kicker { color: var(--ember); font-size: 0.8125rem; font-weight: 700; line-height: 1.2; margin-bottom: 2px; }
+.cl__name {
+  font-size: 1.0625rem;              /* 17 */
+  font-weight: 750;
+  font-variation-settings: "wdth" 86;
+  line-height: 1.25;
+  overflow-wrap: break-word;
+  max-width: 100%;
+}
+.cl__name--fallback, .cl__team--fallback span { font-style: italic; font-weight: 600; font-variation-settings: "wdth" 100; }
+.cl__team {
+  position: relative; z-index: 1;
+  pointer-events: auto;
+  display: block;
+  min-height: 48px; max-width: calc(100% + 8px);
+  margin-left: -8px; padding: 13px 8px;
+  border-radius: var(--radius-sm);
+  color: var(--text-2); font-size: 0.875rem; font-weight: 600; line-height: 1.25;
+}
+.cl__team span { text-decoration: underline; text-decoration-color: var(--hair-strong); text-underline-offset: 3px; overflow-wrap: break-word; }
+.cl__team:hover { color: var(--text); background: var(--tray); }
+.cl__team:active { background: var(--raised); }
+.cl__go { width: 16px; height: 16px; stroke-width: 2.25; vertical-align: -3px; margin-left: 2px; }
+.cl__val {
+  grid-area: val;
+  padding-top: 12px;
+  display: flex; flex-direction: column; align-items: flex-end; gap: 4px;
+  text-align: right;
+  pointer-events: none;
+}
+.cl__pts {
+  font-size: min(1.375rem, 28px);   /* 22 */
+  font-weight: 800;
+  font-variation-settings: "wdth" 112;
+  letter-spacing: -0.02em;
+  line-height: 1;
+  white-space: nowrap;
+}
+.cl__unit { font-size: 0.8125rem; font-weight: 700; letter-spacing: 0; color: var(--text-2); }
+.cl__time { color: var(--text-2); font-size: 0.8125rem; font-weight: 600; white-space: nowrap; }
+
+/* Confirmed race winner (exactly one resolved P1 in a race document, the
+   home_race_winner.dart rule): the rail's only Red Oxide cell, with the 12°
+   livery edge cutting into the gap; Ember "Winner" kicker. */
+.cl--winner .cl__pos {
+  background: linear-gradient(165deg, #B04633 0%, var(--oxide) 55%, var(--oxide-deep) 100%);
+  color: var(--chalk);
+  font-size: min(1.875rem, 36px);
+  padding-top: 11px;
+}
+.cl--winner .cl__pos {
+  /* 12° livery edge inside the rail: 17px of run over the 80px row
+     (tan 12° × 80). Taller rows (large text) make the edge steeper. */
+  clip-path: polygon(0 0, 100% 0, calc(100% - 17px) 100%, 0 100%);
+  padding-right: 18px;
+}
+.cl--winner .cl__name { font-size: min(1.25rem, 30px); font-weight: 800; font-variation-settings: "wdth" 82; line-height: 1.1; }
+
+/* Narrow classification (large text): values move under the name. */
+@container cls (max-width: 21em) {
+  .cl { grid-template-columns: var(--rail) minmax(0, 1fr); grid-template-areas: "pos who" "pos val"; }
+  .cl__val { padding: 0 0 12px; flex-direction: row; flex-wrap: wrap; align-items: baseline; justify-content: flex-start; column-gap: 10px; text-align: left; }
+}
+
+/* ---------- Empty, error, loading (GP15, R15, detail states) ----------
+   In the pilot: .empty, .empty__msg, .btn in ../../shared/components/empty-state.css;
+   the 28px / 18px .empty .icon and .empty__title in empty-state-detail.css.
+   No .btn:hover here: the approved GP has none (Driver, Team, Circuit do). */
+.empty--inline { padding: 12px var(--gutter) 4px; }
+.skel { display: flex; flex-direction: column; gap: 8px; padding: 12px 0 8px; }
+.skel span { display: block; background: linear-gradient(90deg, var(--tray), var(--raised), var(--tray)); }
+.skel__hero { height: 212px; border-block: 1px solid var(--hair); margin-bottom: 20px; }
+.skel__label { width: 120px; height: 18px; margin: 0 var(--gutter) 6px; border-radius: 4px; }
+.skel__row { height: 56px; margin: 0 var(--gutter); border-radius: var(--radius-sm); }
+.skel__row--48 { height: 48px; }
+.skel--rows { padding-top: 12px; }
+
+/* Fixture-build banner (states page only) */
+.banner {
+  padding: 8px 12px; border-radius: var(--radius-sm);
+  border: 1.5px solid var(--ember); color: var(--ember);
+  font-size: 0.875rem; font-weight: 700; text-align: center;
+}

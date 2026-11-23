@@ -1,0 +1,40 @@
+/* EXPERIMENT (Step 51C), not an approved design. Loaded after the pilots'
+   own stylesheets and only overrides them; ../../shared/ and the pilot
+   stylesheets are read, never written. No new hue: every value is an
+   existing Primer V2 colour (Chalk, on-chalk, Red Oxide) or an alpha of one,
+   the same mechanism as --hair / --hair-strong and the dashed 60% border.
+
+   A1  Solid status outline, one role with a value per surface:
+       graphite surfaces  Chalk 45%    (current --hair-strong = Chalk 22%)
+       Chalk surfaces     on-chalk 55% (current Standings marker = 35%)
+       The dashed unknown border (Chalk 60%) and the solid alert border
+       (Chalk 60%) are unchanged, so both stay louder than the known chips.
+   A2  Selected slab and the Calendar next-event block: flat --oxide in place
+       of the gradient that starts at the uncatalogued #B04633.
+   A3  Focus ring drawn on Red Oxide: Chalk instead of Ember. Unselected
+       controls keep the Ember ring (Ember on graphite). */
+
+:root {
+  --x-line-status: rgba(236, 234, 229, 0.45);
+  --x-line-status-on-chalk: rgba(20, 21, 24, 0.55);
+}
+
+/* A1 */
+.chip--scheduled,
+.chip--outline,
+.chip--done,
+.chip--provisional { border-color: var(--x-line-status); }
+.st--leader .chip--provisional { border-color: var(--x-line-status-on-chalk); }
+
+/* A2 */
+.seg__btn[aria-pressed="true"]::before { background: var(--oxide); }
+.ev--next .ev__round::before { background: var(--oxide); }
+
+/* A3 */
+.seg__btn[aria-pressed="true"]:focus-visible { outline-color: var(--chalk); }
+.ev--next .ev__link:focus-visible { outline-color: var(--chalk); }
+/* A3, found by measurement in this step: the leader row's oxide ring is
+   offset 2px OUTSIDE the Chalk row, so it is drawn on graphite (2.80:1), not
+   on Chalk. The ring takes the colour of the surface it is drawn on: Ember.
+   Offset, radius and target unchanged. */
+.st--leader .st__link:focus-visible { outline-color: var(--ember); }

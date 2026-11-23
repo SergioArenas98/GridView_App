@@ -2,22 +2,28 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../app/router/entity_navigation.dart';
 import '../../../app/router/route_paths.dart';
 import '../../../core/theme/theme.dart';
-import '../../../core/widgets/widgets.dart';
 import '../../../l10n/app_localizations.dart';
 import '../../shared/application/providers.dart';
 import '../../shared/domain/entities/season_card.dart';
-import '../../shared/presentation/widgets/mock_data_banner.dart';
-import '../../shared/presentation/widgets/screen_scaffold.dart';
+import '../../shared/presentation/widgets/primer_pinned_header_layout.dart';
 import '../application/explore_providers.dart';
 import '../application/explore_state.dart';
 import '../application/explore_ui_state.dart';
 import 'explore_cards.dart';
 import 'explore_collection_view.dart';
+import 'widgets/explore_header.dart';
+import 'widgets/explore_status.dart';
 
-/// The Explore branch: the current season's Drivers, Teams and Circuits
-/// collections, read from Drift in their deterministic local order.
+/// The Explore branch, in Primer V2 (Step 55C.7): the current season's
+/// Drivers, Teams and Circuits collections, read from Drift in their
+/// deterministic local order, as a reference library (EX-01, EX-02).
+///
+/// The title row, the season and the category selector are pinned; the
+/// selected collection's caption, progress line and notices scroll with its
+/// rows (owner-approved DD EF-1, Explore only).
 ///
 /// The three categories are **route-addressable** (`/explore/drivers`,
 /// `/explore/teams`, `/explore/circuits`) and rendered by this one screen, so a
@@ -44,19 +50,54 @@ class ExploreScreen extends ConsumerStatefulWidget {
 
 class _ExploreScreenState extends ConsumerState<ExploreScreen> {
   /// One controller per category — never shared — so the three lists keep
-  /// genuinely independent positions.
-  late final Map<ExploreCategory, ScrollController> _controllers;
+  /// genuinely independent positions. Replaced as a set on a season
+  /// transition (see [_followSeason]); never mutated in place.
+  late Map<ExploreCategory, ScrollController> _controllers;
+
+  /// The last *known* resolved season the controllers belong to. A transient
+  /// unresolved (`null`) season leaves it untouched, so a same-season
+  /// recovery never resets the lists.
+  int? _season;
 
   @override
   void initState() {
     super.initState();
     final ExploreUiState ui = ref.read(exploreUiStateProvider);
-    final int? season = ref.read(exploreStateProvider(widget.category)).season;
-    _controllers = <ExploreCategory, ScrollController>{
-      for (final ExploreCategory c in ExploreCategory.values)
-        c: ScrollController(initialScrollOffset: ui.offsetFor(c, season))
-          ..addListener(() => _remember(c)),
-    };
+    _season = ref.read(exploreStateProvider(widget.category)).season;
+    _controllers = _controllersAt(
+      (ExploreCategory c) => ui.offsetFor(c, _season),
+    );
+  }
+
+  Map<ExploreCategory, ScrollController> _controllersAt(
+    double Function(ExploreCategory category) offset,
+  ) => <ExploreCategory, ScrollController>{
+    for (final ExploreCategory c in ExploreCategory.values)
+      c: ScrollController(initialScrollOffset: offset(c))
+        ..addListener(() => _remember(c)),
+  };
+
+  /// A genuine transition from one known season to a different known season
+  /// starts all three collections at the top: a new season never inherits
+  /// another season's offset (Phase 7C navigation contract).
+  ///
+  /// Runs during build, before the lists are built, so the new controllers are
+  /// the ones the new season's scroll views attach. Those views carry a
+  /// season-scoped storage key, so the previous season's views are replaced
+  /// (detaching the old controllers) and nothing is restored from page storage;
+  /// the old controllers are disposed after that frame, once detached.
+  void _followSeason(int? season) {
+    if (season == null || season == _season) return;
+    final int? previous = _season;
+    _season = season;
+    if (previous == null) return;
+    final List<ScrollController> retired = _controllers.values.toList();
+    _controllers = _controllersAt((ExploreCategory _) => 0);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      for (final ScrollController c in retired) {
+        c.dispose();
+      }
+    });
   }
 
   @override
@@ -103,122 +144,107 @@ class _ExploreScreenState extends ConsumerState<ExploreScreen> {
       exploreStateProvider(widget.category),
     );
     final ExploreCategory selected = state.selected;
-
-    return GvScreenScaffold(
-      title: l10n.exploreTitle,
-      showSettingsAction: true,
-      body: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: <Widget>[
-          _ExploreHeader(season: state.season),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(
-              GvLayout.screenPaddingHorizontal,
-              0,
-              GvLayout.screenPaddingHorizontal,
-              GvSpacing.sm,
-            ),
-            child: Semantics(
-              label: l10n.exploreCategorySelector,
-              container: true,
-              child: GvSegmentedControl(
-                segments: <String>[
-                  l10n.exploreDrivers,
-                  l10n.exploreTeams,
-                  l10n.exploreCircuits,
-                ],
-                selectedIndex: selected.index,
-                onChanged: (int index) =>
-                    _select(ExploreCategory.values[index]),
-              ),
-            ),
-          ),
-          Expanded(
-            child: switch (selected) {
-              ExploreCategory.drivers =>
-                ExploreCollectionView<SeasonDriverCard>(
-                  key: const ValueKey<String>('explore-drivers'),
-                  state: state.drivers,
-                  controller: _controllers[ExploreCategory.drivers]!,
-                  emptyTitle: l10n.exploreDriversEmptyTitle,
-                  emptyMessage: l10n.exploreDriversEmptyMessage,
-                  errorTitle: l10n.exploreDriversErrorTitle,
-                  emptyIcon: Icons.sports_motorsports_outlined,
-                  onRetry: () => _retry(ExploreCategory.drivers),
-                  itemBuilder: (BuildContext context, SeasonDriverCard card) =>
-                      ExploreDriverCardRow(card: card),
-                ),
-              ExploreCategory.teams => ExploreCollectionView<SeasonTeamCard>(
-                key: const ValueKey<String>('explore-teams'),
-                state: state.teams,
-                controller: _controllers[ExploreCategory.teams]!,
-                emptyTitle: l10n.exploreTeamsEmptyTitle,
-                emptyMessage: l10n.exploreTeamsEmptyMessage,
-                errorTitle: l10n.exploreTeamsErrorTitle,
-                emptyIcon: Icons.groups_outlined,
-                onRetry: () => _retry(ExploreCategory.teams),
-                itemBuilder: (BuildContext context, SeasonTeamCard card) =>
-                    ExploreTeamCardRow(card: card),
-              ),
-              ExploreCategory.circuits =>
-                ExploreCollectionView<SeasonCircuitCard>(
-                  key: const ValueKey<String>('explore-circuits'),
-                  state: state.circuits,
-                  controller: _controllers[ExploreCategory.circuits]!,
-                  emptyTitle: l10n.exploreCircuitsEmptyTitle,
-                  emptyMessage: l10n.exploreCircuitsEmptyMessage,
-                  errorTitle: l10n.exploreCircuitsErrorTitle,
-                  emptyIcon: Icons.route_outlined,
-                  onRetry: () => _retry(ExploreCategory.circuits),
-                  itemBuilder: (BuildContext context, SeasonCircuitCard card) =>
-                      ExploreCircuitCardRow(card: card),
-                ),
-            },
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-/// The season context and, in a fixture build only, the sample-data banner.
-///
-/// Freshness, notices and progress belong to the selected collection and are
-/// rendered with its content, so switching the selector immediately switches
-/// that context. The layout deliberately mirrors the Standings header: the
-/// season leads as a section title, and the banner follows it only when the
-/// build actually serves fixtures.
-class _ExploreHeader extends ConsumerWidget {
-  const _ExploreHeader({required this.season});
-
-  final int? season;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final AppLocalizations l10n = AppLocalizations.of(context);
+    final int? season = state.season;
+    _followSeason(season);
     final bool showMock = ref.watch(usesMockDataProvider);
-    final int? value = season;
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(
-        GvLayout.screenPaddingHorizontal,
-        GvSpacing.md,
-        GvLayout.screenPaddingHorizontal,
-        GvSpacing.sm,
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisSize: MainAxisSize.min,
-        children: <Widget>[
-          if (value != null)
-            Text(
-              l10n.seasonLabel('$value'),
-              style: context.gvText.sectionTitle,
+    final ExploreStatusFacts facts = switch (selected) {
+      ExploreCategory.drivers => ExploreStatusFacts.of(state.drivers),
+      ExploreCategory.teams => ExploreStatusFacts.of(state.teams),
+      ExploreCategory.circuits => ExploreStatusFacts.of(state.circuits),
+    };
+
+    return Scaffold(
+      backgroundColor: context.gvPrimer.surface.page,
+      body: SafeArea(
+        // Step 55C.15R: the header stays pinned unless it would leave the
+        // list less than two targets (a short viewport at large text with the
+        // strip and the 2 x 2 navigation); then it scrolls with the page.
+        child: PrimerPinnedHeaderLayout(
+          header: ExploreHeader(
+            season: season == null ? null : l10n.seasonLabel('$season'),
+            selected: selected,
+            onSelect: _select,
+            onOpenSettings: () => context.openSettings(),
+          ),
+          body: switch (selected) {
+            ExploreCategory.drivers => ExploreCollectionView<SeasonDriverCard>(
+              key: const ValueKey<String>('explore-drivers'),
+              storageKey: 'explore-drivers-list-$_season',
+              status: ExploreStatus(facts: facts, showMock: showMock),
+              onOffsetCorrected: () => _remember(ExploreCategory.drivers),
+              state: state.drivers,
+              controller: _controllers[ExploreCategory.drivers]!,
+              emptyTitle: l10n.exploreDriversEmptyTitle,
+              emptyMessage: l10n.exploreDriversEmptyMessage,
+              errorTitle: l10n.exploreDriversErrorTitle,
+              emptyIcon: Icons.sports_motorsports_outlined,
+              onRetry: () => _retry(ExploreCategory.drivers),
+              hasMedia: driverHasMedia,
+              itemBuilder:
+                  (
+                    BuildContext context,
+                    SeasonDriverCard card, {
+                    required bool mediaColumn,
+                    required bool dividerAbove,
+                  }) => ExploreDriverCardRow(
+                    card: card,
+                    mediaColumn: mediaColumn,
+                    dividerAbove: dividerAbove,
+                  ),
             ),
-          if (showMock) ...<Widget>[
-            const SizedBox(height: GvSpacing.sm),
-            const MockDataBanner(),
-          ],
-        ],
+            ExploreCategory.teams => ExploreCollectionView<SeasonTeamCard>(
+              key: const ValueKey<String>('explore-teams'),
+              storageKey: 'explore-teams-list-$_season',
+              status: ExploreStatus(facts: facts, showMock: showMock),
+              onOffsetCorrected: () => _remember(ExploreCategory.teams),
+              state: state.teams,
+              controller: _controllers[ExploreCategory.teams]!,
+              emptyTitle: l10n.exploreTeamsEmptyTitle,
+              emptyMessage: l10n.exploreTeamsEmptyMessage,
+              errorTitle: l10n.exploreTeamsErrorTitle,
+              emptyIcon: Icons.groups_outlined,
+              onRetry: () => _retry(ExploreCategory.teams),
+              hasMedia: teamHasMedia,
+              itemBuilder:
+                  (
+                    BuildContext context,
+                    SeasonTeamCard card, {
+                    required bool mediaColumn,
+                    required bool dividerAbove,
+                  }) => ExploreTeamCardRow(
+                    card: card,
+                    mediaColumn: mediaColumn,
+                    dividerAbove: dividerAbove,
+                  ),
+            ),
+            ExploreCategory.circuits =>
+              ExploreCollectionView<SeasonCircuitCard>(
+                key: const ValueKey<String>('explore-circuits'),
+                storageKey: 'explore-circuits-list-$_season',
+                status: ExploreStatus(facts: facts, showMock: showMock),
+                onOffsetCorrected: () => _remember(ExploreCategory.circuits),
+                state: state.circuits,
+                controller: _controllers[ExploreCategory.circuits]!,
+                emptyTitle: l10n.exploreCircuitsEmptyTitle,
+                emptyMessage: l10n.exploreCircuitsEmptyMessage,
+                errorTitle: l10n.exploreCircuitsErrorTitle,
+                emptyIcon: Icons.route_outlined,
+                onRetry: () => _retry(ExploreCategory.circuits),
+                hasMedia: circuitHasMedia,
+                itemBuilder:
+                    (
+                      BuildContext context,
+                      SeasonCircuitCard card, {
+                      required bool mediaColumn,
+                      required bool dividerAbove,
+                    }) => ExploreCircuitCardRow(
+                      card: card,
+                      mediaColumn: mediaColumn,
+                      dividerAbove: dividerAbove,
+                    ),
+              ),
+          },
+        ),
       ),
     );
   }

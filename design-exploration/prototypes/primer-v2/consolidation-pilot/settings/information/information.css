@@ -1,0 +1,215 @@
+/* GridView — Primer V2: Settings information screens (part 2).
+   Loads after ../primer-core.css and ../settings.css (both reused unchanged,
+   not copied: no sixth core copy, backlog XS-09) and only adds to them.
+
+   These are reading screens: disclosures, credits and build facts, some of
+   them long legal passages. The composition stays Settings': open rows on
+   graphite, the kicker section heading with its trailing rule, the detail
+   app bar, no cards, no hero, no figure. New pieces:
+   - .facts / .fact      read-only metadata group (GvSettingsField): label
+                         above value, inset hairlines, never interactive;
+   - .lede / .prose /
+     .explain / .note    long-form text at a comfortable measure (36em) and a
+                         1.55 line height; nothing truncated or clamped;
+   - .source             one attribution block per record entry: provider
+                         name (h3), notices, supplied notices, external links;
+   - .xrow               external-link row: the Settings row with Flutter's
+                         open-in-new glyph instead of the in-app chevron;
+   - .istate / .skel /
+     .notice             loading, known-empty and unavailable states.
+   Text in rem, layout in px; nothing capped for text scaling. */
+
+/* CONSOLIDATION PILOT copy (2026-11-10) of
+   ../../../settings/information/information.css. Loaded after
+   ../../../shared/tokens.css, base.css, components/app-bar.css,
+   components/notice.css and ../settings.css (the root pilot's copy).
+   Every rule is the approved rule, unchanged, except .notice and
+   .notice .icon, reduced to the declarations that differ from the shared
+   notice (see there). The S-2 title fit stays here: it is the approved
+   multi-line Settings title rule, not the detail bars' ellipsis. */
+
+/* Content scrolled to by focus never hides under the sticky chrome
+   (strip + app bar is 57-114px at 100-200%). */
+html { scroll-padding-top: calc(5.5rem + 16px); scroll-padding-bottom: 24px; }
+
+.info { padding-top: 0; }
+.info > :first-child { margin-top: 20px; }
+
+/* ---------- Long-form text ---------- */
+.lede, .explain, .prose p, .note, .istate--empty {
+  max-width: 36em;                /* ~65-70 characters of Archivo at 16px */
+  overflow-wrap: break-word;
+  text-wrap: pretty;
+}
+.lede, .explain, .prose p {
+  font-size: 1rem;                /* 16: one step above body for reading */
+  line-height: 1.55;
+}
+/* The independence statement opens Acknowledgements and Privacy and closes
+   App information. Plain text at full Chalk: a disclosure, not a banner. */
+.lede { padding: 0 var(--gutter); }
+.facts + .lede { margin-top: 24px; }
+.explain { margin: 24px var(--gutter) 0; }
+.prose { padding: 0 var(--gutter); }
+.prose p + p { margin-top: 12px; }
+.note {
+  margin: 12px var(--gutter) 0;
+  color: var(--text-2);           /* 7.95:1 */
+  font-size: 0.9375rem; line-height: 1.5;
+}
+
+/* ---------- Sections ---------- */
+.isec { margin-top: 32px; }
+.isec > .kicker { margin-bottom: 4px; }
+
+/* ---------- Read-only facts (GvSettingsField) ---------- */
+.facts { margin: 0; container: rows / inline-size; }
+.fact {
+  position: relative;
+  padding: 12px var(--gutter);
+}
+.fact + .fact {
+  background-image: linear-gradient(var(--hair), var(--hair));
+  background-size: calc(100% - 2 * var(--gutter)) 1px;
+  background-position: var(--gutter) 0;
+  background-repeat: no-repeat;
+}
+.fact dt {
+  color: var(--text-2);
+  font-size: 0.875rem; font-weight: 600; line-height: 1.3;
+  overflow-wrap: break-word;
+}
+.fact dd {
+  margin: 3px 0 0;
+  font-size: 1.0625rem; font-weight: 600; line-height: 1.35;
+  overflow-wrap: break-word;
+  text-wrap: pretty;              /* "...capturados el 2026-10-07" never leaves the date alone */
+}
+.fact--num dd { font-variant-numeric: tabular-nums lining-nums; }
+/* "Not available yet": an answer about missing data, so quieter than a value. */
+.fact--pending dd { color: var(--text-2); font-weight: 500; }
+/* Supplied legal notices: read as text, not as a value. */
+.fact--prose dd {
+  max-width: 36em;
+  font-size: 1rem; font-weight: 400; line-height: 1.55;
+  text-wrap: pretty;
+}
+.facts--supplied { margin-top: 12px; }
+.facts--supplied .fact:first-child {
+  background-image: linear-gradient(var(--hair), var(--hair));
+  background-size: calc(100% - 2 * var(--gutter)) 1px;
+  background-position: var(--gutter) 0;
+  background-repeat: no-repeat;
+}
+
+/* This session's reporting is a runtime reading, not the fixed build policy
+   above it: a dashed rule (Primer's "not fixed / not confirmed" line) sets
+   it apart, and the diagnostics note that qualifies it follows directly. */
+.facts--session .fact::before {
+  content: ""; position: absolute; top: 0;
+  left: var(--gutter); right: var(--gutter);
+  border-top: 1.5px dashed var(--hair-strong);
+}
+
+/* ---------- Attribution source block ---------- */
+.sources { display: grid; gap: 40px; }
+.source { margin-top: 8px; }
+.source__name {
+  padding: 0 var(--gutter);
+  margin-bottom: 10px;
+  font-size: 1.375rem;            /* 22: the strongest text after the title */
+  font-weight: 800;
+  font-variation-settings: "wdth" 96;
+  line-height: 1.2;
+  overflow-wrap: break-word;
+  text-wrap: balance;
+}
+
+/* ---------- External-link rows ---------- */
+.xlinks { margin-top: 12px; }
+.xlinks > li:first-child > .srow,
+.xlinks > .srow {
+  background-image: linear-gradient(var(--hair), var(--hair));
+  background-size: calc(100% - 2 * var(--gutter)) 1px;
+  background-position: var(--gutter) 0;
+  background-repeat: no-repeat;
+}
+.xlinks--policy { margin-top: 24px; }
+button.srow {
+  width: 100%; border: 0; margin: 0;
+  background-color: transparent;
+  text-align: start; cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+@media (hover: hover) { button.srow:hover { background-color: var(--tray); } }
+button.srow:active { background-color: var(--raised); }
+.xrow__value {
+  display: block;
+  margin-top: 2px;
+  font-size: 1rem; font-weight: 650; line-height: 1.35;
+  overflow-wrap: break-word;
+}
+/* A displayed address (host + path): secondary, and free to break at any
+   character, because a path has no word boundaries. */
+.xrow__value--link {
+  color: var(--text-2);
+  font-size: 0.9375rem; font-weight: 500;
+  overflow-wrap: anywhere;
+}
+.xrow__glyph { width: 20px; height: 20px; margin-right: 2px; align-self: center; }
+.xrow .srow__desc { max-width: 34em; }
+
+/* ---------- States ---------- */
+.istate { padding: 10px var(--gutter) 6px; }
+/* GvSkeletonBlock(height: 20). Static: no shimmer, so nothing to reduce. */
+.skel {
+  display: block; height: 20px; max-width: 36em;
+  border-radius: 4px;
+  background: var(--raised);
+}
+.istate--empty { color: var(--text-2); font-size: 1rem; line-height: 1.5; }
+/* The Primer notice (as Standings/Explore), for the unreadable record.
+   PILOT: the shared notice (../../../shared/components/notice.css) supplies
+   display, alignment, gap, radius, tray background, border and the icon's
+   size and colour, with values identical to the approved rule. What follows
+   is the reading-width variant, kept local (intentional, SI-01 to SI-04):
+   margin, 12px 14px padding, 15px / 1.45 text, 36em measure, icon offset. */
+.notice {
+  margin: 8px var(--gutter) 0;
+  padding: 12px 14px;
+  font-size: 0.9375rem; line-height: 1.45;
+  max-width: 36em;
+}
+.notice .icon { margin-top: 1px; }
+
+/* ---------- Prototype annotations ---------- */
+.xlinks--policy + .devnote { margin: 12px var(--gutter) 0; }
+.devnote { overflow-wrap: break-word; text-wrap: pretty; }
+
+/* Short hyphenated licence tokens ("BY-NC-SA") never split at their hyphens. */
+.nobr { white-space: nowrap; }
+
+/* ---------- App-bar title fit (approved rule S-2) ----------
+   "Agradecimientos" at 320 @200% is one word wider than its column, and
+   ../settings.css lets it break mid-word. Here the title may only wrap
+   between words; information.js narrows the width axis 88 → 76 → 66 → 62
+   and, only when a single word still overflows, scales that title down to
+   its column (as Standings' title rule). Multi-word titles just wrap. */
+.info-screen .dbar__title, .gallery .dbar__title { overflow-wrap: normal; }
+/* Gallery captions are prototype chrome: a narrower cut instead of
+   mid-word breaks at 320 @200%. */
+.gallery .frame__cap { font-variation-settings: "wdth" 80; overflow-wrap: break-word; hyphens: manual; }
+.gallery .frame { container: cap / inline-size; }
+@container cap (max-width: 10em) { .gallery .frame__cap { font-variation-settings: "wdth" 62; } }
+.dbar__title[data-fit="w76"] { font-variation-settings: "wdth" 76; }
+.dbar__title[data-fit="w66"] { font-variation-settings: "wdth" 66; }
+.dbar__title[data-fit="w62"], .dbar__title[data-fit="scaled"] { font-variation-settings: "wdth" 62; }
+
+/* Browser surfaces in the palette. */
+.info ::selection { background: var(--oxide); color: var(--chalk); }
+
+/* Large text on a narrow screen: the width axis narrows before words break
+   (the approved S-2 rule, as ../settings.css), never a smaller size. */
+@container rows (max-width: 17em) {
+  .fact:not(.fact--prose) dd { font-variation-settings: "wdth" 88; }
+}

@@ -1,0 +1,28 @@
+/* EXPERIMENT (Step 54B, XS-25), not an approved design. Loaded last on the
+   frozen Light chain (light-seam pages only); every approved sheet is only
+   read. The shared geometry is described in seam-dark.css: shape at its own
+   size in every theme and state, 1px edge in the surface's primary text
+   colour (var(--text): Graphite here) painted outside the shape, no layout.
+
+   Light today already draws the tick and line-up seam edges this way
+   (light-53b.css 5, light-b1.css 6); what changes here:
+   - rows the Dark build marked .lu--edge / .tb--edge (#1E41FF) keep Dark's
+     widened 4px seam column and 2px pinstripe in Light although no edge is
+     needed there (#1E41FF 5.46 on the page, 6.03 on the band): back to the
+     shared 2px column and 3px pinstripe;
+   - the #FF8000 banner rail (2.35 on the band): the inset 2px frame and the
+     Graphite pinstripe become the shared 1px outside edge around the
+     full-size team-colour bar and pinstripe. */
+
+@container lu not (max-width: 20em) {
+  .lu--edge .lu__row { grid-template-columns: 3.5em 2px minmax(0, 1fr) auto; }
+}
+.lu--edge .lu__seam { width: 2px; background: var(--team); }
+.tb--edge .tb__pin { height: 3px; }
+
+.tb[style*="#FF8000"] .tb__bar { box-shadow: none; }
+.tb[style*="#FF8000"] .tb__pin { background-color: var(--team); }
+.tb[style*="#FF8000"] .tb__rail {
+  filter: drop-shadow(1px 0 0 var(--text)) drop-shadow(-1px 0 0 var(--text))
+          drop-shadow(0 1px 0 var(--text)) drop-shadow(0 -1px 0 var(--text));
+}

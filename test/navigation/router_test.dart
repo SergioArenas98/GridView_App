@@ -23,6 +23,14 @@ import '../support/entity_fixtures.dart';
 import '../support/fake_entity_repository.dart';
 import '../support/router_harness.dart';
 
+/// A Standings championship option. The Primer selector's slab layer repeats
+/// each label invisibly (no semantics, no hit testing), so the plain text
+/// finder matches twice.
+Finder _standingsSegment(String label) => find.descendant(
+  of: find.byType(GvPrimerFocusTarget),
+  matching: find.text(label),
+);
+
 void main() {
   group('branch switching', () {
     testWidgets('the pill navigation switches among all four branches', (
@@ -125,7 +133,7 @@ void main() {
 
       // Switching championship at the root is internal to the screen: the
       // season-agnostic location is preserved and no season is invented.
-      await tester.tap(find.text('Constructors'));
+      await tester.tap(_standingsSegment('Constructors'));
       await tester.pumpAndSettle();
       expect(shellLocation(router), '/standings');
       expect(find.text('McLaren Formula 1 Team'), findsOneWidget);
@@ -152,12 +160,12 @@ void main() {
         initialLocation: '/standings/drivers/2026',
       );
 
-      await tester.tap(find.text('Constructors'));
+      await tester.tap(_standingsSegment('Constructors'));
       await tester.pumpAndSettle();
       expect(shellLocation(router), '/standings/constructors/2026');
       expect(find.byType(StandingsScreen), findsOneWidget);
 
-      await tester.tap(find.text('Drivers'));
+      await tester.tap(_standingsSegment('Drivers'));
       await tester.pumpAndSettle();
       expect(shellLocation(router), '/standings/drivers/2026');
       expect(find.byType(StandingsScreen), findsOneWidget);
@@ -253,16 +261,27 @@ void main() {
         await tester.pumpAndSettle();
         expect(find.byType(DriverDetailScreen), findsOneWidget);
 
-        // Forward navigation to the current team pushes a new page.
-        await tester.tap(find.byType(GvTeamRow));
+        // Forward navigation to the current team pushes a new page (the
+        // Primer V2 team link: the relevant span's row, Step 55C.9).
+        await tester.tap(
+          find.bySemanticsLabel('Open team Oracle Red Bull Racing'),
+        );
         await tester.pumpAndSettle();
         expect(find.byType(ConstructorDetailScreen), findsOneWidget);
 
         // Re-opening the driver that is directly below returns to it instead of
-        // pushing a duplicate.
-        await tester.tap(
-          find.byKey(const ValueKey<String>('team-lineup-2026-b-racer')),
+        // pushing a duplicate. (The Primer V2 banner and strip put the row
+        // beyond the 600px fold and the list's cache, Step 55C.10.)
+        final Finder row = find.byKey(
+          const ValueKey<String>('team-lineup-2026-b-racer'),
         );
+        await tester.dragUntilVisible(
+          row,
+          find.byKey(const ValueKey<String>('team-detail-list')),
+          const Offset(0, -200),
+        );
+        await tester.pumpAndSettle();
+        await tester.tap(row);
         await tester.pumpAndSettle();
         expect(find.byType(ConstructorDetailScreen), findsNothing);
         expect(find.byType(DriverDetailScreen), findsOneWidget);

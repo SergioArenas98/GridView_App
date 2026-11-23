@@ -1,0 +1,91 @@
+/* VISUAL PROTOTYPE (Step 53C, Light rollout Batch 1): screen roles for
+   Calendar, Driver Detail and Team Detail on the approved B Motorsport
+   (LT-1). Loaded last, after ../light-foundations/light-roles.css,
+   light-b.css, light-bm.css and light-53b.css, which are reused unchanged.
+
+   Colour only. Every declaration is a colour, a background colour/image, a
+   shadow or an outline colour. No size, offset, order, markup, word or
+   behaviour change (checks-b1.mjs compares every page with its Dark
+   reference). No new token and no new hue: values are existing Light roles
+   (--lt-*), the approved Dark decorative gradients (DK-6, untouched) or an
+   alpha of an existing colour, the mechanism --hair already uses.
+
+   No Graphite panel is added on these screens (LT-3): their identity bands
+   and the Calendar next-event band are light bands. Graphite appears only as
+   the small inverse controls the role map already defines (arrow discs,
+   primary button). The Graphite-band alternative for the two detail bands is
+   in light-b1-alt.css, for comparison only (LT-13). */
+
+/* ---------- 1. Shared row states (the role map's hover / pressed values) ----------
+   Dark: hover Chalk 3%, pressed = tray. On Light the tray is lighter than the
+   page, so pressed takes the role map's pressed tint (as .cl__hit). */
+.ev__link:hover, .st__hit:hover, .ch__link:hover, .dest:hover, .lu__hit:hover { background: var(--lt-hover); }
+.ev__link:active, .st__hit:active, .ch__link:active, .dest:active, .lu__hit:active { background: var(--lt-pressed-soft); }
+/* Primary button hover (the role map fills .btn with Graphite; Dark hover = chalk-low). */
+.btn:not(.btn--state):hover { background: var(--lt-inverse-low); }
+
+/* ---------- 2. Small inverse controls: arrow discs ----------
+   Dark: Chalk disc, Graphite glyph. Light: Graphite disc, Chalk glyph, as the
+   role map's .cx__disc (Explore) and Home's .hero__arrow outside the strip. */
+.disc, .ev--next .ev__go { background: var(--lt-inverse); color: var(--lt-on-inverse); }
+.ev--next .ev__link:hover .ev__go { color: var(--lt-on-inverse); }
+
+/* ---------- 3. Calendar ----------
+   Next (and the accommodated current) event band: the light band, as Home's
+   session band; the hairlines above and below stay. The flat Red Oxide
+   round block (DK-2) is unchanged, its shadow takes the Light alpha (mirror
+   of --lt-round-shadow, which leans the other way on Home). */
+.ev--next, .ev--current { background-image: none; background-color: var(--lt-band); }
+.ev--next .ev__round::before { box-shadow: 10px 0 24px -14px rgba(20, 21, 24, 0.30); }
+/* Next-event focus: Dark draws a Chalk ring above the oxide block (DK-3,
+   refine-focus.css 2). On the light band Chalk is invisible, and Graphite on
+   oxide is 2.80:1. Same answer as LT-4 / LT-5 (approved): Graphite ring on
+   the band, with a 5px inset band of the band colour under it, which covers
+   the block's top-left corner locally while the row is focused. The block
+   paints below the link while focused (refine-focus.css), so the band
+   reaches it. Nothing changes at rest. */
+.ev--next .ev__link:focus-visible { outline-color: var(--lt-focus); box-shadow: inset 0 0 0 5px var(--tray); }
+
+/* ---------- 4. Detail identity bands (Driver plate, Team banner) ----------
+   The light band. Two background layers, as in Dark (the 4.5% white sheen has
+   no effect on light). The Driver number board keeps its approved decorative
+   gradient (DK-6) and Chalk label: the board is the identity accent. */
+.dp, .tb { background-image: none, none; background-color: var(--lt-band); }
+/* Media scrims (geometry only on the states pages): fade from the light band
+   instead of the Dark tray. Same stops and alphas as Dark. */
+.dp__media::after { background-image: linear-gradient(90deg, var(--tray) 0%, rgba(247, 247, 248, 0.86) 45%, rgba(247, 247, 248, 0.2) 100%); }
+.tb__media::after { background-image: linear-gradient(90deg, var(--tray) 0%, rgba(247, 247, 248, 0.9) 55%, rgba(247, 247, 248, 0.55) 100%); }
+
+/* ---------- 5. Team colour (LT-6, XS-25) ----------
+   Rule (approved visually in 53B): a team colour below 3:1 against the
+   surface it actually sits on gets a 1px edge in that surface's primary text
+   colour (Graphite on Light, Chalk on Dark). The supplied colour never
+   changes.
+
+   No colour can be below 3:1 on both the Dark and the Light surfaces
+   (below 3:1 on #141518 needs L < 0.1225, on #EBECEE needs L > 0.243; on
+   the tray/band pair 0.1456 vs 0.2767). So every Dark edge (.tb--edge,
+   .lu--edge, set by the approved build from Dark contrast) is unnecessary
+   in Light, and only colours that pass in Dark can need a Light edge.
+
+   5a. Dark-edged colours (#1E41FF on the states page): plain in Light.
+   Sizes stay the Dark ones (2px pinstripe, 4px seam column); only colours. */
+.tb--edge .tb__bar { background-color: var(--team); }
+.tb--edge .tb__pin { background-color: var(--team); }
+.lu--edge .lu__seam { background-image: linear-gradient(90deg, transparent 0 1px, var(--team) 1px 3px, transparent 3px 4px); }
+
+/* 5b. Colours below 3:1 on their Light surface. The attribute selectors stand
+   in for the runtime contrast test Flutter would make (as light-53b.css 5).
+   Banner rail on the band (#F7F7F8): #FF8000 2.35 (edge); #0093CC 3.24 and
+   #1E41FF 6.03 pass. The bar gets a 2px Graphite line above and below
+   inside its 12px (Dark: Chalk, same geometry, clipped by the same 12° cut);
+   the pinstripe becomes a Graphite line (Dark: a Chalk line; it stays 3px
+   here because the markup has no edge class). */
+.tb[style*="#FF8000"] .tb__bar { box-shadow: inset 0 2px 0 var(--text), inset 0 -2px 0 var(--text); }
+.tb[style*="#FF8000"] .tb__pin { background-color: var(--text); }
+/* Line-up seam on the page (#EBECEE): #FF8000 2.13 and #0093CC 2.94 (edge);
+   #1E41FF 5.46 passes. A 1px Graphite edge outside the 2px seam, following
+   its 12° slant (box-shadow, so the column and the row keep their Dark
+   geometry; Dark widens the column to 4px instead). */
+.lu[style*="#FF8000"] .lu__seam,
+.lu[style*="#0093CC"] .lu__seam { box-shadow: 0 0 0 1px var(--text); }

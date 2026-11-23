@@ -63,6 +63,26 @@ extension GridViewNavigation on BuildContext {
     }
   }
 
+  /// Opens a primary-branch destination — a [location] that lives **inside**
+  /// the bottom-navigation shell, such as a season's Standings table — from an
+  /// entity page rendered above the shell.
+  ///
+  /// When this page was opened from exactly that location, the call returns
+  /// to it with `pop`, so the table keeps its season, championship and scroll
+  /// position. Otherwise it changes the active branch with `go`, as Home's
+  /// own branch actions do; it never pushes a second shell destination above
+  /// the entity page, which would duplicate the shell's branch navigators.
+  /// Entity-to-entity links keep using [openEntity].
+  void openBranchDestination(String location) {
+    final Object? origin = GoRouterState.of(this).extra;
+    if (origin is EntityNavigationOrigin &&
+        _samePath(origin.location, location)) {
+      pop();
+    } else {
+      go(location);
+    }
+  }
+
   /// The season context this route was opened with, or `null` for a deep link
   /// (or any origin that had no season of its own).
   int? get entityOriginSeason {

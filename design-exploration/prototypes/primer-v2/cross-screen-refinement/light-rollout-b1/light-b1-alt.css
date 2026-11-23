@@ -1,0 +1,20 @@
+/* COMPARISON ONLY (Step 53C), NOT PROPOSED: the Driver plate and the Team
+   banner as a Graphite plane, scoped exactly as light-bm.css scopes GP
+   Detail's heading band (Dark roles inside the band). Built on the Driver
+   and Team index pages only, so the owner can decide LT-13 from pixels.
+   LT-3 limits Graphite panels to reviewed contexts; these bands are not one
+   until the owner says so. */
+.dp, .tb {
+  --text: #ECEAE5; --text-2: #A9ABB1; --tray: #1F2125; --raised: #2A2D32; --ember: #F08A6C;
+  --hair: rgba(236, 234, 229, 0.12); --hair-strong: rgba(236, 234, 229, 0.22); --x-line-status: rgba(236, 234, 229, 0.45);
+  --lt-line-unknown: rgba(236, 234, 229, 0.6); --lt-inverse: #ECEAE5; --lt-on-inverse: #141518; --lt-focus: #F08A6C;
+  color: var(--text);
+  background-image: linear-gradient(168deg, rgba(255, 255, 255, 0.045) 0%, rgba(255, 255, 255, 0) 46%), none;
+  background-color: #1F2125;
+}
+/* Team colour on the Graphite banner follows the Dark rule (Chalk edge below
+   3:1 on #1F2125): #1E41FF edged, #FF8000 and #0093CC plain. */
+.tb.tb--edge .tb__bar { background-color: var(--chalk); }
+.tb.tb--edge .tb__pin { background-color: var(--chalk); }
+.tb[style*="#FF8000"] .tb__bar { box-shadow: none; }
+.tb[style*="#FF8000"] .tb__pin { background-color: var(--team); }

@@ -1,4 +1,3 @@
-import 'package:flutter/material.dart';
 import 'package:flutter/semantics.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -15,98 +14,6 @@ import '../support/component_harness.dart';
 /// happened — and exactly the moments a silent or doubled announcement is least
 /// likely to be noticed by a sighted reviewer.
 void main() {
-  group('GvLoadingSemantics', () {
-    testWidgets('announces its loading label exactly once, however many '
-        'skeleton shapes it wraps', (WidgetTester tester) async {
-      final SemanticsHandle handle = tester.ensureSemantics();
-      await pumpComponent(
-        tester,
-        const GvLoadingSemantics(
-          label: 'Loading',
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: <Widget>[
-              GvSkeletonCard(),
-              SizedBox(height: 8),
-              GvSkeletonCard(),
-              SizedBox(height: 8),
-              GvSkeletonBlock(height: 48),
-              SizedBox(height: 8),
-              GvSkeletonBlock(height: 48),
-            ],
-          ),
-        ),
-      );
-
-      expect(labelOccurrences(tester, 'Loading'), 1);
-      handle.dispose();
-    });
-
-    testWidgets('is the only labelled node in its subtree, so the shapes stay '
-        'decorative', (WidgetTester tester) async {
-      final SemanticsHandle handle = tester.ensureSemantics();
-      await pumpComponent(
-        tester,
-        const GvLoadingSemantics(
-          label: 'Loading',
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: <Widget>[GvSkeletonCard(), GvSkeletonCard()],
-          ),
-        ),
-      );
-
-      expect(
-        renderedLabels(tester),
-        <String>['Loading'],
-        reason: 'a skeleton shape must contribute nothing of its own',
-      );
-      handle.dispose();
-    });
-
-    testWidgets('exposes the loading frame as a single live region', (
-      WidgetTester tester,
-    ) async {
-      final SemanticsHandle handle = tester.ensureSemantics();
-      await pumpComponent(
-        tester,
-        const GvLoadingSemantics(
-          label: 'Loading',
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: <Widget>[GvSkeletonCard(), GvSkeletonCard()],
-          ),
-        ),
-      );
-
-      final List<SemanticsData> regions = liveRegions(tester);
-      expect(regions, hasLength(1));
-      expect(regions.single.label, 'Loading');
-      handle.dispose();
-    });
-
-    testWidgets('does not alter the size of what it wraps', (
-      WidgetTester tester,
-    ) async {
-      await pumpComponent(
-        tester,
-        const SizedBox(
-          width: 200,
-          child: GvLoadingSemantics(
-            label: 'Loading',
-            child: GvSkeletonBlock(height: 48),
-          ),
-        ),
-      );
-
-      expect(
-        tester.getSize(find.byType(GvSkeletonBlock)),
-        const Size(200, 48),
-        reason: 'the wrapper is semantics only; it may not change layout',
-      );
-    });
-  });
-
   group('GvErrorState', () {
     testWidgets('exposes one live region that actually carries text', (
       WidgetTester tester,

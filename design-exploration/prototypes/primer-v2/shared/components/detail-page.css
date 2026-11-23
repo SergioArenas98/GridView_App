@@ -1,0 +1,22 @@
+/* GridView — Primer V2 shared component: detail-page scaffold (the body of a
+   root-navigator detail route under the detail app bar: no bottom navigation,
+   so the page ends with the safe area + 32px; sections 32px apart, section
+   titles on the gutter).
+
+   Moved verbatim. These three rules are byte-identical (after whitespace and
+   comment normalisation) in grand-prix-detail/gpd.css, driver-detail/dd.css,
+   team-detail/td.css and circuit-detail/cd.css (verified 2026-11-10). Load it
+   last among the shared files, directly before the screen stylesheet: that is
+   the position closest to the original rules, and no shared rule targets
+   these elements. Consumers: the GP, Driver, Team and Circuit Detail pilots.
+
+   NOT here, because the copies disagree or are screen compositions:
+   - `.page-notice`: GP `12px var(--gutter) 0`; Driver, Team, Circuit
+     `12px var(--gutter)`.
+   - Section variants: GP's `.sec__head`, `.sec__notice`; Circuit's `.rel`;
+     the galleries' `.spec__frame > .sec` (states.css).
+   - `.about` (Driver and Team only). */
+
+.page { padding: 0 0 calc(32px + env(safe-area-inset-bottom)); }
+.sec { margin-top: 32px; }
+.sec__title { padding: 0 var(--gutter); }

@@ -6,6 +6,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:gridview/core/widgets/widgets.dart';
 import 'package:gridview/features/shared/domain/entities/calendar_entry.dart';
+import 'package:gridview/features/shared/domain/entities/enums.dart';
 import 'package:gridview/features/shared/domain/entities/sync_state.dart';
 
 import '../support/a11y_harness.dart';
@@ -26,10 +27,14 @@ import '../support/router_harness.dart';
 void main() {
   const Size tall = Size(390, 1600);
 
+  /// The Primer V2 Home (Step 55C.1) is a longer page than the legacy one; a
+  /// surface that lays out every section keeps all of them in the tree.
+  const Size homeTall = Size(390, 3600);
+
   Future<void> open(WidgetTester tester, String location) => pumpApp(
     tester,
     initialLocation: location,
-    surfaceSize: tall,
+    surfaceSize: location == '/' ? homeTall : tall,
     disableAnimations: true,
   );
 
@@ -40,9 +45,9 @@ void main() {
             '/',
             <String>[
               'GridView',
+              '2026 season',
               'Refresh Home',
               'Open settings',
-              '2026 season',
               'Next Grand Prix',
               'Weekend sessions',
               'Latest result',
@@ -69,15 +74,27 @@ void main() {
               'Explore',
             ],
           ),
+          // Step 55C.12 (Primer V2, prototype order; PD-06 / XS-03 pending):
+          // the band reads chips → round → season → heading → facts, then
+          // the circuit row link (G-3: "Circuit" is its kicker, no longer a
+          // section title), the time zones, then each session time first.
           'Grand Prix': (
             '/calendar/2026/13',
             <String>[
               'Back',
-              'Grand Prix',
               'Belgian Grand Prix',
-              'Circuit',
-              'View circuit',
+              'Upcoming',
+              'Sprint weekend',
+              'Round 13',
+              '2026 season',
+              'Belgian Grand Prix',
+              'Dates',
+              'Location',
+              'View circuit, Circuit de Spa-Francorchamps',
               'Sessions',
+              'Event time zone',
+              'Your time zone',
+              'Practice 1',
               'Results',
             ],
           ),
@@ -151,27 +168,42 @@ void main() {
               'Home',
             ],
           ),
+          // Step 55C.9 (Primer V2, prototype order; PD-11 / XS-03 pending):
+          // the plate reads heading → season → nationality → board, the team
+          // is the relevant span's link, Championship follows participation.
           'Driver detail': (
             '/drivers/max-verstappen',
             <String>[
               'Driver',
               'Max Verstappen',
-              'Team',
-              'Championship',
+              '2026 season',
+              'Nationality: Dutch',
+              'Race number 1 · VER',
               'Season participation',
+              'Open team Oracle Red Bull Racing',
+              'Championship',
+              "View drivers' standings",
               'Profile',
               'About',
             ],
           ),
+          // Step 55C.10 (Primer V2, prototype order; XS-03 / XS-04 pending):
+          // the banner reads heading → season → stable name → nationality
+          // (shown once; no "Team information" card), Championship before
+          // Drivers (TM-01), each row its link and then its own facts.
           'Team detail': (
             '/constructors/alpine',
             <String>[
               'Team',
               'BWT Alpine Formula One Team',
+              '2026 season',
+              'Team: Alpine',
+              'Nationality: French',
               'Championship',
+              "View constructors' standings",
               'Drivers',
+              'Open driver Pierre Gasly',
               'Team details',
-              'Team information',
               'About',
             ],
           ),
@@ -296,7 +328,7 @@ void main() {
         tester.getSemantics(
           find
               .descendant(
-                of: find.byType(GvBottomNav),
+                of: find.byType(GvPrimerBottomNav),
                 matching: find.text('Calendar'),
               )
               .first,
@@ -307,7 +339,7 @@ void main() {
         tester.getSemantics(
           find
               .descendant(
-                of: find.byType(GvBottomNav),
+                of: find.byType(GvPrimerBottomNav),
                 matching: find.text('Home'),
               )
               .first,
@@ -327,8 +359,14 @@ void main() {
         tester.getSemantics(
           find
               .descendant(
-                of: find.byType(GvSegmentedControl),
-                matching: find.text('Constructors'),
+                // The Primer V2 selector (Step 55C.5): its slab layer repeats
+                // each label invisibly, without semantics; the option is the
+                // focus target.
+                of: find.byType(GvPrimerSegmentedControl),
+                matching: find.descendant(
+                  of: find.byType(GvPrimerFocusTarget),
+                  matching: find.text('Constructors'),
+                ),
               )
               .first,
         ),
@@ -393,7 +431,13 @@ void main() {
       final Iterable<String> headingLabels = headings(
         tester,
       ).map((SemanticsData d) => d.label);
-      for (final String title in <String>['Circuit', 'Sessions', 'Results']) {
+      // Step 55C.12: "Circuit" became the circuit row's kicker (DD G-3); the
+      // event name is now the page heading.
+      for (final String title in <String>[
+        'Belgian Grand Prix',
+        'Sessions',
+        'Results',
+      ]) {
         expect(
           headingLabels.any((String label) => label.contains(title)),
           isTrue,
@@ -440,9 +484,10 @@ void main() {
         ),
       );
 
-      expect(find.byType(GvOfflineNotice), findsOneWidget);
+      // The Primer V2 Calendar (Step 55C.2) uses GvPrimerNotice.
+      expect(find.byType(GvPrimerNotice), findsOneWidget);
       final String message = tester
-          .widget<GvOfflineNotice>(find.byType(GvOfflineNotice))
+          .widget<GvPrimerNotice>(find.byType(GvPrimerNotice))
           .message;
       expect(labelOccurrences(tester, message), 1);
       expect(
@@ -538,7 +583,7 @@ void main() {
       Stream<ResourceSyncState?> Function(String key)? syncMetadataStream,
     }) => pumpApp(
       tester,
-      surfaceSize: tall,
+      surfaceSize: homeTall,
       disableAnimations: true,
       syncMetadata: syncMetadata,
       syncMetadataStream: syncMetadataStream,
@@ -595,10 +640,35 @@ void main() {
       handle.dispose();
     });
 
-    testWidgets('available-empty announces its own, different copy exactly '
-        'once', (WidgetTester tester) async {
+    testWidgets('available-empty under Next Grand Prix omits the section and '
+        'announces nothing (HM-01)', (WidgetTester tester) async {
       final SemanticsHandle handle = tester.ensureSemantics();
       await pumpHome(tester, upcoming: const <CalendarEntry>[]);
+
+      expect(labelOccurrences(tester, 'Upcoming events'), 0);
+      expect(labelOccurrences(tester, 'No upcoming events'), 0);
+      expect(labelOccurrences(tester, 'Upcoming events unavailable'), 0);
+      handle.dispose();
+    });
+
+    testWidgets('available-empty after the race announces its own, different '
+        'copy exactly once', (WidgetTester tester) async {
+      final SemanticsHandle handle = tester.ensureSemantics();
+      await pumpApp(
+        tester,
+        surfaceSize: homeTall,
+        disableAnimations: true,
+        repository: FakeRaceWeekendRepository(
+          dashboard: homeDashboardFixture(
+            focus: homeFocusFixture(status: EventStatus.completed),
+            upcoming: const <CalendarEntry>[],
+          ),
+          home: homeViewFixture(),
+          calendar: (int season) => calendarFixture(season: season),
+          grandPrix: (int season, int round) =>
+              grandPrixDetailFixture(season, round),
+        ),
+      );
 
       expect(labelOccurrences(tester, 'No upcoming events'), 1);
       expect(labelOccurrences(tester, 'Upcoming events unavailable'), 0);

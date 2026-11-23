@@ -13,13 +13,26 @@ import '../../domain/fixture_data_identity.dart';
 /// A test-only frozen-data build is labelled as frozen captured data with its
 /// capture date. Until the bundled data is identified, and for sample data,
 /// the sample wording is shown: it never claims more than is known.
+///
+/// Primer V2 (Step 55C.15), from the Grand Prix Detail states page, spec 26
+/// (`consolidation-pilot/grand-prix-detail/gpd.css` `.banner`): 8 × 12
+/// padding inside a 1.5px `text.accent` outline (Ember in Dark, Red Oxide in
+/// Light) with the small radius, Archivo 14px weight 700 at line height 1.45
+/// (`base.css`) in `text.accent`, centred, wrapping freely. The reference has
+/// no icon, so the legacy flask glyph is gone; the wording is unchanged. Each
+/// screen keeps its own placement and spacing around the banner.
+///
+/// Semantics: one container node carries the label and the visible text is
+/// excluded, so the label is read once.
 class MockDataBanner extends ConsumerWidget {
   const MockDataBanner({super.key});
+
+  static const double _fontSize = 14;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final AppLocalizations l10n = AppLocalizations.of(context);
-    final GvSemanticColors colors = context.gvColors;
+    final GvPrimerRoles roles = GvPrimerSurface.of(context).roles;
     final String label = switch (ref.watch(fixtureDataIdentityProvider).value) {
       FrozenCaptureData(:final DateTime capturedAt) => l10n.frozenDataBanner(
         captureDateLabel(capturedAt),
@@ -27,35 +40,28 @@ class MockDataBanner extends ConsumerWidget {
       UnverifiedFixtureData() => l10n.unverifiedDataBanner,
       SampleFixtureData() || null => l10n.mockDataBanner,
     };
+    final Color accent = roles.text.accent;
     return Semantics(
+      container: true,
       label: label,
+      excludeSemantics: true,
       child: Container(
-        padding: const EdgeInsets.symmetric(
-          horizontal: GvSpacing.md,
-          vertical: GvSpacing.sm,
-        ),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
         decoration: BoxDecoration(
-          color: context.gvColors.surfaceElevated,
-          borderRadius: GvRadii.mdAll,
-          border: Border.all(color: colors.warning),
+          borderRadius: BorderRadius.circular(GvPrimerLayout.radiusSm),
+          border: Border.all(
+            color: accent,
+            width: GvPrimerMetrics.statusOutlineWidth,
+          ),
         ),
-        child: Row(
-          children: <Widget>[
-            Icon(
-              Icons.science_outlined,
-              size: GvIconSizes.md,
-              color: colors.warning,
-            ),
-            const SizedBox(width: GvSpacing.sm),
-            Expanded(
-              child: Text(
-                label,
-                style: context.gvText.label.copyWith(
-                  color: context.gvColors.textSecondary,
-                ),
-              ),
-            ),
-          ],
+        child: Text(
+          label,
+          textAlign: TextAlign.center,
+          style: GvPrimerTypography.archivo(
+            size: _fontSize,
+            weight: 700,
+            height: 1.45,
+          ).copyWith(color: accent),
         ),
       ),
     );

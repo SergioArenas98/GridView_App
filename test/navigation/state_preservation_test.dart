@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
+import 'package:gridview/core/widgets/widgets.dart';
 
 import 'package:gridview/features/calendar/presentation/calendar_screen.dart';
 import 'package:gridview/features/drivers/presentation/driver_detail_screen.dart';
@@ -30,7 +31,14 @@ void main() {
 
     // Select a category. It replaces the Explore page inside the branch rather
     // than stacking a second one.
-    await tester.tap(find.text('Circuits'));
+    // The Primer selector paints each label twice (slab and option layers):
+    // the option is found through its focus target.
+    await tester.tap(
+      find.descendant(
+        of: find.byType(GvPrimerFocusTarget),
+        matching: find.text('Circuits'),
+      ),
+    );
     await tester.pumpAndSettle();
     expect(shellLocation(router), '/explore/circuits');
     expect(find.byType(ExploreScreen), findsOneWidget);

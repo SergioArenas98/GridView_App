@@ -1,0 +1,37 @@
+/* GridView — Primer V2 shared foundation: tokens.
+   Source: primer-core.css (byte-identical in calendar/, standings/, explore/,
+   grand-prix-detail/, driver-detail/, team-detail/, circuit-detail/, settings/;
+   MD5 0d78851eb21ce06b5f2a3c78cbc003fd), itself copied from the approved Home
+   (refinement-01/styles.css). Rules and values are moved verbatim.
+   Load first. Consolidation pilot only; approved prototypes still load their
+   own primer-core.css copy. */
+
+:root {
+  /* Primer palette */
+  --ground: #141518;
+  --ground-low: #101113;
+  --tray: #1F2125;
+  --raised: #2A2D32;
+  --text: #ECEAE5;          /* Chalk */
+  --text-2: #A9ABB1;
+  --oxide: #A03E2B;         /* Red Oxide: surfaces and text on Chalk only */
+  --oxide-deep: #7A2E21;
+  --ember: #F08A6C;         /* accent text on graphite */
+  --chalk: #ECEAE5;
+  --chalk-low: #E2DFD8;
+  --on-chalk: #141518;
+  --on-chalk-2: #4F525A;
+  --hair: rgba(236, 234, 229, 0.12);
+  --hair-strong: rgba(236, 234, 229, 0.22);
+  --hair-chalk: rgba(20, 21, 24, 0.14);
+
+  --cut: -12deg;
+  --gutter: 16px;
+  --radius-lg: 20px;
+  --radius-md: 14px;
+  --radius-sm: 8px;
+  --nav-min: 68px;   /* regular navigation height; real height in --nav-space (nav-inset.js) */
+
+  --font: "Archivo", system-ui, sans-serif;
+  color-scheme: dark;
+}

@@ -1,0 +1,24 @@
+/* GridView — Primer V2 shared component: status chips. Moved verbatim from
+   primer-core.css. Screen additions (compact list chip, GP outline/done/alert/
+   fastest) stay in screen stylesheets until XS-11 is decided. */
+
+/* ---------- Chips (status vocabulary) ----------
+   Meaning is carried by word + border/fill pattern, never colour alone.
+   unknown = dashed outline; confirmed (Final) = filled Chalk + check.
+   Accommodated, not rendered in the frozen scenario:
+   .chip--scheduled (solid outline), .chip--live (Ember fill + dot),
+   .chip--cancelled / --postponed (outline + strike icon), .chip--context
+   ("Race weekend", "Sprint": tray fill), .chip--provisional (dagger + word). */
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip {
+  display: inline-flex; align-items: center; gap: 6px;
+  min-height: 30px; padding: 6px 12px;
+  border-radius: var(--radius-sm);
+  font-size: 0.8125rem; font-weight: 600; line-height: 1.2;
+  max-width: 100%;   /* long localized states wrap instead of clipping */
+}
+.chip--unknown { border: 1.5px dashed rgba(236, 234, 229, 0.6); color: var(--text); }
+.chip--final { background: var(--chalk); color: var(--on-chalk); }
+.chip--scheduled { border: 1.5px solid var(--hair-strong); }
+.chip--live { background: var(--ember); color: var(--on-chalk); }
+.chip--context { background: var(--raised); }

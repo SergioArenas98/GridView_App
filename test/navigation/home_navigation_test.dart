@@ -31,7 +31,7 @@ import '../support/router_harness.dart';
 
 /// A tall surface so every Home module is laid out without step-by-step
 /// scrolling; the navigation behaviour under test is unaffected by it.
-const Size _tall = Size(400, 2400);
+const Size _tall = Size(400, 3600);
 
 Future<GoRouter> pumpHomeRouter(
   WidgetTester tester, {

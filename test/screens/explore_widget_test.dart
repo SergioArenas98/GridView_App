@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
@@ -6,6 +8,7 @@ import 'package:gridview/core/widgets/widgets.dart';
 import 'package:gridview/features/circuits/presentation/circuit_detail_screen.dart';
 import 'package:gridview/features/constructors/presentation/constructor_detail_screen.dart';
 import 'package:gridview/features/drivers/presentation/driver_detail_screen.dart';
+import 'package:gridview/features/explore/presentation/explore_collection_view.dart';
 import 'package:gridview/features/explore/presentation/explore_screen.dart';
 import 'package:gridview/features/shared/domain/entities/season_card.dart';
 import 'package:gridview/features/shared/domain/entities/sync_state.dart';
@@ -15,8 +18,10 @@ import 'package:gridview/features/sync/application/sync_providers.dart';
 import 'package:gridview/features/sync/domain/app_sync_state.dart';
 import 'package:gridview/features/sync/domain/sync_plan.dart';
 
+import '../support/domain_fixtures.dart' show syncedMetadata;
 import '../support/entity_fixtures.dart';
 import '../support/fake_entity_repository.dart';
+import '../support/primer_fonts.dart';
 import '../support/router_harness.dart';
 
 /// A surface tall enough for the whole fixture collection, so content assertions
@@ -71,6 +76,17 @@ List<SeasonCircuitCard> _longCircuits({int season = 2026}) =>
           ),
         ),
     ];
+
+/// One option of the Primer category selector. The control paints each label
+/// twice (the slab layer and the option layer), so the option is found
+/// through its focus target.
+Finder _segment(String label) => find.descendant(
+  of: find.byType(GvPrimerSegmentedControl),
+  matching: find.descendant(
+    of: find.byType(GvPrimerFocusTarget),
+    matching: find.text(label),
+  ),
+);
 
 /// Metadata that has never synchronised, so a collection stays unmaterialized.
 ResourceSyncState? _neverSynced(String key) => null;
@@ -136,16 +152,16 @@ void main() {
         circuits: circuits,
       );
 
-      await tester.tap(find.text('Teams'));
+      await tester.tap(_segment('Teams'));
       await tester.pumpAndSettle();
       expect(shellLocation(router), '/explore/teams');
       expect(find.byType(ExploreScreen), findsOneWidget);
 
-      await tester.tap(find.text('Circuits'));
+      await tester.tap(_segment('Circuits'));
       await tester.pumpAndSettle();
       expect(shellLocation(router), '/explore/circuits');
 
-      await tester.tap(find.text('Drivers'));
+      await tester.tap(_segment('Drivers'));
       await tester.pumpAndSettle();
       expect(shellLocation(router), '/explore/drivers');
 
@@ -163,7 +179,7 @@ void main() {
         surfaceSize: _tallSurface,
       );
       for (int i = 0; i < 3; i++) {
-        await tester.tap(find.text('Teams'));
+        await tester.tap(_segment('Teams'));
         await tester.pumpAndSettle();
       }
       expect(shellLocation(router), '/explore/teams');
@@ -192,7 +208,7 @@ void main() {
         ),
       );
       expect(find.text('No teams yet'), findsOneWidget);
-      expect(find.byType(GvSkeletonCard), findsNothing);
+      expect(find.byType(ExploreSkeleton), findsNothing);
     });
 
     testWidgets('an unmaterialized collection stays loading, not empty', (
@@ -209,7 +225,7 @@ void main() {
         ),
       );
       expect(find.text('No drivers yet'), findsNothing);
-      expect(find.byType(GvSkeletonCard), findsWidgets);
+      expect(find.byType(ExploreSkeleton), findsOneWidget);
     });
 
     testWidgets('a bootstrap-only collection shows no fabricated timestamp', (
@@ -485,12 +501,13 @@ void main() {
         final Size size = tester.getSize(
           find
               .ancestor(
-                of: find.text(label),
-                matching: find.byType(ConstrainedBox),
+                of: _segment(label),
+                matching: find.byType(GvPrimerFocusTarget),
               )
               .first,
         );
         expect(size.height, greaterThanOrEqualTo(48));
+        expect(size.width, greaterThanOrEqualTo(48));
       }
     });
 
@@ -593,25 +610,31 @@ void main() {
         ),
       );
 
-      await tester.drag(find.byType(ListView).last, const Offset(0, -220));
+      await tester.drag(
+        find.byType(CustomScrollView).last,
+        const Offset(0, -220),
+      );
       await tester.pumpAndSettle();
       final double driversOffset = await offset(tester);
       expect(driversOffset, greaterThan(0));
 
-      await tester.tap(find.text('Teams'));
+      await tester.tap(_segment('Teams'));
       await tester.pumpAndSettle();
       expect(await offset(tester), 0, reason: 'a fresh list starts at the top');
 
-      await tester.drag(find.byType(ListView).last, const Offset(0, -120));
+      await tester.drag(
+        find.byType(CustomScrollView).last,
+        const Offset(0, -120),
+      );
       await tester.pumpAndSettle();
       final double teamsOffset = await offset(tester);
       expect(teamsOffset, greaterThan(0));
 
-      await tester.tap(find.text('Drivers'));
+      await tester.tap(_segment('Drivers'));
       await tester.pumpAndSettle();
       expect(await offset(tester), closeTo(driversOffset, 1));
 
-      await tester.tap(find.text('Teams'));
+      await tester.tap(_segment('Teams'));
       await tester.pumpAndSettle();
       expect(await offset(tester), closeTo(teamsOffset, 1));
     });
@@ -619,6 +642,8 @@ void main() {
     testWidgets('a detail round trip restores the originating offset', (
       WidgetTester tester,
     ) async {
+      // Real Archivo metrics for the Primer navigation's fit (Step 55C.15).
+      await loadArchivo(tester);
       await pumpApp(
         tester,
         initialLocation: '/explore/circuits',
@@ -630,12 +655,17 @@ void main() {
         ),
       );
 
-      await tester.drag(find.byType(ListView).last, const Offset(0, -200));
+      await tester.drag(
+        find.byType(CustomScrollView).last,
+        const Offset(0, -200),
+      );
       await tester.pumpAndSettle();
       final double before = await offset(tester);
       expect(before, greaterThan(0));
 
-      await tester.tap(find.text('Circuit 4'));
+      // The row fully on screen above the navigation after the drag (Primer
+      // rows are taller than the legacy cards).
+      await tester.tap(find.text('Circuit 3'));
       await tester.pumpAndSettle();
       expect(find.byType(CircuitDetailScreen), findsOneWidget);
 
@@ -656,9 +686,12 @@ void main() {
         ),
       );
 
-      await tester.tap(find.text('Teams'));
+      await tester.tap(_segment('Teams'));
       await tester.pumpAndSettle();
-      await tester.drag(find.byType(ListView).last, const Offset(0, -150));
+      await tester.drag(
+        find.byType(CustomScrollView).last,
+        const Offset(0, -150),
+      );
       await tester.pumpAndSettle();
       final double before = await offset(tester);
       expect(before, greaterThan(0));
@@ -668,6 +701,315 @@ void main() {
 
       expect(shellLocation(router), '/explore/teams');
       expect(await offset(tester), closeTo(before, 1));
+    });
+  });
+
+  group('season transition', () {
+    double offset(WidgetTester tester) => scrollOffsetOf(tester, ExploreScreen);
+
+    Future<void> drag(WidgetTester tester, double dy) async {
+      await tester.drag(find.byType(CustomScrollView).last, Offset(0, -dy));
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets('A: a new season with stored rows starts at the top', (
+      WidgetTester tester,
+    ) async {
+      // The resolved season the test drives, starting at 2026.
+      final StreamController<int?> season = StreamController<int?>()..add(2026);
+      addTearDown(season.close);
+      await pumpApp(
+        tester,
+        initialLocation: '/explore',
+        surfaceSize: _shortSurface,
+        currentSeasonStream: season.stream,
+        drivers: FakeDriverRepository(
+          cards: (int s) => _longDrivers(season: s),
+        ),
+      );
+      await drag(tester, 220);
+      expect(offset(tester), greaterThan(0));
+
+      season.add(2027);
+      await tester.pumpAndSettle();
+
+      expect(find.text('2027 season'), findsOneWidget);
+      expect(offset(tester), 0);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('B: a new season loaded after a loading state starts at the '
+        'top', (WidgetTester tester) async {
+      // The resolved season the test drives, starting at 2026.
+      final StreamController<int?> season = StreamController<int?>()..add(2026);
+      addTearDown(season.close);
+      final StreamController<List<SeasonDriverCard>> next =
+          StreamController<List<SeasonDriverCard>>();
+      addTearDown(next.close);
+      await pumpApp(
+        tester,
+        initialLocation: '/explore',
+        surfaceSize: _shortSurface,
+        currentSeasonStream: season.stream,
+        drivers: FakeDriverRepository(
+          cardsStream: (int s) => s == 2026
+              ? Stream<List<SeasonDriverCard>>.value(_longDrivers(season: s))
+              : next.stream,
+        ),
+      );
+      await drag(tester, 220);
+      expect(offset(tester), greaterThan(0));
+
+      season.add(2027);
+      await tester.pump();
+      await tester.pump();
+      expect(find.byType(ExploreSkeleton), findsOneWidget);
+      next.add(_longDrivers(season: 2027));
+      await tester.pumpAndSettle();
+
+      expect(find.text('2027 season'), findsOneWidget);
+      expect(offset(tester), 0);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('C: no previous-season Teams offset survives a branch switch', (
+      WidgetTester tester,
+    ) async {
+      // The resolved season the test drives, starting at 2026.
+      final StreamController<int?> season = StreamController<int?>()..add(2026);
+      addTearDown(season.close);
+      await pumpApp(
+        tester,
+        initialLocation: '/explore/teams',
+        surfaceSize: _shortSurface,
+        currentSeasonStream: season.stream,
+        drivers: FakeDriverRepository(
+          cards: (int s) => _longDrivers(season: s),
+        ),
+        constructors: FakeConstructorRepository(
+          cards: (int s) => _longTeams(season: s),
+        ),
+      );
+      await drag(tester, 150);
+      expect(offset(tester), greaterThan(0));
+
+      season.add(2027);
+      await tester.pumpAndSettle();
+      expect(offset(tester), 0);
+
+      await tapNav(tester, 'Home');
+      await tapNav(tester, 'Explore');
+      expect(find.text('2027 season'), findsOneWidget);
+      expect(offset(tester), 0);
+
+      await tester.tap(_segment('Drivers'));
+      await tester.pumpAndSettle();
+      expect(offset(tester), 0, reason: 'no 2026 Drivers offset either');
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('D: a season change while Explore is offstage starts at the '
+        'top', (WidgetTester tester) async {
+      // The resolved season the test drives, starting at 2026.
+      final StreamController<int?> season = StreamController<int?>()..add(2026);
+      addTearDown(season.close);
+      await pumpApp(
+        tester,
+        initialLocation: '/explore',
+        surfaceSize: _shortSurface,
+        currentSeasonStream: season.stream,
+        drivers: FakeDriverRepository(
+          cards: (int s) => _longDrivers(season: s),
+        ),
+      );
+      await drag(tester, 220);
+      expect(offset(tester), greaterThan(0));
+
+      await tapNav(tester, 'Home');
+      season.add(2027);
+      await tester.pumpAndSettle();
+      await tapNav(tester, 'Explore');
+
+      expect(find.text('2027 season'), findsOneWidget);
+      expect(offset(tester), 0);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('E: new data for the same season keeps the position', (
+      WidgetTester tester,
+    ) async {
+      final StreamController<List<SeasonDriverCard>> rows =
+          StreamController<List<SeasonDriverCard>>()..add(_longDrivers());
+      addTearDown(rows.close);
+      await pumpApp(
+        tester,
+        initialLocation: '/explore',
+        surfaceSize: _shortSurface,
+        drivers: FakeDriverRepository(cardsStream: (int s) => rows.stream),
+      );
+      await drag(tester, 220);
+      final double before = offset(tester);
+      expect(before, greaterThan(0));
+
+      rows.add(<SeasonDriverCard>[
+        for (int i = 0; i < 22; i++)
+          driverCard(
+            season: 2026,
+            order: i,
+            driverId: 'driver-${i + 1}',
+            name: 'Updated ${i + 1}',
+            raceNumber: i + 1,
+            constructorId: 'team-${(i ~/ 2) + 1}',
+            teamName: 'Team ${(i ~/ 2) + 1}',
+            position: i + 1,
+            points: (22 - i) * 10 + 1,
+          ),
+      ]);
+      await tester.pumpAndSettle();
+
+      expect(find.textContaining('Updated'), findsWidgets);
+      expect(offset(tester), closeTo(before, 1));
+    });
+
+    testWidgets('repeated emissions of the same season keep the position', (
+      WidgetTester tester,
+    ) async {
+      // The resolved season the test drives, starting at 2026.
+      final StreamController<int?> season = StreamController<int?>()..add(2026);
+      addTearDown(season.close);
+      await pumpApp(
+        tester,
+        initialLocation: '/explore',
+        surfaceSize: _shortSurface,
+        currentSeasonStream: season.stream,
+        drivers: FakeDriverRepository(
+          cards: (int s) => _longDrivers(season: s),
+        ),
+      );
+      await drag(tester, 220);
+      final double before = offset(tester);
+
+      season
+        ..add(2026)
+        ..add(2026);
+      await tester.pumpAndSettle();
+
+      expect(offset(tester), closeTo(before, 1));
+    });
+
+    testWidgets('a transient unresolved season does not reset the same '
+        'season', (WidgetTester tester) async {
+      // The resolved season the test drives, starting at 2026.
+      final StreamController<int?> season = StreamController<int?>()..add(2026);
+      addTearDown(season.close);
+      await pumpApp(
+        tester,
+        initialLocation: '/explore',
+        surfaceSize: _shortSurface,
+        currentSeasonStream: season.stream,
+        drivers: FakeDriverRepository(
+          cards: (int s) => _longDrivers(season: s),
+        ),
+      );
+      await drag(tester, 220);
+      final double before = offset(tester);
+
+      season.add(null);
+      await tester.pumpAndSettle();
+      expect(find.byType(CustomScrollView), findsNothing);
+      season.add(2026);
+      await tester.pumpAndSettle();
+
+      expect(find.text('2026 season'), findsOneWidget);
+      expect(offset(tester), closeTo(before, 1));
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('a refreshed sync record for the same season keeps the '
+        'position', (WidgetTester tester) async {
+      final StreamController<ResourceSyncState?> record =
+          StreamController<ResourceSyncState?>()
+            ..add(syncedMetadata('drivers:2026'));
+      addTearDown(record.close);
+      await pumpApp(
+        tester,
+        initialLocation: '/explore',
+        surfaceSize: _shortSurface,
+        drivers: FakeDriverRepository(
+          cards: (int s) => _longDrivers(season: s),
+        ),
+        syncMetadataStream: (String key) => key == 'drivers:2026'
+            ? record.stream
+            : Stream<ResourceSyncState?>.value(syncedMetadata(key)),
+      );
+      await drag(tester, 220);
+      final double before = offset(tester);
+
+      record.add(
+        syncedMetadata(
+          'drivers:2026',
+          lastSuccessAt: DateTime.utc(2026, 7, 18, 12, 5),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(offset(tester), closeTo(before, 1));
+    });
+
+    testWidgets('the new season keeps independent offsets and restores them '
+        'after a category switch and a detail round trip', (
+      WidgetTester tester,
+    ) async {
+      // Real Archivo metrics for the Primer navigation's fit (Step 55C.15).
+      await loadArchivo(tester);
+      // The resolved season the test drives, starting at 2026.
+      final StreamController<int?> season = StreamController<int?>()..add(2026);
+      addTearDown(season.close);
+      await pumpApp(
+        tester,
+        initialLocation: '/explore/circuits',
+        surfaceSize: _shortSurface,
+        currentSeasonStream: season.stream,
+        constructors: FakeConstructorRepository(
+          cards: (int s) => _longTeams(season: s),
+        ),
+        circuits: FakeCircuitRepository(
+          cards: (int s) => _longCircuits(season: s),
+          profile: (int s, String id) =>
+              circuitProfileFixture(season: s, circuitId: id),
+        ),
+      );
+      await drag(tester, 200);
+      season.add(2027);
+      await tester.pumpAndSettle();
+      expect(offset(tester), 0);
+
+      await drag(tester, 200);
+      final double circuits2027 = offset(tester);
+      expect(circuits2027, greaterThan(0));
+
+      await tester.tap(_segment('Teams'));
+      await tester.pumpAndSettle();
+      expect(offset(tester), 0);
+      await drag(tester, 120);
+      final double teams2027 = offset(tester);
+      expect(teams2027, greaterThan(0));
+
+      await tester.tap(_segment('Circuits'));
+      await tester.pumpAndSettle();
+      expect(offset(tester), closeTo(circuits2027, 1));
+
+      await tester.tap(find.text('Circuit 3'));
+      await tester.pumpAndSettle();
+      expect(find.byType(CircuitDetailScreen), findsOneWidget);
+      await tester.pageBack();
+      await tester.pumpAndSettle();
+      expect(offset(tester), closeTo(circuits2027, 1));
+
+      await tester.tap(_segment('Teams'));
+      await tester.pumpAndSettle();
+      expect(offset(tester), closeTo(teams2027, 1));
+      expect(tester.takeException(), isNull);
     });
   });
 }

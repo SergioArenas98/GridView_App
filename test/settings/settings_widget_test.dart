@@ -1,12 +1,15 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/semantics.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:gridview/app/environment/app_environment.dart';
 import 'package:gridview/core/preferences/preference_values.dart';
+import 'package:gridview/core/widgets/widgets.dart';
 import 'package:gridview/features/settings/application/app_info.dart';
 import 'package:gridview/features/settings/application/external_links.dart';
 import 'package:gridview/features/settings/domain/data_source_attribution.dart';
 import 'package:gridview/features/settings/presentation/acknowledgements_screen.dart';
-import 'package:gridview/features/settings/presentation/widgets/settings_rows.dart';
+import 'package:gridview/features/settings/presentation/widgets/settings_navigation_row.dart';
+import 'package:gridview/features/shared/presentation/widgets/primer_detail_app_bar.dart';
 import 'package:gridview/l10n/app_localizations.dart';
 
 import '../support/a11y_harness.dart';
@@ -79,9 +82,11 @@ Future<void> pumpSettings(
   disableAnimations: true,
 );
 
-/// Taps the app bar's back control, i.e. the Android back affordance.
+/// Taps the app bar's back control, i.e. the Android back affordance: the
+/// circular Primer back of every Settings screen (Steps 55C.13A and
+/// 55C.13B).
 Future<void> tapBack(WidgetTester tester) async {
-  final Finder back = find.byType(BackButton);
+  final Finder back = find.byType(PrimerDetailBackButton);
   expect(back, findsOneWidget, reason: 'a pushed screen must offer back');
   await tester.tap(back);
   await tester.pumpAndSettle();
@@ -293,14 +298,15 @@ void main() {
         options.where((Semantics s) => s.properties.checked ?? false),
         hasLength(1),
       );
-      // Selection is spoken, never conveyed by the radio glyph alone.
-      expect(
-        options
-            .firstWhere((Semantics s) => s.properties.checked ?? false)
-            .properties
-            .label,
-        contains('Selected'),
-      );
+      // Selection is announced by the radio's checked state, never by the
+      // glyph alone; the literal ", Selected" suffix is no longer appended
+      // (Step 55C.13A, owner decision: no duplicate announcement).
+      final String? selectedLabel = options
+          .firstWhere((Semantics s) => s.properties.checked ?? false)
+          .properties
+          .label;
+      expect(selectedLabel, 'Dark');
+      expect(selectedLabel, isNot(contains('Selected')));
     });
   });
 
@@ -582,14 +588,20 @@ void main() {
         const ValueKey<String>('settings-feedback'),
       );
       expect(row, findsOneWidget);
+      // No focus target (so no focus stop and no tap) inside the static row.
+      expect(
+        find.descendant(of: row, matching: find.byType(GvPrimerFocusTarget)),
+        findsNothing,
+      );
+      final SemanticsHandle handle = tester.ensureSemantics();
       expect(
         tester
-            .widget<InkWell>(
-              find.descendant(of: row, matching: find.byType(InkWell)),
-            )
-            .onTap,
-        isNull,
+            .getSemantics(row)
+            .getSemanticsData()
+            .hasAction(SemanticsAction.tap),
+        isFalse,
       );
+      handle.dispose();
     });
   });
 
@@ -998,20 +1010,23 @@ void main() {
     });
   });
 
-  // --- GvSettingsRow accessible name ---------------------------------------
+  // --- Settings row accessible name -----------------------------------------
   //
   // The row composes one label over an excluded subtree, so whatever the
-  // composition omits is simply never spoken. The description was omitted, and
-  // it is the part that explains what a row does — "Component catalogue" alone
-  // says nothing about "Design-system gallery, development only".
-  group('GvSettingsRow speaks everything it shows', () {
+  // composition omits is simply never spoken. The description was once
+  // omitted, and it is the part that explains what a row does — "Component
+  // catalogue" alone says nothing about "Design-system gallery, development
+  // only". Step 55C.13BR ports these checks from the retired legacy
+  // `GvSettingsRow` to the Primer `SettingsNavigationRow` (Step 55C.13A),
+  // which composes its label with the same rule (`settingsSpokenLabel`).
+  group('SettingsNavigationRow speaks everything it shows', () {
     testWidgets('a title-only row speaks its title and nothing else', (
       WidgetTester tester,
     ) async {
       final SemanticsHandle handle = tester.ensureSemantics();
       await pumpComponent(
         tester,
-        GvSettingsRow(title: 'Language', onTap: () {}),
+        SettingsNavigationRow(title: 'Language', onActivate: () async {}),
       );
 
       expect(nodeLabelled(tester, 'Language').flagsCollection.isButton, isTrue);
@@ -1025,10 +1040,10 @@ void main() {
       final SemanticsHandle handle = tester.ensureSemantics();
       await pumpComponent(
         tester,
-        GvSettingsRow(
+        SettingsNavigationRow(
           title: 'Component catalogue',
           description: 'Design-system gallery, development only',
-          onTap: () {},
+          onActivate: () async {},
         ),
       );
 
@@ -1041,25 +1056,34 @@ void main() {
       handle.dispose();
     });
 
-    testWidgets('a row with a value and a description speaks title, value, '
-        'then description', (WidgetTester tester) async {
+    testWidgets('a preference row speaks title, then value', (
+      WidgetTester tester,
+    ) async {
       final SemanticsHandle handle = tester.ensureSemantics();
       await pumpComponent(
         tester,
-        GvSettingsRow(
+        SettingsNavigationRow(
           title: 'Theme',
           value: 'Dark',
-          description: 'Follows the flagship palette',
-          onTap: () {},
+          onActivate: () async {},
         ),
       );
 
       // Spoken in the order it is read on screen, deterministically.
-      expect(
-        renderedLabels(tester),
-        contains('Theme, Dark, Follows the flagship palette'),
-      );
+      expect(renderedLabels(tester), contains('Theme, Dark'));
       handle.dispose();
+    });
+
+    test('the composed label keeps reading order: title, value, then '
+        'description', () {
+      expect(
+        settingsSpokenLabel(<String?>[
+          'Theme',
+          'Dark',
+          'Follows the flagship palette',
+        ]),
+        'Theme, Dark, Follows the flagship palette',
+      );
     });
 
     testWidgets('a blank description or value is omitted cleanly', (
@@ -1068,11 +1092,11 @@ void main() {
       final SemanticsHandle handle = tester.ensureSemantics();
       await pumpComponent(
         tester,
-        GvSettingsRow(
+        SettingsNavigationRow(
           title: 'Language',
           value: '   ',
           description: '',
-          onTap: () {},
+          onActivate: () async {},
         ),
       );
 
@@ -1081,32 +1105,43 @@ void main() {
         contains('Language'),
         reason: 'no dangling separator and no empty component',
       );
-      handle.dispose();
-    });
-
-    testWidgets('the visible descendants never repeat the composed label', (
-      WidgetTester tester,
-    ) async {
-      final SemanticsHandle handle = tester.ensureSemantics();
-      await pumpComponent(
-        tester,
-        GvSettingsRow(
-          title: 'Theme',
-          value: 'Dark',
-          description: 'Follows the flagship palette',
-          onTap: () {},
-        ),
+      expect(
+        settingsSpokenLabel(<String?>['Language', '   ', '', null]),
+        'Language',
       );
-
-      // Each component is visible…
-      expect(find.text('Theme'), findsOneWidget);
-      expect(find.text('Dark'), findsOneWidget);
-      expect(find.text('Follows the flagship palette'), findsOneWidget);
-      // …and each is spoken exactly once, from the composed label alone.
-      expect(labelOccurrences(tester, 'Theme'), 1);
-      expect(labelOccurrences(tester, 'Dark'), 1);
-      expect(labelOccurrences(tester, 'Follows the flagship palette'), 1);
       handle.dispose();
     });
+
+    for (final (String title, String? value, String? description)
+        in <(String, String?, String?)>[
+          ('Theme', 'Dark', null),
+          (
+            'Component catalogue',
+            null,
+            'Design-system gallery, development only',
+          ),
+        ]) {
+      testWidgets('the visible descendants never repeat the composed label: '
+          '$title', (WidgetTester tester) async {
+        final SemanticsHandle handle = tester.ensureSemantics();
+        await pumpComponent(
+          tester,
+          SettingsNavigationRow(
+            title: title,
+            value: value,
+            description: description,
+            onActivate: () async {},
+          ),
+        );
+
+        // Each component is visible…
+        for (final String part in <String>[title, ?value, ?description]) {
+          expect(find.text(part), findsOneWidget, reason: part);
+          // …and each is spoken exactly once, from the composed label alone.
+          expect(labelOccurrences(tester, part), 1, reason: part);
+        }
+        handle.dispose();
+      });
+    }
   });
 }

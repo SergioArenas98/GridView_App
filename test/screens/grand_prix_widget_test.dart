@@ -5,7 +5,6 @@ import 'package:gridview/core/widgets/widgets.dart';
 import 'package:gridview/features/calendar/application/grand_prix_detail_state.dart';
 import 'package:gridview/features/calendar/presentation/calendar_screen.dart';
 import 'package:gridview/features/calendar/presentation/grand_prix_detail_screen.dart';
-import 'package:gridview/features/calendar/presentation/widgets/grand_prix_hero.dart';
 import 'package:gridview/features/circuits/presentation/circuit_detail_screen.dart';
 import 'package:gridview/features/constructors/presentation/constructor_detail_screen.dart';
 import 'package:gridview/features/drivers/presentation/driver_detail_screen.dart';
@@ -19,6 +18,7 @@ import 'package:gridview/features/shared/domain/entities/session.dart';
 import 'package:gridview/features/shared/domain/freshness_evaluator.dart';
 import 'package:gridview/features/shared/domain/refresh_result.dart';
 import 'package:gridview/features/shared/presentation/not_found_screen.dart';
+import 'package:gridview/features/shared/presentation/widgets/primer_detail_app_bar.dart';
 import 'package:gridview/l10n/app_localizations_en.dart';
 import 'package:gridview/l10n/app_localizations_es.dart';
 
@@ -152,13 +152,21 @@ Future<void> _open(
   disableAnimations: true,
 );
 
-/// [text] inside the identity header, as opposed to the app-bar title.
-Finder _inHero(String text) =>
-    find.descendant(of: find.byType(GrandPrixHero), matching: find.text(text));
+/// [text] inside the identity band, as opposed to the app-bar title (Primer
+/// V2, Step 55C.12: the band replaced the legacy hero).
+Finder _inHero(String text) => find.descendant(
+  of: find.byKey(const ValueKey<String>('gp-band')),
+  matching: find.text(text),
+);
 
-/// [text] as the app-bar title.
-Finder _inAppBar(String text) =>
-    find.descendant(of: find.byType(AppBar), matching: find.text(text));
+/// [text] as the app-bar title (the Primer detail app bar since 55C.12).
+Finder _inAppBar(String text) => find.descendant(
+  of: find.byType(PrimerDetailAppBar),
+  matching: find.text(text),
+);
+
+/// One finder hit per rendered session row (55C.12: Primer schedule rows).
+Finder get _sessionRows => find.byKey(const ValueKey<String>('session-name'));
 
 void main() {
   group('Grand Prix header and weekend facts', () {
@@ -181,10 +189,10 @@ void main() {
       );
       expect(find.text('Upcoming'), findsOneWidget);
       expect(find.text('Sprint weekend'), findsOneWidget);
-      expect(
-        find.textContaining('Round 13 · 2026 season · Spa, Belgium'),
-        findsOneWidget,
-      );
+      // Round, season and location are separate band lines since 55C.12.
+      expect(find.bySemanticsLabel('Round 13'), findsOneWidget);
+      expect(find.text('2026 season'), findsOneWidget);
+      expect(find.text('Spa, Belgium'), findsOneWidget);
       // Circuit facts.
       expect(find.text('Circuit de Spa-Francorchamps'), findsOneWidget);
       expect(find.text('Spa, Belgium'), findsWidgets);
@@ -410,7 +418,7 @@ void main() {
 
       expect(find.text('Practice 1'), findsOneWidget);
       expect(find.text('Race'), findsOneWidget);
-      expect(find.byType(GvSessionRow), findsNWidgets(2));
+      expect(_sessionRows, findsNWidgets(2));
     });
 
     testWidgets('unknown, cancelled and postponed sessions stay visible', (
@@ -446,7 +454,7 @@ void main() {
         ),
       );
 
-      expect(find.byType(GvSessionRow), findsNWidgets(3));
+      expect(_sessionRows, findsNWidgets(3));
       expect(find.text('Session'), findsOneWidget);
       expect(find.textContaining('Cancelled'), findsOneWidget);
       expect(find.textContaining('Postponed'), findsOneWidget);
@@ -485,7 +493,7 @@ void main() {
       );
 
       expect(find.text('Schedule not available'), findsOneWidget);
-      expect(find.byType(GvSessionRow), findsNothing);
+      expect(_sessionRows, findsNothing);
     });
   });
 
@@ -496,8 +504,11 @@ void main() {
       await _open(tester);
 
       expect(find.text('Results not available yet'), findsOneWidget);
-      expect(find.byType(GvErrorState), findsNothing);
-      expect(find.byType(GvResultRow), findsNothing);
+      expect(
+        find.byKey(const ValueKey<String>('gp-results-error')),
+        findsNothing,
+      );
+      expect(find.byType(GvPrimerResultRow), findsNothing);
     });
 
     testWidgets('a completed race renders its classification', (
@@ -512,14 +523,15 @@ void main() {
       );
 
       expect(find.text('Race results'), findsOneWidget);
-      expect(find.byType(GvResultRow), findsNWidgets(2));
+      expect(find.byType(GvPrimerResultRow), findsNWidgets(2));
       expect(find.text('Max Verstappen'), findsOneWidget);
       expect(find.text('Red Bull Racing'), findsOneWidget);
       expect(find.text('1:25:03.456'), findsOneWidget);
       expect(find.text('+4.120'), findsOneWidget);
       // Fractional points keep their fraction; whole points lose the ".0".
-      expect(find.text('25'), findsOneWidget);
-      expect(find.text('18.5'), findsOneWidget);
+      // The "pts" unit follows the figure since 55C.12 (DD G-6).
+      expect(find.text('25 pts'), findsOneWidget);
+      expect(find.text('18.5 pts'), findsOneWidget);
     });
 
     testWidgets('sprint and race classifications coexist and stay separate', (
@@ -665,7 +677,7 @@ void main() {
       );
 
       expect(find.textContaining('Fastest lap'), findsOneWidget);
-      expect(find.byType(GvResultRow), findsNWidgets(2));
+      expect(find.byType(GvPrimerResultRow), findsNWidgets(2));
     });
 
     testWidgets('a provisional classification says so', (
@@ -698,7 +710,7 @@ void main() {
       expect(find.text("Can't load results"), findsOneWidget);
       // The weekend information is untouched.
       expect(_inHero('Belgian Grand Prix'), findsOneWidget);
-      expect(find.byType(GvSessionRow), findsNWidgets(5));
+      expect(_sessionRows, findsNWidgets(5));
     });
 
     testWidgets('a result failure with cache keeps the classification', (
@@ -715,7 +727,7 @@ void main() {
         ),
       );
 
-      expect(find.byType(GvResultRow), findsNWidgets(2));
+      expect(find.byType(GvPrimerResultRow), findsNWidgets(2));
       expect(find.text("Can't load results"), findsNothing);
     });
 
@@ -730,7 +742,7 @@ void main() {
         ),
       );
 
-      expect(find.byType(GvResultRow), findsNWidgets(2));
+      expect(find.byType(GvPrimerResultRow), findsNWidgets(2));
       expect(find.text('Results not available yet'), findsNothing);
     });
   });
@@ -748,7 +760,7 @@ void main() {
         ),
       );
 
-      expect(find.byType(GvSessionRow), findsNWidgets(5));
+      expect(_sessionRows, findsNWidgets(5));
       expect(
         find.text("Couldn't refresh — showing saved data."),
         findsOneWidget,
@@ -773,8 +785,8 @@ void main() {
         clock: DateTime.utc(2026, 7, 18, 12, 30),
       );
 
-      expect(find.byType(GvOfflineNotice), findsOneWidget);
-      expect(find.byType(GvSessionRow), findsNWidgets(5));
+      expect(find.byType(GvPrimerNotice), findsOneWidget);
+      expect(_sessionRows, findsNWidgets(5));
     });
   });
 
@@ -953,7 +965,7 @@ void main() {
         surfaceSize: const Size(400, 4000),
       );
 
-      expect(find.byType(GvResultRow), findsWidgets);
+      expect(find.byType(GvPrimerResultRow), findsWidgets);
       expect(tester.takeException(), isNull);
     });
 
@@ -1029,7 +1041,7 @@ void main() {
       expect(find.text('Driver name unavailable'), findsOneWidget);
       // The rest of the row is unaffected.
       expect(find.text('Red Bull Racing'), findsWidgets);
-      expect(find.text('25'), findsWidgets);
+      expect(find.text('25 pts'), findsWidgets);
       expectNoIdentifierText(tester);
     });
 
@@ -1118,7 +1130,7 @@ void main() {
       expect(find.text('Team name unavailable'), findsWidgets);
       // The classification is still fully rendered: position, points, laps.
       expect(find.text('1'), findsWidgets);
-      expect(find.text('25'), findsWidgets);
+      expect(find.text('25 pts'), findsWidgets);
       expect(tester.takeException(), isNull);
       expectNoIdentifierText(tester);
     });

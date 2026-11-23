@@ -1,0 +1,49 @@
+/* GridView — Primer V2 shared foundation: base (reset, type defaults, focus,
+   selection, utilities, icons, hidden guard, reduced motion).
+   Source: primer-core.css (byte-identical in calendar/, standings/, explore/,
+   grand-prix-detail/, driver-detail/, team-detail/, circuit-detail/, settings/;
+   MD5 0d78851eb21ce06b5f2a3c78cbc003fd), itself copied from the approved Home
+   (refinement-01/styles.css). Rules and values are moved verbatim.
+   Load after tokens.css. */
+
+*, *::before, *::after { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
+body {
+  margin: 0;
+  background: var(--ground);
+  color: var(--text);
+  font-family: var(--font);
+  font-size: 0.9375rem;      /* 15 */
+  line-height: 1.45;
+  font-variation-settings: "wdth" 100;
+  -webkit-font-smoothing: antialiased;
+  overflow-x: hidden;
+}
+h1, h2, h3, p, ol, ul { margin: 0; }
+ol, ul { padding: 0; list-style: none; }
+a { color: inherit; text-decoration: none; -webkit-tap-highlight-color: transparent; }
+button { font: inherit; color: inherit; }
+::selection { background: var(--oxide); color: var(--chalk); }
+:focus-visible { outline: 2px solid var(--ember); outline-offset: 3px; border-radius: 6px; }
+.sprite { position: absolute; }
+.sr-only {
+  position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+  overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;
+}
+.num { font-variant-numeric: tabular-nums lining-nums; }
+.icon {
+  width: 24px; height: 24px; flex: none;
+  fill: none; stroke: currentColor; stroke-width: 1.75;
+  stroke-linecap: round; stroke-linejoin: round;
+}
+.icon--sm { width: 16px; height: 16px; stroke-width: 2.25; }
+
+/* Hidden guard. Components such as .notice set display:flex, which would beat
+   the [hidden] attribute. Moved here from the screen stylesheets: the same rule
+   is repeated verbatim in calendar.css, standings.css, explore.css, gpd.css,
+   dd.css, td.css, cd.css and settings.css (not in Home's styles.css). */
+[hidden] { display: none !important; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { transition: none !important; }
+}

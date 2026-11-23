@@ -133,8 +133,11 @@ void main() {
       expect(find.byType(GvRemoteImage), findsWidgets);
     });
 
+    // Primer V2 Explore (Step 55C.7, EX-02 Alternative B): a collection with
+    // no media reference has no image column, so it shows no placeholder
+    // tiles at all; it still requests nothing.
     testWidgets(
-      'a row with no media renders the placeholder and fetches nothing',
+      'a list with no media shows no image column and fetches nothing',
       (WidgetTester tester) async {
         final FakeMediaImageLoader loader = servingEverything();
         await pumpApp(
@@ -152,7 +155,8 @@ void main() {
         expect(loader.cacheProbes, isEmpty);
         expect(loader.fetches, isEmpty);
         expect(find.text('Test Shape'), findsOneWidget);
-        expect(find.byType(GvImagePlaceholder), findsWidgets);
+        expect(find.byType(GvRemoteImage), findsNothing);
+        expect(find.byType(GvImagePlaceholder), findsNothing);
       },
     );
 

@@ -3,307 +3,336 @@
 ## Document information
 
 - Product: GridView
-- Document type: Design System (implementation)
-- Status: **accumulated through Phase 8C-3**, whose accessibility hardening of the
-  shared components is implemented. The header previously read "Phase 3A", which
-  described only §1–§8 and was never updated as the document grew (see "Scope
-  evolution" in §1).
-- Related documents:
-  - `../product/GridView_UI_UX_Design.md` (source of truth for palette, type
-    scale, radius and spacing)
-  - `GridView_TRD.md` (sections 27-28: theming and accessibility)
-- Document date: 2026-07-19
+- Document type: Design System (implementation), **primary entry point**
+- Status: **Primer V2 is implemented on every production screen, in Dark and
+  Light** (completed 2026-11-22, Step 55C.16R). This document describes the
+  system as it ships and links to the detailed records instead of repeating
+  them.
+- Detailed documents:
+  - [GridView_Primer_V2_Theme_Foundation.md](GridView_Primer_V2_Theme_Foundation.md):
+    the per-screen implementation record (contracts, decisions, exceptions,
+    tests), in the order the migration happened.
+  - [GridView_Accessibility.md](GridView_Accessibility.md): accessibility
+    evidence levels, the Primer V2 contracts (§2a) and known limitations.
+  - [GridView_Navigation.md](GridView_Navigation.md): shell, routes, branch
+    restoration and recovery.
+  - [`../testing/README.md`](../testing/README.md) "Canonical goldens
+    (Primer V2)": golden suites and the regeneration procedure.
+  - [GridView_Media.md](GridView_Media.md): remote media architecture.
+- Design record (authoritative for design intent):
+  [`design-exploration/prototypes/primer-v2/`](../../design-exploration/prototypes/primer-v2/README.md),
+  in particular
+  [`DESIGN-DECISIONS.md`](../../design-exploration/prototypes/primer-v2/DESIGN-DECISIONS.md)
+  (decision IDs cited in code comments, such as LT-, XT-, XS-, VS-, N-),
+  [`DESIGN-BACKLOG.md`](../../design-exploration/prototypes/primer-v2/DESIGN-BACKLOG.md)
+  (open and deferred work),
+  [`CROSS-THEME-CONSOLIDATION.md`](../../design-exploration/prototypes/primer-v2/CROSS-THEME-CONSOLIDATION.md)
+  and
+  [`CROSS-THEME-TOKEN-MAP.md`](../../design-exploration/prototypes/primer-v2/CROSS-THEME-TOKEN-MAP.md)
+  (the frozen cross-theme specification).
+- Superseded: the pre-Primer visual direction in
+  `../product/GridView_UI_UX_Design.md` (palette, Sora/Inter pairing) is
+  historical; it is not the source of truth for tokens any more.
+- Document date: 2026-11-22
 
 ---
 
-## 1. Scope
+## 1. Primer V2 principles
 
-Phase 3A implemented the reusable visual foundation: design tokens, typography,
-the dark-first theme, and data-agnostic shared components, plus a
-development-only component catalogue. No feature screens, navigation, data,
-Drift, Worker calls or Firebase were part of **that phase**.
+Primer V2 ("Motorsport Editorial") is the approved visual system. Its rules,
+which every screen follows:
 
-### Scope evolution
+- **One signature move: the 12° livery cut.** A single diagonal, the CSS
+  `skewX(-12deg)` of the prototypes, marks the GridView identity at several
+  scales: the selected navigation slab, the segmented-control slab, the round
+  block and the winner and leader seams. It is one primitive
+  (`GvLiveryCut`), never redrawn per screen (XS-27).
+- **One typeface, the width axis as hierarchy.** Archivo throughout. Figures
+  are expanded and tabular; names are condensed; labels and body text run at
+  normal width, in sentence case, never in tracked capitals (§4).
+- **Meaning by word and shape, never by hue alone.** Status is a word plus an
+  outline pattern: solid for a known state, dashed for an unknown value,
+  filled for Final and Live (VS-1 to VS-7). Colour adds emphasis; it is never
+  the only carrier.
+- **Two themes, one component set.** Dark (graphite, chalk, red oxide, ember)
+  and Light (the approved "B Motorsport" direction) share every component and
+  geometry; only roles differ (XT-1 to XT-6).
+- **Data fidelity.** A screen shows only values the data supplies. A missing
+  value is omitted or shown as an explicit unknown; it never becomes a zero,
+  a guessed name or an invented count. Team colours are decorative accents
+  with a contrast boundary where needed (XT-3).
+- **Accessible by construction.** 48dp targets, visible focus rings,
+  heading and live-region semantics, and layouts that stay usable at 320dp
+  and 200% text (§8).
 
-This document has grown well past Phase 3A and now records the design system as
-it stands. What later phases added:
-
-| Phase | Added here |
-|---|---|
-| 7A / 7B / 7C | Component changes in §8b, §8c and §8d — session and standings rows, the overflow-safe section header, the driver/team/circuit rows |
-| **8A** | **A full light theme shipped.** Both palettes are produced by one builder from one component configuration, so only the palette differs, and the semantic colour pairings enumerated by the contrast suite are asserted for both. That set is curated and explicitly enumerated: it covers pairings the current interface uses together with reserved and decorative roles held to their applicable thresholds, and it is **not** an exhaustive cross-product of all 21 semantic colour tokens; see [GridView_Accessibility.md](GridView_Accessibility.md) §2 and [GridView_Preferences_And_Settings.md](GridView_Preferences_And_Settings.md) §3.4. The earlier statement in §5 that a light theme was "intentionally deferred" is obsolete and is corrected there. |
-| **8B** | **Remote-image components.** `GvRemoteImage` and the media policy in §8d. The original scope line above excluded remote images; that exclusion applied to Phase 3A only, and is no longer true of the design system. |
-| **8C-3** | Accessibility hardening of the shared components: one loading announcement per screen state, live-region and heading semantics on the error and empty states, a de-duplicated offline notice, keyboard/D-pad operability and reduced motion on the primary navigation controls, and complete settings-row and button names. This proves the Flutter semantics and interaction layer only. TalkBack behaviour was covered separately by one populated device review, whose confirmed and still-unfixed findings — including a redundant selected-state suffix on the settings option component — are recorded in [GridView_Accessibility.md](GridView_Accessibility.md) §4. Switch Access remains unverified. |
-
-Advertising is **not** part of the design system's live surface: `GvAdContainer`
-exists but is catalogue-only, and advertising is not retained for v1
-([ADR 0018](../adr/0018-advertising-not-retained-for-v1.md)). See §6.
-
-## 2. Layout
+## 2. Where things live
 
 ```text
 lib/core/theme/
-├── tokens/            strongly-typed design tokens
-│   ├── gv_colors.dart, gv_spacing.dart, gv_radii.dart, gv_elevation.dart
-│   ├── gv_icon_sizes.dart, gv_motion.dart, gv_layout.dart, gv_typography.dart
-│   └── tokens.dart    (barrel)
-├── gv_semantic_colors.dart   ThemeExtension for semantic colours (+ context.gvColors)
-├── gv_team_accent.dart       contrast-safe team-accent foreground helper
-├── gridview_theme.dart       buildGridViewDarkTheme()
-└── theme.dart                (barrel)
-lib/core/widgets/     shared, data-agnostic components (+ widgets.dart barrel)
-lib/features/dev/catalogue/   development-only component catalogue
+├── tokens/
+│   ├── gv_primer_palette.dart     the 15 Primer primitives (never read by widgets)
+│   ├── gv_primer_typography.dart  Archivo style builder
+│   ├── gv_primer_layout.dart      gutter 16, radii 8/14/20, 48dp target, rem helpers
+│   ├── gv_primer_metrics.dart     outline, ring, backing and focus offsets
+│   └── gv_colors*.dart, gv_spacing.dart, ...   legacy tokens (Material layer, catalogue)
+├── gv_primer_roles.dart           GvPrimerRoles ThemeExtension (+ context.gvPrimer)
+├── gv_primer_role_groups.dart     surface / text / fill / line / state / focus groups
+├── gv_primer_components.dart      component roles (nav, selector, chip, notice, ...)
+├── gv_primer_effects.dart         brand gradients, Dark band lighting
+├── gv_primer_surface.dart         GvPrimerSurface: page, inverse, graphite band, brand
+├── gv_primer_system_overlay.dart  status and navigation bar style (XS-35)
+├── gv_font_licenses.dart          Archivo OFL registration
+├── gridview_theme.dart            buildGridViewDarkTheme() / buildGridViewLightTheme()
+└── gv_semantic_colors.dart, gv_text_styles.dart   legacy extensions
+lib/core/widgets/gv_primer_*.dart  shared Primer components (§6)
+lib/core/widgets/gv_*.dart         legacy components: catalogue only, plus GvRemoteImage
+lib/features/shared/presentation/widgets/primer_*.dart   detail-page and pinned-header parts
+lib/features/dev/catalogue/        development-only component catalogue
 ```
 
-## 3. Tokens
+## 3. Themes: Dark and Light
 
-All colour, spacing, radius, elevation, icon-size, motion and layout values come
-from `lib/core/theme/tokens`. **Do not hard-code raw colour, spacing or radius
-literals in widgets** — read them from a token class or the theme.
+- `buildGridViewDarkTheme()` and `buildGridViewLightTheme()` (one builder in
+  `gridview_theme.dart`) install the `GvPrimerRoles` extension with the frozen
+  Dark and Light roles. Widgets read them through `context.gvPrimer`.
+- The theme is a persisted user preference (System, Light, Dark), resolved by
+  `MaterialApp.router` as before; see
+  [GridView_Preferences_And_Settings.md](GridView_Preferences_And_Settings.md) §3.
+- `GvPrimerSystemOverlay` wraps the app in `GridViewApp.builder` and sets the
+  system bars from Primer roles: transparent status bar with theme-matched
+  icons, navigation bar in the colour of the Primer bottom navigation
+  (Theme Foundation §6r, XS-35).
+- **The legacy Material layer still exists** (`ColorScheme`, `TextTheme` and
+  component themes built from `GvSemanticColors` / `GvTextStyles`). No
+  production screen draws with it any more, but `MaterialApp`, `Scaffold`,
+  tooltip and snackbar defaults, the ambient text style (XS-33) and the
+  development catalogue still depend on it. Retiring it would change approved
+  rendering, so it stays until a dedicated step (SF-19 remainder). New code
+  must not read `context.gvColors` or legacy tokens for Primer surfaces.
 
-- `GvColors` — backgrounds, neutrals/text, red primary and blue secondary
-  accents, semantic success/warning, tertiary. Source: UI/UX section 7.
-- `GvSpacing` — 4/8/12/16/20/24/32/40.
-- `GvRadii` — 8/12/20/28 and pill; plus ready-made `BorderRadius` constants.
-- `GvElevation` — subtle shadows and a tonal-surface helper (dark surfaces prefer
-  tonal layering over heavy shadows).
-- `GvIconSizes`, `GvMotion` (durations + curves), `GvLayout` (screen padding,
-  max content width).
+## 4. Typography: Archivo
 
-Semantic colours that do not fit Material's `ColorScheme` (success, warning,
-info, stale, extra surfaces) live in the `GvSemanticColors` theme extension,
-reached via `context.gvColors`.
+- Archivo 2.001, one variable file (`assets/fonts/archivo/Archivo-Variable.ttf`,
+  `wght` 100–900, `wdth` 62–125), bundled under the SIL Open Font License 1.1.
+  Provenance and checksums: `assets/fonts/archivo/README.md`; the licence is
+  registered with `LicenseRegistry` at startup (`gv_font_licenses.dart`).
+- Styles come from `GvPrimerTypography.archivo(size, weight, width, ...)`.
+  Styles carry the nearest standard `FontWeight` and add an explicit `wght`
+  variation only for intermediate weights (650, 750, 820, 830, 850); for those,
+  the platform bold-text setting cannot raise the weight.
+- Width is part of the hierarchy: expanded tabular figures (round, points,
+  times), condensed names, normal-width labels. Long titles and labels use
+  measured fits (`GvPrimerFit`: regular, then condensed, then stacked) rather
+  than truncation.
+- The legacy Sora/Inter pairing was never bundled and is not used.
+- Tests that measure real layout load Archivo (`test/support/primer_fonts.dart`);
+  golden tests deliberately keep the Ahem test font (§10).
 
-## 4. Typography
+Details: Theme Foundation §6.
 
-Hierarchy (UI/UX section 8): `displayXl`, `displayL`, `pageTitle`, `sectionTitle`,
-`cardTitle`, `bodyL`, `bodyM`, `label`, `caption`, and `statValue` (tabular
-figures for numbers). The approved pairing is **Sora** (headings) + **Inter**
-(body/UI).
+## 5. Colour and surface roles
 
-**Font assets are not yet in the repository.** The licensed Sora/Inter TTFs must
-be sourced before bundling; until then `GvFonts.heading`/`GvFonts.body` are
-`null` and text falls back to the platform font. To add them later: place the
-licensed TTFs under `assets/fonts/`, declare them in `pubspec.yaml`, and set
-`GvFonts.heading = 'Sora'` / `GvFonts.body = 'Inter'`. Do not commit unverified
-font files. The legacy Formula 1 fonts must not be used.
+The cross-theme token map is implemented in five layers (Theme Foundation §2
+and §3):
 
-## 5. Theme
+| Layer | Flutter |
+|---|---|
+| Raw values (15 primitives) | `GvPrimerPalette`, private to the role builders |
+| Semantic roles | `GvPrimerRoles.surface` / `.text` / `.fill` |
+| Contextual alpha, boundary, focus | `.line`, `.state`, `.focus`, `.teamEdgeFor()` |
+| Component roles | `.nav`, `.selector`, `.statusChip`, `.notice`, `.action`, `.skeleton` |
+| Decorative effects | `GvPrimerEffects` (brand gradients, Dark band lighting) |
 
-`buildGridViewDarkTheme()` is a dark-first Material 3 theme built from the tokens:
-colour scheme, text theme, system status/navigation-bar styling, and component
-themes for the common Material controls (app bar, card, chip, elevated/outlined/
-icon buttons, dividers).
+- **Surfaces.** `surface.page`, `band`, `raised`, `nav`, the inverse plane
+  and (Light only) `card`. A subtree that sits on a different plane declares
+  it with `GvPrimerSurface(kind: page | inverse | graphiteBand | brand)`;
+  components read foreground, outline and focus colours from
+  `GvPrimerSurface.of(context)` so they adapt to the plane they are on.
+- **No new colours.** Every contextual value is a primitive at an exact alpha;
+  `test/design_system/primer_roles_test.dart` proves it against the token map.
+- **Team colours** are applied only through `teamEdgeFor` / `GvTeamAccent`,
+  with a 1px boundary where the colour is below 3:1 against its surface (XT-3).
+- The legacy blue `accentSecondary`, `success`, `warning`, `info`, `stale`
+  and `tertiary` roles have no Primer counterpart; Primer carries status by
+  outline and word.
 
-**A full light theme shipped in Phase 8A** as `buildGridViewLightTheme()`. The
-token and extension architecture held: both themes come from one builder and one
-component configuration, so only the palette differs and no component code was
-touched. The semantic colour pairings enumerated by
-`test/design_system/theme_contrast_test.dart` are asserted for both palettes.
-That enumeration is curated and explicit. Most text-bearing pairings are
-asserted at 4.5:1; the decorative and reserved roles are asserted at the 3:1
-non-text floor — `accentPrimary` against the background, the `tertiary` accent,
-which has no call site yet, and white on `accentSecondary`, which is never drawn
-as a fill.
+## 6. Component architecture
 
-One of those non-text assertions covers a pair that production also uses for
-text. `onAccentPrimary` on `accentPrimary` is asserted only at 3:1, and the
-selected option of `GvSegmentedControl` draws its 14 px, weight-700 label in
-exactly that pair: **3.55:1 in the dark palette, below the 4.5:1 small-text
-threshold**, against 5.67:1 in the light palette, which meets it. That is a
-known, **pre-existing and unfixed** limitation — it is not introduced here and
-exists identically on `master` — and it is recorded in
-[GridView_Accessibility.md](GridView_Accessibility.md) §4.11. The 3:1 assertion
-is not itself wrong: it correctly checks the decorative, non-text use it was
-written for. What is missing is a separate 4.5:1 assertion for the small-text
-use.
+Shared components are **data-agnostic**: they take formatted strings, kinds,
+slots and callbacks. They never import DTOs, domain entities, repositories,
+Riverpod or Drift; feature code maps its own state onto their inputs (for
+example a domain status onto a `GvPrimerChipKind`).
 
-The enumeration is **not** an exhaustive cross-product of all 21 semantic colour
-tokens; the pairs are listed in `GridView_Preferences_And_Settings.md` §3.4. (This paragraph previously said
-a light theme was "intentionally deferred"; that was true of Phase 3A and is not
-true now.)
-Theme selection is a persisted user preference — see
-`GridView_Preferences_And_Settings.md` §3.
+| Family | Components (`lib/core/widgets/`) |
+|---|---|
+| Geometry and fit | `GvLiveryCut`, `GvPrimerFit`, `GvPrimerOutlinePainter` (solid and dashed) |
+| Focus | `GvPrimerFocusTarget`, `GvPrimerFocusRing`, `GvPrimerFocusGeometry` |
+| Status | `GvPrimerStatusChip` (`GvPrimerChipKind`, two sizes), `GvPrimerRowStatuses`, `GvPrimerNotice` |
+| Navigation and selection | `GvPrimerBottomNav` (`GvPrimerNavItem`), `GvPrimerSegmentedControl` |
+| Editorial rows | `GvPrimerRaceRow`, `GvPrimerResultRow`, `GvPrimerStandingsRow`, row parts (chevron, divider, status label) |
+| Facts and figures | `GvPrimerFact`, `GvPrimerFactGrid`, `GvPrimerStat`, `GvPrimerStatStrip` |
+| Headings and actions | `GvPrimerSectionTitle`, `GvPrimerButton`, `GvPrimerLinkRow`, `GvPrimerArrowDisc` |
+| States | `GvPrimerEmptyState`, `GvPrimerSkeleton`, `GvPrimerLoading` |
+| Identity | `GvPrimerTeamMark`, `GvPrimerIcon` / `GvPrimerGlyph` |
+| Media | `GvRemoteImage` with `GvImagePlaceholder` (§13) |
 
-Team colours are decorative and may fail contrast, so they are applied only as
-accents through `GvTeamAccent.foregroundOn(...)`, never as the sole carrier of
-meaning.
+Feature-level shared parts (`lib/features/shared/presentation/widgets/`):
+`PrimerDetailAppBar` and `PrimerDetailBackButton` (the pinned detail header),
+`PrimerDetailNotices`, `PrimerDetailMessage` / `PrimerDetailSkeleton` (full-page
+states), `PrimerDetailAbout` and `PrimerPinnedHeaderLayout` (§7).
 
-## 6. Components
-
-Shared components (in `lib/core/widgets`) are reusable and **data-agnostic**: they
-accept simple presentation values, colours, slots and callbacks. They **must not
-import API DTOs, domain entities, repositories or feature controllers.** Feature
-code maps its own state onto simple inputs (for example, a domain `EventStatus`
-onto a `GvStatusTone`).
-
-Implemented: `GvAppBar`, `GvSectionHeader`, `GvBottomNav`, `GvPrimaryButton`,
-`GvSecondaryButton`, `GvIconButton`, `GvSegmentedControl`, `GvStatusChip`,
-`GvHeroCard`, `GvContentCard`, `GvDataCard`, `GvSessionRow`, `GvStandingsRow`,
-`GvDriverRow`, `GvTeamRow`, `GvCircuitRow`, `GvResultRow`, `GvSkeletonBlock`,
-`GvSkeletonCard`, `GvEmptyState`, `GvErrorState`, `GvOfflineNotice`,
-`GvImagePlaceholder`, `GvAdContainer` (reserved space only — **no** ad
-initialization; **catalogue-only**, see below).
-
-`GvAdContainer` is a development catalogue component and nothing else.
-Advertising is not retained for v1
-([ADR 0018](../adr/0018-advertising-not-retained-for-v1.md)): no advertising or
-consent SDK is packaged, no ad unit or ad request exists, and no live screen
-constructs this component. It is built only by `ComponentCatalogueScreen`, which
-refuses to navigate in production, so it is unreachable from every production
-route. It is retained because it documents the reserved-space pattern a future
-advertising phase would start from — its presence is not evidence that ads are
-planned for v1.
+Per-component contracts (sizes, semantics, rings, wrapping) are in Theme
+Foundation §6a–§6e.
 
 ### When a new shared component is justified
 
-Add a shared component only when a visual pattern is reused across features and
-benefits from a single accessible implementation. A one-off screen layout does
-not need to become a shared component. Prefer composing existing components.
+Add one only when a visual pattern is reused across features and benefits from
+a single accessible implementation. Prefer composing the existing components;
+a one-off layout stays in its feature.
 
-## 7. Accessibility
+## 7. Navigation, layout and responsive behaviour
 
-Every component follows the baseline (UI/UX section 18, TRD section 28):
+- **Bottom navigation.** `AppShell` uses `GvPrimerBottomNav` as
+  `Scaffold.bottomNavigationBar`, so content always ends above it. Four
+  destinations (Home, Calendar, Standings, Explore), icon above a full label,
+  the selected tab on a 60×32 oxide slab with bold label and `selected`
+  semantics. Height 68dp plus the system inset. The bar picks one row, a
+  condensed row or a 2 × 2 grid from measured label widths; at 320dp @200%
+  it is 2 × 2 (155dp, owner-approved D1). Standings and Explore use a narrower
+  selected-label fallback (GI-2). Routing behaviour is in
+  [GridView_Navigation.md](GridView_Navigation.md) §1.
+- **Pinned headers.** Detail screens (Grand Prix, Driver, Team, Circuit) and
+  NotFound pin a `PrimerDetailAppBar`; the Settings screens pin a
+  `SettingsAppBar` built on the same `PrimerDetailBackButton`.
+  Standings and Explore pin title, season and selector through
+  `PrimerPinnedHeaderLayout`: the header stays pinned while it leaves the list
+  at least 96dp (two targets); on a shorter viewport the whole page scrolls so
+  content stays reachable (GI-10). Status captions and notices scroll with the
+  content instead of being pinned (SF-1). Calendar pins its title and season
+  and places the list once per branch session (N-6, Theme Foundation §6f).
+- **Gutters and widths.** 16dp screen gutter (`GvPrimerLayout.gutter`).
+  Prototype `rem` lengths scale with the text scaler and are capped where the
+  specification says `min(<rem>, <px>)`; lists switch to a narrow layout at
+  their measured container width, not at a fixed device breakpoint.
+- **Large text.** Every screen is verified at 390dp @100% and 320dp @200%
+  in both themes and both languages. Where a block is taller than the space
+  between the pinned header and the navigation, it is reachable line by line
+  (`test/support/reachability.dart`), and keyboard focus reveals its top
+  (XS-34).
 
-- Semantics on important controls; icon-only buttons carry a label.
-- Interactive touch targets are at least 48 logical px (`GvLayout.minTouchTarget`);
-  the visible icon or control may be smaller, but the hit area is not. Buttons,
-  icon buttons, segmented controls, bottom-nav destinations and tappable cards
-  all enforce this minimum.
-- Information is never conveyed by colour alone (status chips pair a dot with a
-  text label; selected states also change weight and expose a selected flag).
-- No fixed heights that clip scaled text; rows use `minHeight` and ellipsis.
-- Reduced-motion is respected (skeletons render static when animations are
-  disabled).
+## 8. Accessibility and focus contracts
 
-## 8. Development component catalogue
+Summary; the evidence and limitations are in
+[GridView_Accessibility.md](GridView_Accessibility.md) §2a and §4.
 
-`ComponentCatalogueScreen` is a development-only gallery of every component and
-its states, including long English/Spanish text, large text scaling, team accents
-and narrow-phone width. It is **unreachable in production**: `open()` refuses to
-navigate when the environment is production, and only non-production builds show
-its entry point.
+- Every interactive element has a hit area of at least 48 × 48dp
+  (`GvPrimerLayout.minTarget`), even when the visible control is smaller.
+- Focus is shown by a 2px ring painted above the element, never clipped, in
+  the colour defined per surface (Ember on Dark page, Graphite on Light page,
+  Chalk on oxide; a 5px backing band in Light where the ring crosses a
+  surface edge). Geometry per component is in `GvPrimerFocusGeometry`.
+- Enter and Space activate every focus target; traversal follows reading
+  order, with the pinned header and the list as separate traversal groups.
+- Screen and section titles are headings; one live region per page state
+  (loading, error, notice), never merged with the message below it.
+- Status words are always present; outlines and colour never carry meaning
+  alone. Computed contrast: text ≥ 4.5:1, labels on fills ≥ 4.5:1, focus rings
+  and solid status outlines ≥ 3:1. Recorded exception: the Dark segmented
+  slab against its container is 2.47:1, accepted as a limit with the bold
+  label and selected semantics carrying the state.
+- These are Flutter-semantics (Level 1) results from `flutter_tester`.
+  TalkBack, Switch Access and physical-device validation of Primer V2 have not
+  been performed.
 
-Open it: run a dev or staging build and tap **Settings → Developer → Component
-catalogue**. (Before Phase 3B the entry lived on the placeholder shell home
-screen; it moved to Settings when the navigation shell landed.)
+## 9. Implementing a new screen
 
-Navigation, routing and the screen skeletons that consume these components are
-documented in `GridView_Navigation.md`.
+1. Start from the design record: find the approved prototype and the
+   decisions for the screen in `DESIGN-DECISIONS.md`, and the open items in
+   `DESIGN-BACKLOG.md`. If there is no approved design, get one approved
+   first; do not improvise a new visual pattern.
+2. Build from the shared components (§6) and roles (§5). Read colours only
+   through `context.gvPrimer` or `GvPrimerSurface.of(context)`; never through
+   legacy tokens or literals.
+3. Use `PrimerDetailAppBar` for a detail page or `PrimerPinnedHeaderLayout`
+   for a pinned title with a scrolling list; put status captions and notices
+   in the scrolling content.
+4. Keep the screen data-agnostic at the widget boundary and respect data
+   fidelity: omit or mark unknown values, never invent them.
+5. Add every user-visible string to both ARB files (English and Spanish).
+6. Test: semantics (headings, live regions, labels), 48dp targets, focus
+   rings and keyboard activation, Dark and Light × EN and ES × 390dp @100% and
+   320dp @200% with no overflow or broken words, short viewports, and
+   real-font layout with Archivo where measurement matters.
+7. Add or update canonical goldens only on Linux through the procedure in
+   [`../testing/README.md`](../testing/README.md), and record the screen's
+   contracts and decisions in the Theme Foundation record and, for design
+   decisions, in `DESIGN-DECISIONS.md`.
 
-## 8b. Phase 7A component changes
+## 10. Golden tests and review captures
 
-Three data-agnostic refinements were made while wiring the Calendar and Grand
-Prix features. None of them knows about a domain entity, a repository, Riverpod
-or Drift; feature widgets map their own state into primitive inputs.
+- **Canonical goldens:** 90 PNG baselines from six suites, rendered on Linux
+  with Flutter 3.44.0 and the Ahem test font, checked by a zero-drift
+  freshness job in CI. Ahem draws every glyph as a square, so goldens pin
+  layout, colour and geometry, not real typography; for example every shell
+  golden shows the 2 × 2 navigation. Procedure, suites and the accepted
+  Windows exceptions: [`../testing/README.md`](../testing/README.md).
+- **Review captures** (not goldens, not committed): the
+  `tool/primer_review/` scripts render the approved HTML prototypes with
+  headless Chrome (`capture_*_refs.mjs`) and the Flutter screens with Archivo
+  (`capture_*_test.dart`) into `build/primer-review/`, for side-by-side visual
+  review. They read the prototypes under
+  `design-exploration/prototypes/primer-v2/cross-screen-refinement/`.
 
-- **`gvToneColor(context, tone)`** was extracted from `GvStatusChip` so a chip, a
-  row accent and any other status affordance resolve the same semantic colour.
-  The chip's rendering is unchanged.
-- **`GvSessionRow.tone`** now actually renders: a non-neutral tone adds a
-  restrained accent bar. Feature code deliberately reserves it for the states a
-  reader must not miss (live, cancelled, postponed) — colouring every scheduled
-  or completed row would be noise. The textual status label is always present,
-  so meaning is never carried by colour alone.
-- **`GvResultRow`** gained optional `statusLabel`, `badgeLabel`, `score`,
-  `semanticLabel`, `onTeamTap` and `teamSemanticLabel`. Every value is optional
-  and purely presentational: anything the caller omits is not rendered, so a
-  missing value never becomes a false zero. The primary action and the secondary
-  (team) action occupy **separate, stacked** hit areas, each at least
-  `GvLayout.minTouchTarget` tall and each exposing its own button semantics — no
-  nested competing tap regions. `semanticLabel` replaces the row's merged child
-  semantics with one explicit label so a screen reader announces position,
-  driver, team, status and score in a useful order.
+## 11. Known limitations and deferred issues
 
-A row's trailing slot is now capped at a fraction of the row width. A `Row`
-gives a non-flex child unbounded width, which turned a long value (a race time
-at a large text scale) into an overflow instead of a wrap; capping it keeps the
-title readable and lets the value wrap.
+The backlog
+([`DESIGN-BACKLOG.md`](../../design-exploration/prototypes/primer-v2/DESIGN-BACKLOG.md))
+is the authoritative list. The ones that matter most when working on the UI:
 
-The component catalogue examples and the design-system tests were updated with
-these components.
+- **Device validation not done:** TalkBack and screen-reader behaviour
+  (XS-02), real Android font scaling (XS-05), device rendering, safe areas and
+  scrolling (XS-16), system-bar rendering on Android 14 and 15+, and keyboard,
+  D-pad and Switch Access on real hardware. All Primer V2 evidence is
+  `flutter_tester` and Chrome emulation.
+- **Legacy Material layer kept** (SF-19 remainder, §3), including the ambient
+  0.25px letter spacing on Primer text (XS-33).
+- **NF-04:** a stale router URI after an invalid Grand Prix recovery; benign
+  today, with recorded reopen conditions (router refresh, state restoration,
+  route observers, web).
+- **Goldens use Ahem** (GI-9, D2): real typography is covered by Archivo
+  layout tests and review captures, not by goldens.
+- **Data licensing (SETT-18):** commercial-use compatibility of the CC BY-NC-SA
+  4.0 data credit is unresolved; GridView stays free and unmonetised while it
+  relies on non-commercial sources (ADR 0019 C2–C4).
 
-## 8c. Phase 7B component changes
+## 12. Legacy components and the development catalogue
 
-Two data-agnostic refinements were made while wiring the Standings feature. Both
-stay primitive: `GvStandingsRow` still takes only already-formatted strings and
-knows nothing about drivers, constructors, repositories, Riverpod, Drift or DTOs,
-and both championship tables use the same component.
+The pre-Primer components (`GvAppBar`, buttons, cards, `GvSectionHeader`,
+`GvSegmentedControl`, rows, skeleton blocks, states, `GvStatusChip`,
+`GvAdContainer`) are no longer used by any production screen. They remain for
+the development catalogue and are covered by five design-system goldens.
+`GvBottomNav`, the screen and entity-detail scaffolds, the old Calendar and
+Grand Prix widgets and the Settings rows were removed. The Phase 7 refinements
+to the legacy rows are recorded in this document's Git history.
 
-- **`GvStandingsRow`** gained optional `stat`, `badgeLabel` and `semanticLabel`.
-  `stat` and `badgeLabel` join the existing `team` on the row's secondary line
-  with the shared ` · ` separator; anything the caller omits is simply not
-  rendered, so a missing team leaves no dangling separator and a missing
-  statistic never becomes a false zero. `semanticLabel` replaces the row's merged
-  child semantics with one explicit label, so a screen reader announces position,
-  name, team, points, statistics and status (leader, tied leader, provisional) in
-  a useful order — leader emphasis therefore has a semantic equivalent and is
-  never carried by colour or elevation alone.
-- The row's **leading position slot** changed from a fixed 28 px box to a 32 px
-  *minimum* width with a single line. Single- and double-digit positions stay
-  aligned, while a wider value — a two-digit position at a large text scale, or
-  the localized unranked em dash — takes the room it needs instead of wrapping
-  onto a second line and misaligning the row. This regenerated the
-  `standings_row_leader` design-system golden.
-- **`GvTeamAccent.parse`** turns a contract `#RRGGBB` team colour into a `Color`,
-  returning `null` for a missing or malformed value. A team colour is decorative,
-  so an unparseable one renders no accent rather than failing or substituting a
-  fabricated default. Accents remain thin bars; they never carry meaning alone.
+`ComponentCatalogueScreen` is a development-only gallery of every component
+and its states (legacy and Primer, Dark and Light, long text, large text,
+narrow width). It is **unreachable in production**: `open()` refuses to
+navigate in production, and only non-production builds show its entry
+(Settings → Developer → Component catalogue).
 
-The component catalogue gained a provisional row with a two-digit position and a
-row with no team and no statistics, and the design-system behaviour tests cover
-the new slots, the omission rules and the single-line position.
+`GvAdContainer` is catalogue-only. Advertising is not retained for v1
+([ADR 0018](../adr/0018-advertising-not-retained-for-v1.md)): no advertising
+or consent SDK is packaged and no production route constructs it.
 
+## 13. Media policy
 
-## 8d. Phase 7C component changes
-
-Phase 7C introduced no new component. Three existing ones gained optional,
-backward-compatible parameters, and one layout defect was fixed.
-
-### `GvSectionHeader` — overflow-safe trailing action
-
-The trailing action is now `Flexible` with a single-line ellipsis, so a long
-localized label (Spanish `Ver clasificación de constructores`) or a large text
-scale no longer overflows the row.
-
-- The title (`Expanded`) and the action (`Flexible`) each have flex 1, so the
-  title always keeps at least half the row and stays usable.
-- Ellipsis is **visual only**: the complete label remains the semantic label, so
-  assistive technology reads the whole action.
-- The target still meets `GvLayout.minTouchTarget` in both dimensions.
-- No tooltip was added — the design system does not use tooltips for section
-  actions, and a truncated label must not silently acquire one.
-
-Verified in `test/design_system/section_header_test.dart` for both locales at 1x
-and 2x text scale, at 390 px and 320 px widths.
-
-### `GvDriverRow`
-
-- `subtitle` — an already-composed secondary line, taking precedence over the
-  existing `team` (which is retained, so existing call sites are unchanged).
-- `shortCode` — rendered beneath the number in the trailing slot.
-- `accentColor` — a restrained team accent, never the sole carrier of identity.
-- `semanticLabel` — one explicit reading order for the whole row.
-
-### `GvTeamRow` / `GvCircuitRow`
-
-- `semanticLabel` on both; `trailing` on `GvCircuitRow`.
-
-All new parameters are optional and default to the previous behaviour, so every
-existing user and every existing golden remains valid.
-
-### Media policy (Phase 8B)
-
-Phase 7C shipped media **fallbacks**; Phase 8B added the media system around
-them. `GvImagePlaceholder` is unchanged and remains the fallback for every
-no-image state.
-
-`GvRemoteImage` renders remote imagery. It takes **primitives only** — a
-validated URL, a cache identity, a size, a placeholder icon, an optional label —
-and knows nothing about `Driver`, `Constructor`, `Circuit`, `GrandPrix`,
-`MediaAsset`, a repository, a Riverpod `Ref`, a Drift row or a DTO. Choosing
-*which* image belongs in a slot happens before the widget is built, in a pure
-selector.
+`GvImagePlaceholder` is the fallback for every no-image state. `GvRemoteImage`
+renders remote imagery. It takes **primitives only**: a validated URL, a cache
+identity, a size, a placeholder icon, an optional label. It knows nothing about
+`Driver`, `Constructor`, `Circuit`, `GrandPrix`, `MediaAsset`, a repository, a
+Riverpod `Ref`, a Drift row or a DTO. Choosing *which* image belongs in a slot
+happens before the widget is built, in a pure selector.
 
 - Every hero and every row leading slot reserves its aspect ratio from the first
   frame, so content never shifts when bytes arrive or fail to.
@@ -317,24 +346,22 @@ selector.
   so no widget test can reach the network by accident.
 - No production asset URL is hardcoded, and no logo, portrait or circuit outline
   is bundled.
-- Initials are never derived from an identifier; team treatment uses the
-  contrast-safe accent from `GvTeamAccent`, which returns `null` for a missing or
-  malformed colour rather than inventing one.
-- Accessibility is decided slot by slot rather than by marking every image
-  informative: an image beside text that already names its subject is decorative,
-  while a circuit layout diagram is informative, because the shape of the track is
-  information no adjacent text states.
-- Missing media never removes core text content: every row and every detail
-  screen stays fully usable and navigable without it.
+- Accessibility is decided slot by slot: an image beside text that already names
+  its subject is decorative, while a circuit layout diagram is informative.
+- Missing media never removes core text content.
+- Media attribution and licence notices are shown in Settings →
+  Acknowledgements; their wording and the provider restrictions are unchanged
+  by Primer V2.
 
-Full architecture — ownership, variant selection, URL policy, cache limits, the
-loader boundary and publication — is in [GridView_Media.md](GridView_Media.md).
+Full architecture: [GridView_Media.md](GridView_Media.md).
 
-## 9. Rules
+## 14. Rules
 
-- No raw colour/spacing/radius literals in widgets — use tokens.
-- No API/DTO/repository/controller imports in `lib/core/theme` or
+- No raw colour, spacing or radius literals in widgets: use Primer roles and
+  `GvPrimerLayout` / `GvPrimerMetrics`.
+- No API, DTO, repository or controller imports in `lib/core/theme` or
   `lib/core/widgets`.
 - No ad, Firebase, Worker, Drift or provider dependency in design-system code.
-- The production `applicationId` (`com.sejuma.gridview`) and Android signing are
-  never changed by design-system work.
+- Never mix legacy and Primer roles inside one component.
+- The production `applicationId` (`com.sejuma.gridview`) and Android signing
+  are never changed by design-system work.

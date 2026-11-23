@@ -1,0 +1,7 @@
+/* LT-8 COMPARISON (Step 53D), not proposed by itself: the smallest stronger
+   notice boundary that needs no new value. The notice border takes the
+   approved solid status-outline role (--x-line-status = Graphite 55% in
+   Light, DK-1's line.status), instead of --hair-strong (Graphite 26%).
+   Same 1px width, radius, fill, icon, text, role and position: only the
+   border colour changes. Loaded after light-b2.css on the notice pages. */
+.notice { border-color: var(--x-line-status); }

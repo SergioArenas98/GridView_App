@@ -33,6 +33,8 @@ class GvRemoteImage extends StatefulWidget {
     this.borderRadius = GvRadii.mdAll,
     this.semanticLabel,
     this.decorative = false,
+    this.showPlaceholder = true,
+    this.failedPlaceholder,
   });
 
   /// Markers for the three no-image states.
@@ -76,6 +78,24 @@ class GvRemoteImage extends StatefulWidget {
   /// Whether the image is purely decorative, in which case it is removed from the
   /// semantics tree entirely so a screen reader does not announce it twice.
   final bool decorative;
+
+  /// Whether the no-image states draw [GvImagePlaceholder] (the default).
+  ///
+  /// `false` leaves the reserved slot empty and transparent instead, for a
+  /// decorative layer whose surroundings are already complete without an
+  /// image (the Primer V2 Driver plate, XS-15). Size, the three state keys,
+  /// the requests made, the fade-in of a real image and the semantics are the
+  /// same either way.
+  final bool showPlaceholder;
+
+  /// What a failed load shows when [showPlaceholder] is `false` (Step
+  /// 55C.11, the Primer V2 Circuit Detail media frame: an empty frame while
+  /// pending, the decorative route glyph after a failure). `null` (the
+  /// default) keeps the slot empty after a failure too, exactly as before.
+  /// Ignored while [showPlaceholder] is `true`, so the legacy placeholder
+  /// still never distinguishes a failure from a slow load. A decode failure
+  /// counts as a failure; the three state keys are unchanged.
+  final Widget? failedPlaceholder;
 
   @override
   State<GvRemoteImage> createState() => _GvRemoteImageState();
@@ -212,7 +232,7 @@ class _GvRemoteImageState extends State<GvRemoteImage> {
       // 40px row never keeps detail-resolution pixels in memory.
       cacheWidth: cacheWidth?.round(),
       // A decode failure is just another way of having no image.
-      errorBuilder: (_, _, _) => _placeholder(),
+      errorBuilder: (_, _, _) => _placeholder(decodeFailed: true),
       // Frames arriving from disk are already decoded quickly; a cached hit is
       // shown immediately so scrolling back does not replay a fade.
       gaplessPlayback: true,
@@ -237,17 +257,22 @@ class _GvRemoteImageState extends State<GvRemoteImage> {
     return width * MediaQuery.devicePixelRatioOf(context);
   }
 
-  Widget _placeholder() => GvImagePlaceholder(
-    // The three placeholder states render identically — that is the point, since
-    // a user must not be able to tell a failure from a slow load. The key makes
-    // them distinguishable to a test without changing a single pixel, so
-    // "fell back after an error" can be asserted separately from "still
-    // loading" and from "there was never any media".
-    key: _placeholderKey,
-    aspectRatio: widget.aspectRatio,
-    icon: widget.placeholderIcon,
-    borderRadius: widget.borderRadius,
-  );
+  Widget _placeholder({bool decodeFailed = false}) => !widget.showPlaceholder
+      ? SizedBox.expand(
+          key: _placeholderKey,
+          child: (_failed || decodeFailed) ? widget.failedPlaceholder : null,
+        )
+      : GvImagePlaceholder(
+          // The three placeholder states render identically — that is the point, since
+          // a user must not be able to tell a failure from a slow load. The key makes
+          // them distinguishable to a test without changing a single pixel, so
+          // "fell back after an error" can be asserted separately from "still
+          // loading" and from "there was never any media".
+          key: _placeholderKey,
+          aspectRatio: widget.aspectRatio,
+          icon: widget.placeholderIcon,
+          borderRadius: widget.borderRadius,
+        );
 
   ValueKey<String> get _placeholderKey {
     if (widget.request == null) return GvRemoteImage.noMediaPlaceholderKey;

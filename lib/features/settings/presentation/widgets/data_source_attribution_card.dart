@@ -5,11 +5,12 @@ import '../../../../core/theme/theme.dart';
 import '../../../../l10n/app_localizations.dart';
 import '../../../shared/application/fixture_data_identity_provider.dart';
 import '../../../shared/domain/fixture_data_identity.dart';
-import '../../../shared/presentation/widgets/screen_sections.dart';
 import '../../application/external_links.dart';
 import '../../domain/data_source_attribution.dart';
-import '../information_screens.dart' show openExternalLink;
-import 'settings_rows.dart';
+import 'settings_external_link_row.dart';
+import 'settings_information.dart';
+import 'settings_primer_text.dart';
+import 'settings_snackbar.dart';
 
 /// The attribution one data source is owed (GridView_Provider_Evaluation.md
 /// §7.6.2): its name, how data from it can reach GridView, the
@@ -18,10 +19,27 @@ import 'settings_rows.dart';
 ///
 /// The source's own values — name, licence name and notices — are shown as
 /// published, never translated. Only GridView's explanatory copy is localized.
+///
+/// Primer V2 (Step 55C.13B, `information.css` `.source`): no card. The
+/// provider name is a heading (22px, 800, `wdth` 96), the notices follow as
+/// reading text 12px apart, supplied notices as prose facts under a
+/// hairline, then the external-link rows. Licence tokens such as "BY-NC-SA"
+/// wrap naturally; nothing is inserted into or replaced in a legal string
+/// (owner decision SF-14).
 class DataSourceAttributionCard extends ConsumerWidget {
   const DataSourceAttributionCard({super.key, required this.source});
 
   final DataSourceAttribution source;
+
+  /// The language of the record's free text (licence title and supplied
+  /// notices), for screen-reader pronunciation only (SF-13).
+  ///
+  /// The record is repository-owned and bundled (ADR 0019): it has a single,
+  /// unlocalized value per field, written in English (`data-sources-v3`;
+  /// DESIGN-DECISIONS SI-02, backlog SETT-20). It carries no language tag, so
+  /// a localized record would need this revisited. The source name and the
+  /// licence name are identifiers and are not marked.
+  static const Locale recordTextLocale = Locale('en');
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -30,61 +48,103 @@ class DataSourceAttributionCard extends ConsumerWidget {
     final FixtureDataIdentity? fixtureData = ref
         .watch(fixtureDataIdentityProvider)
         .value;
-    return GvInfoCard(
+    final GvPrimerRoles roles = GvPrimerSurface.of(context).roles;
+    final List<String> notices = <String>[
+      _status(l10n, fixtureData),
+      l10n.settingsSourceModified,
+      l10n.settingsSourceLicenseNotice(source.name, source.licenseName),
+      l10n.settingsSourceNotEndorsed(source.name),
+    ];
+    Future<void> open(ExternalLink link) =>
+        openSettingsExternalLink(context, ref, link);
+    return Padding(
       key: ValueKey<String>('data-source-${source.sourceId}'),
-      children: <Widget>[
-        _Notices(
-          source: source,
-          lines: <String>[
-            _status(l10n, fixtureData),
-            l10n.settingsSourceModified,
-            l10n.settingsSourceLicenseNotice(source.name, source.licenseName),
-            l10n.settingsSourceNotEndorsed(source.name),
-          ],
-        ),
-        // Licensor-supplied notices, retained verbatim when present
-        // (CC BY-NC-SA 4.0 §3(a)(1)(A)). An absent notice renders as nothing.
-        if (source.creatorDesignation != null)
-          GvSettingsField(
-            label: l10n.settingsSourceCredit,
-            value: source.creatorDesignation,
+      padding: const EdgeInsets.only(top: 8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        mainAxisSize: MainAxisSize.min,
+        children: <Widget>[
+          Padding(
+            padding: const EdgeInsets.symmetric(
+              horizontal: GvPrimerLayout.gutter,
+            ),
+            child: Semantics(
+              header: true,
+              child: Text(
+                source.name,
+                style: SettingsType.sourceName.style().copyWith(
+                  color: roles.text.primary,
+                ),
+              ),
+            ),
           ),
-        if (source.copyrightNotice != null)
-          GvSettingsField(
-            label: l10n.settingsSourceCopyright,
-            value: source.copyrightNotice,
+          const SizedBox(height: 10),
+          for (int i = 0; i < notices.length; i++)
+            SettingsProse(notices[i], top: i == 0 ? 0 : 12),
+          // Licensor-supplied notices, retained verbatim when present
+          // (CC BY-NC-SA 4.0 §3(a)(1)(A)). An absent notice renders as
+          // nothing, and with none the list renders nothing at all.
+          Padding(
+            padding: EdgeInsets.only(top: _hasSuppliedNotice ? 12 : 0),
+            child: SettingsFactList(
+              leadingRule: SettingsFactRule.hairline,
+              facts: <SettingsFact>[
+                SettingsFact(
+                  label: l10n.settingsSourceCredit,
+                  value: source.creatorDesignation,
+                  kind: SettingsFactKind.prose,
+                  valueLocale: recordTextLocale,
+                ),
+                SettingsFact(
+                  label: l10n.settingsSourceCopyright,
+                  value: source.copyrightNotice,
+                  kind: SettingsFactKind.prose,
+                  valueLocale: recordTextLocale,
+                ),
+                SettingsFact(
+                  label: l10n.settingsSourceNotice,
+                  value: source.warrantyDisclaimerNotice,
+                  kind: SettingsFactKind.prose,
+                  valueLocale: recordTextLocale,
+                ),
+              ],
+            ),
           ),
-        if (source.warrantyDisclaimerNotice != null)
-          GvSettingsField(
-            label: l10n.settingsSourceNotice,
-            value: source.warrantyDisclaimerNotice,
+          const SizedBox(height: 12),
+          SettingsExternalLinkRow(
+            key: ValueKey<String>('data-source-${source.sourceId}-project'),
+            title: l10n.settingsSourceProject,
+            address: displayLink(source.sourceLink),
+            divider: true,
+            onActivate: () => open(source.sourceLink),
           ),
-        GvSettingsRow(
-          key: ValueKey<String>('data-source-${source.sourceId}-project'),
-          title: l10n.settingsSourceProject,
-          value: displayLink(source.sourceLink),
-          icon: Icons.open_in_new,
-          onTap: () => openExternalLink(context, ref, source.sourceLink),
-        ),
-        if (terms != null)
-          GvSettingsRow(
-            key: ValueKey<String>('data-source-${source.sourceId}-terms'),
-            title: l10n.settingsSourceTerms,
-            value: displayLink(terms),
-            icon: Icons.open_in_new,
-            onTap: () => openExternalLink(context, ref, terms),
+          if (terms != null)
+            SettingsExternalLinkRow(
+              key: ValueKey<String>('data-source-${source.sourceId}-terms'),
+              title: l10n.settingsSourceTerms,
+              address: displayLink(terms),
+              divider: true,
+              onActivate: () => open(terms),
+            ),
+          SettingsExternalLinkRow(
+            key: ValueKey<String>('data-source-${source.sourceId}-license'),
+            title: l10n.settingsSourceLicense,
+            value: source.licenseName,
+            description: source.licenseTitle,
+            descriptionLocale: recordTextLocale,
+            divider: true,
+            onActivate: () => open(source.licenseLink),
           ),
-        GvSettingsRow(
-          key: ValueKey<String>('data-source-${source.sourceId}-license'),
-          title: l10n.settingsSourceLicense,
-          value: source.licenseName,
-          description: source.licenseTitle,
-          icon: Icons.open_in_new,
-          onTap: () => openExternalLink(context, ref, source.licenseLink),
-        ),
-      ],
+        ],
+      ),
     );
   }
+
+  bool get _hasSuppliedNotice => <String?>[
+    source.creatorDesignation,
+    source.copyrightNotice,
+    source.warrantyDisclaimerNotice,
+  ].any((String? notice) => notice != null && notice.isNotEmpty);
 
   /// How data from this source can reach this build.
   ///
@@ -115,37 +175,5 @@ class DataSourceAttributionCard extends ConsumerWidget {
         ? link.uri.path.substring(0, link.uri.path.length - 1)
         : link.uri.path;
     return '${link.uri.host}$path';
-  }
-}
-
-/// The source's name and the notices about it, read as one block.
-class _Notices extends StatelessWidget {
-  const _Notices({required this.source, required this.lines});
-
-  final DataSourceAttribution source;
-  final List<String> lines;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(
-        horizontal: GvSpacing.sm,
-        vertical: GvSpacing.sm,
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisSize: MainAxisSize.min,
-        children: <Widget>[
-          Semantics(
-            header: true,
-            child: Text(source.name, style: context.gvText.cardTitle),
-          ),
-          for (final String line in lines) ...<Widget>[
-            const SizedBox(height: GvSpacing.xs),
-            Text(line, style: context.gvText.bodyM),
-          ],
-        ],
-      ),
-    );
   }
 }

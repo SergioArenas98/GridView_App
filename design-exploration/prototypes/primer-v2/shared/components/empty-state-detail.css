@@ -1,0 +1,18 @@
+/* GridView — Primer V2 shared component: DETAIL-SIZE variant of the empty /
+   error block. Load after components/empty-state.css, only on detail screens.
+
+   An explicit, opt-in size variant, not a default. Two approved sizes exist
+   (see the empty-state.css header):
+   - detail screens (GP, Driver, Team, Circuit): 28px icon, margin-bottom 2px;
+     18px / 1.25 title, capped 28px. These two rules are byte-identical in
+     gpd.css, dd.css, td.css and cd.css (verified 2026-11-09) and are moved
+     here verbatim.
+   - list screens (Standings, Explore): 32px icon, margin-bottom 4px; 20px / 1.2
+     title, capped 30px. They stay in each list screen's stylesheet.
+   Which size, if either, becomes the shared default is not decided here. The
+   detail screens' `.btn:hover` (Chalk-low) is not here either: Grand Prix
+   Detail and the list screens do not have it, so it stays local.
+   First consumers: the Driver, Team and Circuit Detail pilots. */
+
+.empty .icon { width: 28px; height: 28px; color: var(--text-2); margin-bottom: 2px; }
+.empty__title { font-size: min(1.125rem, 28px); font-weight: 750; font-variation-settings: "wdth" 96; line-height: 1.25; text-wrap: balance; }

@@ -1,0 +1,294 @@
+/* GridView — Primer V2: Circuit Detail. Loads after primer-core.css
+   (byte-identical copy of the shared foundation) and only adds to it.
+   Conventions as the other screens: text in rem, layout in px, display
+   figures capped with min() (Android-like non-linear scaling).
+
+   Composition: a circuit sheet, then the records.
+   - The sheet (tray band) holds only the circuit's stable identity: name,
+     location, the circuit's own media when one is selected, and the
+     physical facts. Nothing season-scoped sits in it.
+   - Length is set as a dimension line: the value between two arms whose
+     outer ends carry 12° ticks, the architectural dimension tick. It is
+     notation, not a scale: the arms are always full width.
+   - Corners, direction and first Grand Prix follow as a ruled facts row.
+   - The lap record is a timing readout: the time as the one large figure,
+     then holder and year.
+   - The season-scoped part sits below, under its season line: the related
+     Grand Prix row previews Grand Prix Detail's identity (round figure |
+     12° oxide seam | name) and opens it; or the season's no-event statement.
+   No number board (Driver) and no colour rail (Team). The 12° appears twice:
+   the dimension ticks and the round seam.
+
+   Detail screens open on the root navigator in Flutter: no bottom
+   navigation, only the app bar's back action. */
+
+/* CONSOLIDATION PILOT copy of ../../circuit-detail/cd.css (2026-11-09).
+   Loads after the shared foundation in ../../shared/ instead of
+   primer-core.css. Only these rules were removed, each moved verbatim to a
+   shared file: [hidden] (base.css); .dbar, .dbar__title
+   (components/detail-app-bar.css); .notice, .notice .icon
+   (components/notice.css, common subset); .empty, .empty__msg, .btn
+   (components/empty-state.css); .empty .icon, .empty__title
+   (components/empty-state-detail.css); and, since the Grand Prix pilot
+   (2026-11-10), .page, .sec, .sec__title (components/detail-page.css).
+   `.notice` keeps its local extension (text-wrap: pretty), as in the
+   Standings and Explore pilots. Everything else is unchanged, in its
+   original order. */
+
+/* ---------- Copied from ../team-detail/td.css (itself from Driver Detail; candidates for the core, XS-09). In the pilot:
+   the app bar, notice base and empty block are in ../../shared/; these stay local ---------- */
+.page-notice { padding: 12px var(--gutter); }
+.notice { text-wrap: pretty; }
+.btn:hover { background: var(--chalk-low); }
+
+/* ---------- Chips: Grand Prix Detail's additions (copied from ../grand-prix-detail/gpd.css) ---------- */
+.chip--done { border: 1.5px solid var(--hair-strong); }
+.chip--alert { border: 1.5px solid rgba(236, 234, 229, 0.6); }
+
+/* ---------- Circuit sheet (CI01–CI08) ---------- */
+.ch {
+  container: ch / inline-size;
+  position: relative;
+  padding: 24px var(--gutter) 0;
+  background:
+    linear-gradient(168deg, rgba(255, 255, 255, 0.045) 0%, rgba(255, 255, 255, 0) 46%),
+    var(--tray);
+}
+.ch--bare { padding-bottom: 26px; }
+/* The authoritative circuit name: the most condensed cut in Primer (names
+   such as "Circuit de Spa-Francorchamps" are long and hyphenated), balanced,
+   never truncated. A real hyphen is a valid break; nothing else splits. */
+.ch__name {
+  max-width: 14em;
+  font-size: min(2.5rem, 44px);    /* 40 */
+  font-weight: 820;
+  font-variation-settings: "wdth" 72;
+  line-height: 0.98;
+  letter-spacing: -0.012em;
+  overflow-wrap: break-word;
+  text-wrap: balance;
+}
+/* Location exactly as Flutter joins it ("Stavelot, Belgium"). */
+/* A hyphenated word of up to 18 characters stays whole ("Spa-Francorchamps");
+   longer ones may still break at the hyphen. */
+.ch__name .nobr { white-space: nowrap; }
+.ch__loc {
+  margin-top: 10px;
+  color: var(--text-2);
+  font-size: 0.9375rem; font-weight: 600; line-height: 1.35;
+  overflow-wrap: break-word;
+}
+/* Circuit media (CI04): only when an asset was selected, so the 16:9 frame is
+   reserved from the first frame and loading/failed never shift the page.
+   Corner registration marks frame a layout diagram like a drawing. No
+   cleared media exists; the states page shows the geometry. */
+.ch__media {
+  position: relative;
+  aspect-ratio: 16 / 9;
+  margin: 20px 0 0;
+  background:
+    linear-gradient(var(--text-2), var(--text-2)) 0 0 / 14px 1.5px no-repeat,
+    linear-gradient(var(--text-2), var(--text-2)) 0 0 / 1.5px 14px no-repeat,
+    linear-gradient(var(--text-2), var(--text-2)) 100% 0 / 14px 1.5px no-repeat,
+    linear-gradient(var(--text-2), var(--text-2)) 100% 0 / 1.5px 14px no-repeat,
+    linear-gradient(var(--text-2), var(--text-2)) 0 100% / 14px 1.5px no-repeat,
+    linear-gradient(var(--text-2), var(--text-2)) 0 100% / 1.5px 14px no-repeat,
+    linear-gradient(var(--text-2), var(--text-2)) 100% 100% / 14px 1.5px no-repeat,
+    linear-gradient(var(--text-2), var(--text-2)) 100% 100% / 1.5px 14px no-repeat,
+    var(--ground-low);
+}
+.ch__media--failed { display: grid; place-items: center; color: var(--text-2); }
+.ch__media--failed .icon { width: 32px; height: 32px; }
+
+/* Physical facts: inside the sheet because they are circuit identity, not a
+   season record. The heading is a real h2, set as the sheet's kicker with a
+   trailing rule. */
+.ch__facts { margin-top: 24px; }
+.ch__kicker {
+  display: flex; align-items: center; gap: 12px;
+  color: var(--text-2);
+  font-size: 0.8125rem; font-weight: 700; line-height: 1.25;
+}
+.ch__kicker::after { content: ""; flex: 1; height: 1px; background: var(--hair); }
+.spec { margin: 0; padding-bottom: 20px; }
+.spec dt { color: var(--text-2); font-size: 0.8125rem; font-weight: 700; line-height: 1.25; }
+.spec dd { margin: 0; }
+
+/* Length (CI05) as a dimension line. The arms flex; the value never wraps
+   inside itself and sits on the line. Ticks: 2px Chalk, skewed 12°. */
+.dim { margin-top: 14px; }
+.dim dd {
+  display: flex; align-items: center; gap: 12px;
+  margin-top: 6px;
+}
+.dim__arm { position: relative; flex: 1 1 0; min-width: 18px; height: 20px; }
+.dim__arm::before {
+  content: ""; position: absolute; left: 0; right: 0; top: 50%;
+  height: 1px; background: var(--text-2);
+}
+.dim__arm::after {
+  content: ""; position: absolute; top: 0; bottom: 0;
+  width: 2px; background: var(--chalk);
+  transform: skewX(var(--cut));
+}
+.dim__arm--start::after { left: 2px; }
+.dim__arm--end::after { right: 2px; }
+.dim__val { display: inline-flex; align-items: baseline; gap: 6px; white-space: nowrap; }
+.dim__num {
+  font-size: min(2.5rem, 44px);    /* 40 */
+  font-weight: 830;
+  font-variation-settings: "wdth" 116;
+  letter-spacing: -0.03em;
+  line-height: 0.95;
+}
+.dim__unit { color: var(--text-2); font-size: 1rem; font-weight: 700; }
+
+/* Corners, direction, first Grand Prix (CI06–CI08): one ruled row that
+   wraps in reading order; values share a bottom line. */
+.facts {
+  display: flex; flex-wrap: wrap; align-items: stretch;
+  gap: 16px 28px;
+  margin-top: 18px; padding-top: 14px;
+  border-top: 1px solid var(--hair);
+}
+.dim + .facts { margin-top: 16px; }
+.spec > .facts:first-child { margin-top: 14px; }
+.fact { display: flex; flex-direction: column; flex: 1 1 auto; min-width: 0; }
+.fact dd { margin-top: auto; padding-top: 6px; }
+.fact__fig {
+  font-size: min(1.75rem, 32px);   /* 28 */
+  font-weight: 820;
+  font-variation-settings: "wdth" 112;
+  letter-spacing: -0.02em;
+  line-height: 1;
+}
+.fact__word {
+  display: flex; align-items: center; gap: 6px;
+  font-size: min(1.125rem, 28px);  /* 18 */
+  font-weight: 760;
+  font-variation-settings: "wdth" 90;
+  line-height: 1.2;
+  overflow-wrap: break-word;
+}
+.fact__word span { min-width: 0; }
+.fact__dir { width: 20px; height: 20px; color: var(--ember); stroke-width: 2; }
+
+/* Narrow sheet (320dp, or large text): a smaller name and figure so a long
+   hyphenated word stays whole where it fits. */
+@container ch (max-width: 21em) {
+  .ch__name { font-size: min(2.125rem, 36px); }
+  .dim__num { font-size: min(2.125rem, 36px); }
+  .dim dd { gap: 8px; }
+}
+
+/* ---------- Lap record (CI09–CI11): a timing readout ---------- */
+.lap { margin: 12px var(--gutter) 0; }
+.lap dt { color: var(--text-2); font-size: 0.8125rem; font-weight: 700; line-height: 1.25; }
+.lap dd { margin: 0; }
+.lap__time dd {
+  margin-top: 6px; margin-left: -2px;
+  font-size: min(3rem, 52px);      /* 48 */
+  font-weight: 830;
+  font-variation-settings: "wdth" 118;
+  letter-spacing: -0.025em;
+  line-height: 0.92;
+  overflow-wrap: anywhere;
+}
+.lap__by { display: flex; flex-wrap: wrap; gap: 12px 36px; }
+/* The rule separates holder and year from a time; without a time (a
+   year-only record) there is nothing to separate, so no rule. */
+.lap__time + .lap__by { margin-top: 16px; padding-top: 12px; border-top: 1px solid var(--hair); }
+.lap__by > div { min-width: 0; }
+.lap__by dd {
+  margin-top: 4px;
+  font-size: min(1.1875rem, 30px); /* 19 */
+  font-weight: 780;
+  font-variation-settings: "wdth" 90;
+  line-height: 1.2;
+  overflow-wrap: break-word;
+}
+/* Unavailable copy is a statement, not a name: secondary colour, lighter. */
+.lap__by dd.is-unavailable { color: var(--text-2); font-weight: 600; font-variation-settings: "wdth" 100; }
+
+/* ---------- Related Grand Prix (CI12–CI17) ---------- */
+/* Season line: seasonLabel with the ready state's season, Grand Prix
+   Detail's season-line type. Leads both states of this section. */
+.rel__season {
+  margin: 4px var(--gutter) 0;
+  color: var(--text-2); font-size: 0.875rem; font-weight: 600; line-height: 1.3;
+}
+.rel__none {
+  margin-top: 14px;
+  padding: 16px var(--gutter);
+  border-block: 1px solid var(--hair);
+  font-size: 1rem; font-weight: 650; line-height: 1.35;
+  text-wrap: pretty;
+}
+/* One row link: round figure | 12° oxide seam | event | Chalk disc (the
+   entity-destination affordance of Grand Prix Detail's circuit row). */
+.rel { container: rel / inline-size; }
+.rx {
+  display: grid;
+  grid-template-columns: auto 4px minmax(0, 1fr) auto;
+  grid-template-areas: "round seam body go" "round seam chips chips";
+  column-gap: 14px; align-items: center;
+  min-height: 96px;
+  margin-top: 14px;
+  padding: 16px var(--gutter);
+  border-block: 1px solid var(--hair);
+}
+.rx:hover { background: rgba(236, 234, 229, 0.03); }
+.rx:active { background: var(--tray); }
+.rx:focus-visible { outline-offset: -3px; border-radius: 4px; }
+.rx__round { grid-area: round; display: flex; flex-direction: column; align-items: flex-start; align-self: start; }
+.rx__round-label { color: var(--text-2); font-size: 0.8125rem; font-weight: 700; line-height: 1.2; }
+.rx__round-num {
+  margin: 6px 0 0 -2px;
+  font-size: min(2.75rem, 48px);   /* 44 */
+  font-weight: 850;
+  font-variation-settings: "wdth" 125;
+  letter-spacing: -0.05em;
+  line-height: 0.82;
+}
+.rx__seam {
+  grid-area: seam; align-self: stretch;
+  width: 4px; min-height: 48px; max-height: 76px;
+  background: var(--oxide);
+  transform: skewX(var(--cut));
+}
+.rx__body { display: contents; }
+.rx__text { grid-area: body; min-width: 0; display: flex; flex-direction: column; align-items: flex-start; }
+.rx__name {
+  font-size: min(1.1875rem, 30px); /* 19 */
+  font-weight: 800;
+  font-variation-settings: "wdth" 84;
+  line-height: 1.15;
+  overflow-wrap: break-word;
+  max-width: 100%;
+}
+.rx__name--unavailable { color: var(--text-2); font-weight: 650; font-variation-settings: "wdth" 96; }
+.rx__date { margin-top: 3px; color: var(--text-2); font-size: 0.875rem; line-height: 1.3; }
+.rx__chips { grid-area: chips; margin-top: 10px; }
+.rx__disc {
+  grid-area: go;
+  display: grid; place-items: center;
+  width: 44px; height: 44px; border-radius: 50%;
+  background: var(--chalk); color: var(--on-chalk);
+  transition: transform 220ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+.rx:hover .rx__disc { transform: translateX(3px); }
+/* Narrow row (large text; queried on the section, a container cannot query
+   itself): round figure, seam and disc share the first line; the event and
+   its chips take the full width below. */
+@container rel (max-width: 20em) {
+  .rx { grid-template-areas: "round seam . go" "body body body body" "chips chips chips chips"; row-gap: 14px; }
+  .rx__seam { min-height: 40px; }
+  .rx__chips { margin-top: 0; }
+}
+
+/* ---------- Loading (_DetailSkeleton) ---------- */
+.skel { display: flex; flex-direction: column; gap: 8px; padding: 0 0 8px; }
+.skel span { display: block; background: linear-gradient(90deg, var(--tray), var(--raised), var(--tray)); }
+.skel__head { height: 232px; margin-bottom: 24px; }
+.skel__label { width: 140px; height: 18px; margin: 16px var(--gutter) 6px; border-radius: 4px; }
+.skel__row { height: 88px; margin: 0 var(--gutter); border-radius: var(--radius-sm); }

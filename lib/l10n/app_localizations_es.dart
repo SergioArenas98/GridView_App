@@ -331,6 +331,10 @@ class AppLocalizationsEs extends AppLocalizations {
       'Estos datos pueden estar desactualizados — mostrando la última versión guardada.';
 
   @override
+  String get refreshFailedStaleNotice =>
+      'No se pudo actualizar. Los datos guardados pueden estar desactualizados.';
+
+  @override
   String get refreshFailedNotice =>
       'No se pudo actualizar — mostrando datos guardados.';
 
@@ -426,6 +430,12 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get calendarNextLabel => 'Siguiente';
+
+  @override
+  String get calendarGoToNextAction => 'Ir al próximo Gran Premio';
+
+  @override
+  String get calendarGoToCurrentAction => 'Ir al Gran Premio en curso';
 
   @override
   String get calendarEmptyTitle => 'Todavía no hay carreras programadas';
@@ -974,6 +984,10 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get homeUpdateFailed => 'No se pudo actualizar';
+
+  @override
+  String get homeUpdateFailedStale =>
+      'No se pudo actualizar. Los datos guardados pueden estar desactualizados.';
 
   @override
   String get settingsSectionPreferences => 'Preferencias';

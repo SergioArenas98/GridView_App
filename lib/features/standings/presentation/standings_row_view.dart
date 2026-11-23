@@ -1,4 +1,4 @@
-import 'package:flutter/foundation.dart' show immutable;
+import 'package:flutter/foundation.dart' show immutable, listEquals;
 import 'package:flutter/painting.dart' show Color;
 
 import '../../../core/theme/gv_team_accent.dart';
@@ -8,11 +8,12 @@ import '../../shared/presentation/result_formatting.dart';
 import '../application/standings_state.dart';
 
 /// One standings row reduced to the plain, already-formatted strings the shared
-/// row component renders.
+/// Primer V2 row (`GvPrimerStandingsRow`) renders.
 ///
 /// Built once per row per build from a domain read model — no DTO, no Drift row
 /// and no repository ever reaches the widget tree. Nothing is invented here: a
-/// value the contract did not supply stays `null` and is simply not rendered.
+/// value the contract did not supply stays `null` (or out of [details]) and is
+/// simply not rendered.
 @immutable
 class StandingsRowView {
   const StandingsRowView({
@@ -22,9 +23,10 @@ class StandingsRowView {
     required this.points,
     required this.isLeader,
     required this.semanticLabel,
-    this.team,
-    this.stat,
-    this.badgeLabel,
+    this.nameIsFallback = false,
+    this.leaderLabel,
+    this.details = const <String>[],
+    this.provisionalLabel,
     this.accentColor,
   });
 
@@ -36,19 +38,65 @@ class StandingsRowView {
   final String position;
 
   final String name;
+
+  /// [name] is the localized "Name unavailable" fallback.
+  final bool nameIsFallback;
+
   final String points;
 
   /// True only for a **confirmed** `position == 1`; never derived from the row's
   /// place in the list or from a maximum points total.
   final bool isLeader;
 
+  /// The visible leader kicker (DD S-5, existing copy): "Championship leader",
+  /// or "Tied for the championship lead" when several rows hold position 1.
+  /// `null` for every other row.
+  final String? leaderLabel;
+
+  /// The secondary line's parts, in order: the driver's team (only when the
+  /// standing names one) and the wins (only when the contract supplied them;
+  /// a confirmed zero is kept).
+  final List<String> details;
+
+  /// The row-level provisional marker ("Provisional"), only on the provisional
+  /// rows of a table whose rows disagree.
+  final String? provisionalLabel;
+
   /// The row's explicit reading order for a screen reader.
   final String semanticLabel;
 
-  final String? team;
-  final String? stat;
-  final String? badgeLabel;
+  /// The supplied team colour, unchanged; `null` when none is stored.
   final Color? accentColor;
+
+  @override
+  bool operator ==(Object other) =>
+      other is StandingsRowView &&
+      other.entityId == entityId &&
+      other.position == position &&
+      other.name == name &&
+      other.nameIsFallback == nameIsFallback &&
+      other.points == points &&
+      other.isLeader == isLeader &&
+      other.leaderLabel == leaderLabel &&
+      listEquals(other.details, details) &&
+      other.provisionalLabel == provisionalLabel &&
+      other.semanticLabel == semanticLabel &&
+      other.accentColor == accentColor;
+
+  @override
+  int get hashCode => Object.hash(
+    entityId,
+    position,
+    name,
+    nameIsFallback,
+    points,
+    isLeader,
+    leaderLabel,
+    Object.hashAll(details),
+    provisionalLabel,
+    semanticLabel,
+    accentColor,
+  );
 }
 
 /// The shared points/statistics formatting for both championships.
@@ -73,16 +121,25 @@ class StandingsFormatter {
   String position(int? value) =>
       value == null ? l10n.standingsUnrankedPosition : '$value';
 
-  /// The accessible reading of a position, including the unranked meaning — so
-  /// a missing position is never silence and never "zero".
+  /// The accessible reading of a position. A null position means **unranked**
+  /// by contract, so it reads "Unranked" / "Sin clasificar" (DD RK-1, the
+  /// existing `positionUnranked`): never silence, never "zero" and never
+  /// "Position unavailable".
   String positionSemantics(int? value) => value == null
-      ? l10n.standingsUnrankedSemantics
+      ? l10n.positionUnranked
       : l10n.standingsPositionSemantics('$value');
 
   /// A wins count, or `null` when the contract did not supply one. A confirmed
   /// zero is shown; an absent value is omitted rather than shown as zero.
   String? wins(int? value) =>
       value == null ? null : l10n.standingsWinsLabel(value);
+
+  /// The unit under the leader's points figure ("pts"), taken from the
+  /// existing localized compact-points template rather than a new string.
+  String get pointsUnit {
+    const String marker = '\u0000';
+    return l10n.homePointsValue(marker).replaceAll(marker, '').trim();
+  }
 }
 
 /// How a table's provisional information is presented on its rows.
@@ -113,11 +170,12 @@ StandingsRowView driverRowView(
     entityId: entry.driverId,
     position: format.position(entry.position),
     name: name,
+    nameIsFallback: entry.driverName == null,
     points: points,
-    team: entry.constructorName,
-    stat: wins,
-    badgeLabel: provisional ? l10n.standingsProvisionalBadge : null,
+    details: <String>[?entry.constructorName, ?wins],
+    provisionalLabel: provisional ? l10n.standingsProvisionalBadge : null,
     isLeader: leader,
+    leaderLabel: leader ? _leaderLabel(l10n, tiedLeaders) : null,
     accentColor: GvTeamAccent.parse(entry.teamColor),
     semanticLabel: _semanticLabel(
       l10n: l10n,
@@ -150,10 +208,12 @@ StandingsRowView constructorRowView(
     entityId: entry.constructorId,
     position: format.position(entry.position),
     name: name,
+    nameIsFallback: entry.displayName == null,
     points: points,
-    stat: wins,
-    badgeLabel: provisional ? l10n.standingsProvisionalBadge : null,
+    details: <String>[?wins],
+    provisionalLabel: provisional ? l10n.standingsProvisionalBadge : null,
     isLeader: leader,
+    leaderLabel: leader ? _leaderLabel(l10n, tiedLeaders) : null,
     accentColor: GvTeamAccent.parse(entry.teamColor),
     semanticLabel: _semanticLabel(
       l10n: l10n,
@@ -171,6 +231,10 @@ StandingsRowView constructorRowView(
 /// Whether a table has several rows sharing a confirmed position 1.
 bool hasTiedLeaders(Iterable<int?> positions) =>
     positions.where((int? p) => p == 1).length > 1;
+
+String _leaderLabel(AppLocalizations l10n, bool tiedLeaders) => tiedLeaders
+    ? l10n.standingsTiedLeaderSemantics
+    : l10n.standingsLeaderSemantics;
 
 /// Composes a row's reading order: position, name, team (when the standing names
 /// one), points, statistics, then status.
@@ -191,10 +255,7 @@ String _semanticLabel({
     ?team,
     l10n.standingsPointsSemantics(points),
     ?stat,
-    if (leader)
-      tiedLeaders
-          ? l10n.standingsTiedLeaderSemantics
-          : l10n.standingsLeaderSemantics,
+    if (leader) _leaderLabel(l10n, tiedLeaders),
     if (provisional) l10n.standingsProvisionalBadge,
   ];
   return parts.join(', ');

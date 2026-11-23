@@ -47,7 +47,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byType(HomeScreen), findsOneWidget);
-    expect(find.byType(GvBottomNav), findsOneWidget);
+    expect(find.byType(GvPrimerBottomNav), findsOneWidget);
     // The four primary destinations are labelled.
     expect(find.text('Home'), findsWidgets);
     expect(find.text('Calendar'), findsOneWidget);

@@ -1,0 +1,11 @@
+/* GridView — Primer V2 shared component: section title (20px h2 level).
+   Moved verbatim from primer-core.css. The kicker alternative is screen-specific
+   until XS-29 is decided. */
+
+.section-title {
+  font-size: min(1.25rem, 30px);    /* 20 */
+  font-weight: 700;
+  font-variation-settings: "wdth" 106;
+  letter-spacing: -0.01em;
+  line-height: 1.2;
+}

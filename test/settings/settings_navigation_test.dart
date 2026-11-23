@@ -6,6 +6,7 @@ import 'package:gridview/features/drivers/presentation/driver_detail_screen.dart
 import 'package:gridview/features/home/presentation/home_screen.dart';
 import 'package:gridview/features/settings/presentation/preference_screens.dart';
 import 'package:gridview/features/settings/presentation/settings_screen.dart';
+import 'package:gridview/features/shared/presentation/widgets/primer_detail_app_bar.dart';
 
 import '../support/router_harness.dart';
 
@@ -26,8 +27,10 @@ Future<void> openSettingsFromAppBar(WidgetTester tester) async {
   await tester.pumpAndSettle();
 }
 
+/// The circular Primer back of every Settings screen (Steps 55C.13A and
+/// 55C.13B).
 Future<void> tapBack(WidgetTester tester) async {
-  await tester.tap(find.byType(BackButton));
+  await tester.tap(find.byType(PrimerDetailBackButton));
   await tester.pumpAndSettle();
 }
 

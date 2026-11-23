@@ -1,0 +1,17 @@
+/* EXPERIMENT (Step 51C), not an approved design. Loaded after
+   candidate.css on the "-mark" pages only.
+
+   A2 structural selected cue: the flat oxide slab is 2.47:1 on the selector
+   tray, and no fill can reach 3:1 there while keeping the Chalk label at
+   4.5:1. This tests the smallest added indicator that does not depend on
+   colour: a Chalk underline on the selected label (5.43:1 on oxide). It is
+   part of the text box, so it never changes layout, follows every line when
+   the selector stacks and wraps, and stays clear of the focus ring, which is
+   drawn in the button padding. */
+
+.seg__btn[aria-pressed="true"] .seg__label {
+  text-decoration-line: underline;
+  text-decoration-thickness: 0.125em;
+  text-underline-offset: 0.22em;
+  text-decoration-skip-ink: none;
+}

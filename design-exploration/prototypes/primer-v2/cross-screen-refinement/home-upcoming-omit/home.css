@@ -1,0 +1,329 @@
+/* GridView — Primer V2: Home, CONSOLIDATION PILOT copy of
+   ../../refinement-01/styles.css. Loads after the shared foundation
+   (../../shared/: tokens, base, app bar, section title, chips, tag, text link,
+   navigation) and only adds to it.
+   Differences from ../../refinement-01/styles.css: its 49 core rules (the
+   ones primer-core.css was copied from) moved to ../../shared/ verbatim;
+   every Home rule below is unchanged and in its original order. No rule
+   below sets the same property as a shared rule on the same element with
+   equal specificity, so loading the shared rules first does not change the
+   cascade (REPORT.md §2). `python build.py --check` verifies the split.
+
+   Original header follows. */
+
+/* GridView — Primer V2: Motorsport Editorial — refinement 01
+   (baseline: ../styles.css, unchanged). Dark-first visual prototype. Text sizes in rem (follow system text scale);
+   layout in px (dp). Display figures use min() caps to mirror Android 14
+   non-linear font scaling: body text doubles at 200%, display figures do not.
+
+   Signature move: the livery cut — one 12° seam (skewX(-12deg)) used where it
+   carries meaning: hero round block (featured event), championship seam
+   (points ↔ holder), winner tag (the result's key fact), selected tab.
+   Refinement 01 straightens the Explore separators, which were decorative. */
+
+/* ---------- Page rhythm ---------- */
+.home {
+  padding: 16px var(--gutter) calc(var(--nav-space, calc(var(--nav-min) + env(safe-area-inset-bottom))) + 24px);
+  display: flex; flex-direction: column; gap: 32px;
+}
+/* ---------- Hero: featured Grand Prix ---------- */
+.hero {
+  container: hero / inline-size;
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  border-radius: var(--radius-lg);
+  padding: 18px 18px 0;
+  background:
+    radial-gradient(120% 90% at 0% 0%, #2A2C31 0%, rgba(42, 44, 49, 0) 60%),
+    linear-gradient(180deg, #202226 0%, #1A1B1F 100%);
+  box-shadow: 0 22px 40px -24px rgba(0, 0, 0, 0.8), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+}
+.hero__top {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  column-gap: 16px;
+}
+.hero__lead { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; padding-bottom: 2px; }
+.hero__kind { font-size: 0.9375rem; font-weight: 600; color: var(--text-2); }
+.hero__when {
+  font-size: min(1.375rem, 34px);   /* 22 */
+  font-weight: 750;
+  font-variation-settings: "wdth" 88;
+  line-height: 1.06;
+  letter-spacing: -0.015em;
+  color: var(--ember);
+  margin-bottom: 4px;
+  text-wrap: balance;
+}
+/* Livery block: the round sits on a Red Oxide field cut at 12°. */
+.hero__round {
+  position: relative;
+  z-index: 0;
+  margin: -18px -18px 0 0;
+  padding: 14px 18px 14px 28px;
+  display: flex; flex-direction: column; align-items: flex-end; justify-content: flex-start;
+  color: var(--chalk);
+}
+.hero__round::before {
+  content: "";
+  position: absolute; z-index: -1;
+  top: 0; bottom: 0; left: 0; right: -40px;
+  background: linear-gradient(165deg, #B04633 0%, var(--oxide) 45%, var(--oxide-deep) 100%);
+  transform: skewX(var(--cut));
+  transform-origin: bottom left;
+  box-shadow: -10px 0 24px -12px rgba(0, 0, 0, 0.6);
+}
+.hero__round-num {
+  font-size: min(5.25rem, 112px);   /* 84 */
+  font-weight: 800;
+  font-variation-settings: "wdth" 125;
+  font-variant-numeric: tabular-nums lining-nums;
+  letter-spacing: -0.04em;
+  line-height: 0.8;
+}
+/* Label precedes the number: reads "Round 23" / "Ronda 23" visually and aloud. */
+.hero__round-label { font-size: 0.9375rem; font-weight: 700; margin-bottom: 6px; }
+.hero__name {
+  margin-top: 12px;
+  font-size: min(1.875rem, 42px);   /* 30 */
+  font-weight: 800;
+  font-variation-settings: "wdth" 78;
+  line-height: 1.02;
+  letter-spacing: -0.02em;
+  text-wrap: balance;
+}
+.hero__circuit { margin-top: 4px; color: var(--text-2); font-size: 0.9375rem; }
+.hero__action {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  min-height: 52px;
+  margin: 12px -18px 0;
+  padding: 0 12px 0 18px;
+  border-top: 1px solid var(--hair);
+  font-weight: 700;
+}
+.hero__action::after { content: ""; position: absolute; inset: 0; border-radius: inherit; }
+.hero__arrow {
+  width: 36px; height: 36px; border-radius: 50%;
+  display: grid; place-items: center;
+  background: var(--chalk); color: var(--on-chalk);
+  transition: transform 220ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+.hero:hover .hero__arrow { transform: translateX(3px); }
+.hero:has(.hero__action:focus-visible) { outline: 2px solid var(--ember); outline-offset: 3px; }
+.hero__action:focus-visible { outline: none; }
+
+/* Narrow phones (320dp) and large text: the livery block becomes a strip
+   across the top of the panel; the slanted edge moves to its right end. */
+@container hero (max-width: 21em) {
+  .hero__top { grid-template-columns: 1fr; }
+  .hero__round {
+    order: -1;
+    margin: -18px -18px 14px;
+    padding: 12px 18px 10px;
+    flex-direction: row; flex-wrap: wrap; align-items: baseline; justify-content: flex-start;
+    column-gap: 10px; row-gap: 4px;
+  }
+  .hero__round::before { left: -60px; right: 22%; }
+  .hero__round-num { font-size: min(4.25rem, 100px); }
+  .hero__round-label { margin-bottom: 0; }
+}
+
+/* ---------- Weekend sessions: full-bleed timing band ---------- */
+.sessions {
+  container: sessions / inline-size;
+  margin-inline: calc(var(--gutter) * -1);
+  padding: 22px var(--gutter) 18px;
+  background: linear-gradient(180deg, var(--tray) 0%, #1B1D20 100%);
+  border-block: 1px solid var(--hair);
+}
+.session-list { margin-top: 14px; }
+.session {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-areas:
+    "focus status"
+    "name  time"
+    "date  date";
+  column-gap: 16px;
+  row-gap: 4px;
+  align-items: baseline;
+  padding: 4px 0 14px;
+  border-radius: 10px;
+}
+.session__focus {
+  grid-area: focus;
+  display: inline-flex; align-items: center; gap: 2px;
+  color: var(--ember); font-size: 0.8125rem; font-weight: 700;
+  white-space: nowrap;
+}
+.session__name {
+  grid-area: name;
+  font-size: min(1.5rem, 34px);
+  font-weight: 750;
+  font-variation-settings: "wdth" 88;
+  line-height: 1.1;
+}
+.session__time { grid-area: time; justify-self: end; white-space: nowrap; }
+.session__time .num {
+  font-size: min(2.75rem, 60px);    /* 44 */
+  font-weight: 800;
+  font-variation-settings: "wdth" 118;
+  letter-spacing: -0.03em;
+  line-height: 0.9;
+}
+.session__zone { font-size: 0.9375rem; font-weight: 700; color: var(--text-2); margin-left: 2px; }
+.session__date { grid-area: date; color: var(--text-2); margin-top: 2px; }
+.session__status { grid-area: status; justify-self: end; align-self: center; }
+.session__time { margin-top: 6px; }
+.session:hover .session__name { text-decoration: underline; text-underline-offset: 4px; text-decoration-thickness: 1px; }
+.sessions__tz {
+  padding-top: 12px;
+  border-top: 1px solid var(--hair);
+  color: var(--text-2); font-size: 0.8125rem;
+}
+@container sessions (max-width: 15em) {
+  .session {
+    grid-template-columns: 1fr;
+    grid-template-areas: "focus" "status" "name" "time" "date";
+  }
+  .session__status { margin-top: 4px; }
+  .session__time, .session__status { justify-self: start; }
+}
+
+/* ---------- Championship: Chalk band ---------- */
+.champ {
+  position: relative;
+  border-radius: var(--radius-lg);
+  background: linear-gradient(170deg, var(--chalk) 0%, var(--chalk-low) 100%);
+  color: var(--on-chalk);
+  padding: 4px 20px;
+  box-shadow: 0 20px 36px -26px rgba(0, 0, 0, 0.9);
+}
+.champ ::selection { background: var(--on-chalk); color: var(--chalk); }
+.leader { padding: 14px 0 2px; }
+.leader + .leader { border-top: 1px solid var(--hair-chalk); }
+.leader__label { font-size: 0.9375rem; font-weight: 600; color: var(--on-chalk-2); }
+.leader__body {
+  display: flex; flex-wrap: wrap; align-items: flex-end;
+  column-gap: 12px; row-gap: 8px;
+  margin-top: 4px;
+}
+.leader__points { display: flex; align-items: baseline; gap: 6px; flex: none; }
+.leader__points .num {
+  font-size: min(3.75rem, 80px);    /* 60 */
+  font-weight: 850;
+  font-variation-settings: "wdth" 112;
+  letter-spacing: -0.045em;
+  line-height: 0.82;
+}
+.leader__unit { font-size: 0.9375rem; font-weight: 700; color: var(--on-chalk-2); }
+.leader__who {
+  position: relative;
+  flex: 1 1 8em;
+  min-width: 0;
+  padding: 2px 0 2px 20px;
+}
+/* livery seam */
+.leader__who::before {
+  content: "";
+  position: absolute; left: 10px; top: -6px; bottom: -2px;
+  width: 3px;
+  background: var(--oxide);
+  transform: skewX(var(--cut));
+  transform-origin: top left;   /* slant grows away from the text at large sizes */
+}
+.leader__name {
+  font-size: min(1.5rem, 34px);
+  font-weight: 800;
+  font-variation-settings: "wdth" 84;
+  line-height: 1.08;
+  letter-spacing: -0.015em;
+}
+.leader__team { color: var(--on-chalk-2); margin-top: 2px; }
+.leader__link {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  min-height: 48px; margin-top: 4px;
+  color: var(--oxide); font-weight: 700;
+}
+.leader__link .icon { transition: transform 220ms cubic-bezier(0.16, 1, 0.3, 1); }
+.leader__link:hover .icon { transform: translateX(3px); }
+.champ :focus-visible { outline-color: var(--oxide); }
+
+/* ---------- Latest result: open composition + watermark plane ---------- */
+.result { position: relative; isolation: isolate; padding-top: 2px; }
+.result__mark {
+  position: absolute; z-index: -1;
+  right: -8px; bottom: 4px;
+  font-size: min(10rem, 170px);
+  font-weight: 900;
+  font-variation-settings: "wdth" 125;
+  font-variant-numeric: tabular-nums lining-nums;
+  letter-spacing: -0.06em;
+  line-height: 0.8;
+  color: transparent;
+  -webkit-text-stroke: 1.5px rgba(236, 234, 229, 0.11);
+  user-select: none;
+}
+.result__head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 12px; }
+.result__event {
+  margin-top: 14px;
+  font-size: min(1.625rem, 38px);
+  font-weight: 800;
+  font-variation-settings: "wdth" 80;
+  line-height: 1.05;
+  letter-spacing: -0.02em;
+}
+.result__meta { margin-top: 4px; color: var(--text-2); }
+.result__winner { margin-top: 18px; }
+.result__driver {
+  margin-top: 8px;
+  font-size: min(1.75rem, 40px);    /* 28 */
+  font-weight: 800;
+  font-variation-settings: "wdth" 84;
+  line-height: 1.05;
+  letter-spacing: -0.02em;
+}
+.result__team { color: var(--text-2); margin-top: 2px; }
+
+/* ---------- Upcoming: compact known-empty row ---------- */
+.upcoming__row {
+  display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between;
+  column-gap: 16px;
+  margin-top: 6px;
+  padding-top: 8px;  /* inset from the rule (Impeccable cramped-padding) */
+  border-top: 1px solid var(--hair);
+}
+.upcoming__empty { color: var(--text-2); padding-block: 6px; }
+
+/* ---------- Explore: segmented strip ---------- */
+.explore { container: explore / inline-size; }
+.explore__strip {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  margin-top: 12px;
+  border-radius: var(--radius-md);
+  background: var(--tray);
+  border: 1px solid var(--hair);
+  overflow: hidden;
+}
+.explore__strip li { position: relative; }
+.explore__strip li + li::before {
+  content: "";
+  position: absolute; left: 0; top: 12px; bottom: 12px; width: 1px;
+  background: var(--hair-strong);
+}
+.explore__strip a {
+  display: flex; flex-direction: column; align-items: flex-start; justify-content: flex-end; gap: 10px;
+  min-height: 84px;
+  padding: 14px 16px;
+  font-weight: 700;
+}
+.explore__strip .icon { color: var(--ember); }
+.explore__strip a:hover { background: var(--raised); }
+/* Large text: the strip becomes a list; seams turn into horizontal rules. */
+@container explore (max-width: 16.5em) {
+  .explore__strip { grid-template-columns: 1fr; }
+  .explore__strip li + li::before { top: 0; bottom: auto; left: 16px; right: 16px; width: auto; height: 1px; transform: none; }
+  .explore__strip a { flex-direction: row; align-items: center; justify-content: flex-start; min-height: 56px; gap: 14px; }
+}
