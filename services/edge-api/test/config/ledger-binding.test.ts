@@ -108,7 +108,7 @@ describe('the committed configuration declares the reconciliation ledger in stag
     expect(resolved('').exports).toEqual(topLevelExports);
   });
 
-  it('gives only staging and the demonstration Worker an exports table of their own', () => {
+  it('gives only staging, production (U11 P4) and the demonstration Worker an exports table of their own', () => {
     expect(
       [...rawConfig.matchAll(/^\[env\.([a-z0-9]+)\.exports/gm)].map(
         (match) => match[1],
@@ -118,24 +118,35 @@ describe('the committed configuration declares the reconciliation ledger in stag
       'staging',
       'staging',
       'staging',
+      'production',
+      'production',
+      'production',
+      'production',
       'e2e',
       'e2e',
       'e2e',
     ]);
   });
 
-  it('leaves development without the season binding, and production with the same two as before', () => {
+  it('leaves development without the season binding, and gives production its ledger and catalog (U11 P4)', () => {
     const development = resolved('');
     expect(development.exports).toEqual(topLevelExports);
     expect(bindingNames(development)).toEqual(['PROVIDER_RATE_LIMITER']);
     expect(development.migrations).toEqual([]);
-    // Production genesis (release plan W1) binds the sequencer too, and
-    // inherits the top-level exports; its ledger is gate AU-7's change.
+    // Production genesis (release plan W1) binds the sequencer too. U11 P4
+    // adds the ledger (the season lease of its runtime batch ingest) and the
+    // identity catalog, declaring all four exports itself.
     const production = resolved('production');
-    expect(production.exports).toEqual(topLevelExports);
+    expect(Object.keys(production.exports)).toEqual([
+      ...Object.keys(topLevelExports),
+      'ReconciliationLedger',
+      'IdentityCatalog',
+    ]);
     expect(bindingNames(production)).toEqual([
       'PROVIDER_RATE_LIMITER',
       'SEASON_PUBLICATION_SEQUENCER',
+      'RECONCILIATION_LEDGER',
+      'IDENTITY_CATALOG',
     ]);
     expect(production.migrations).toEqual([]);
   });
@@ -171,13 +182,8 @@ describe('the committed configuration declares the reconciliation ledger in stag
           countingNamespace(),
         ]),
       ) as Pick<Env, 'RECONCILIATION_LEDGER'>;
-    for (const environment of ['', 'production'] as const) {
-      expect(
-        resolveReconciliationLedger(boundEnv(environment)),
-        environment,
-      ).toBeNull();
-    }
-    for (const environment of ['staging', 'e2e'] as const) {
+    expect(resolveReconciliationLedger(boundEnv('')), 'development').toBeNull();
+    for (const environment of ['staging', 'production', 'e2e'] as const) {
       expect(
         resolveReconciliationLedger(boundEnv(environment)),
         environment,
@@ -230,7 +236,17 @@ function committedVars(environment: 'staging' | 'production'): Partial<Env> {
  * batches, which keeps the ledger binding and changes only the mode.
  */
 const noneDeployments: readonly [string, () => Partial<Env>][] = [
-  ['production', () => committedVars('production')],
+  [
+    'production',
+    // No catalog is bound here, so the optional-driver inventory (U11 P4,
+    // which requires one) is left out; the ledger behaviour is unchanged.
+    () =>
+      Object.fromEntries(
+        Object.entries(committedVars('production')).filter(
+          ([name]) => name !== 'IDENTITY_INVENTORY_MODE',
+        ),
+      ),
+  ],
   [
     "staging's fallback to manual batches",
     // No catalog is bound here, so the optional-driver inventory (U11 P3,

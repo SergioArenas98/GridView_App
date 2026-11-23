@@ -555,7 +555,8 @@ describe('the 2026 constructor evidence corpus', () => {
   });
 
   it('keeps the three OpenF1 acknowledgements with accurate reasons', () => {
-    expect(evidenceCorpus.acknowledgedUnmapped).toHaveLength(7);
+    // Six since P0 mapped the November rafael_camara acknowledgement.
+    expect(evidenceCorpus.acknowledgedUnmapped).toHaveLength(6);
     expect(
       evidenceCorpus.acknowledgedUnmapped
         .filter((record) => record.source === 'openf1')
@@ -644,10 +645,11 @@ describe('nothing outside the constructor dataset moved', () => {
     // 62 / 66 / 4 when this dataset merged; the 2026-09-23 driver dataset
     // added 31 driver mappings and 30 driver evidence identities and removed
     // the Jolpica `antonelli` acknowledgement. The 2026-10-07 off-calendar
-    // circuit `jeddah` (Provider Evaluation §8.13) added one of each.
-    expect(mappingDocument.mappings).toHaveLength(94);
+    // circuit `jeddah` (Provider Evaluation §8.13) added one of each. P0 (U11)
+    // mapped rafael_camara: one mapping more, one acknowledgement fewer.
+    expect(mappingDocument.mappings).toHaveLength(95);
     expect(evidenceCorpus.identities).toHaveLength(101);
-    expect(evidenceCorpus.acknowledgedUnmapped).toHaveLength(7);
+    expect(evidenceCorpus.acknowledgedUnmapped).toHaveLength(6);
   });
 
   it('leaves drivers to the driver dataset: 33 identities, 32 Jolpica mappings', () => {
@@ -663,9 +665,9 @@ describe('nothing outside the constructor dataset moved', () => {
     );
 
     // Row-for-row pinning lives in driver-dataset-2026.test.ts.
-    expect(drivers).toHaveLength(33);
-    expect(canonical.driver.size).toBe(33);
-    expect(jolpicaDrivers).toHaveLength(32);
+    expect(drivers).toHaveLength(34);
+    expect(canonical.driver.size).toBe(34);
+    expect(jolpicaDrivers).toHaveLength(33);
     expect(jolpicaDrivers[0]).toMatchObject({
       providerValue: 'norris',
       gridviewId: 'lando-norris',

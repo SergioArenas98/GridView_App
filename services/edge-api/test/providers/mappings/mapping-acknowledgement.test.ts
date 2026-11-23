@@ -122,7 +122,8 @@ describe('an acknowledged identity still fails closed at runtime', () => {
     // 2026-09-23: Jolpica `antonelli` left it when the 2026 driver dataset
     // did the same. November 12 adds four Jolpica diagnostic-only keys
     // awaiting canonical identity curation, alongside those three OpenF1 keys.
-    expect(checks.length).toBe(7);
+    // Six since P0 (U11) mapped the reviewed rafael_camara.
+    expect(checks.length).toBe(6);
     for (const [, lookup] of checks) {
       const result = registry.resolveUnknown(lookup);
       expect(result.outcome, JSON.stringify(lookup)).toBe('unresolved');

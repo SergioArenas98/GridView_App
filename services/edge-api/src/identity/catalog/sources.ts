@@ -98,6 +98,68 @@ export function freeze<T>(v: T): T {
   }
   return v;
 }
+/**
+ * The closed set of reviewed seed corpora, identified by their dataset
+ * version. R0 is the historical U3 corpus. P0 (U11 P4, the initial production
+ * seed) is R0 plus exactly the reviewed Rafael Câmara identity and binding
+ * from the activated staging catalog R1 (U11 Addendum O). Any other corpus is
+ * refused; there is no general driver curation through a seed.
+ */
+export interface CorpusProfile {
+  readonly name: 'R0' | 'P0';
+  readonly datasetVersion: string;
+  readonly drivers: number;
+  readonly mappings: number;
+  readonly acknowledged: number;
+  /** November 2026 Jolpica driver keys that stay unresolved in this corpus. */
+  readonly pendingKeys: readonly string[];
+  /** The one reviewed identity and Jolpica binding P0 adds to R0. */
+  readonly reviewedAddition: {
+    readonly driver: { readonly id: string; readonly fullName: string };
+    readonly providerValue: string;
+  } | null;
+}
+export const corpusProfiles: readonly CorpusProfile[] = Object.freeze([
+  Object.freeze({
+    name: 'R0',
+    datasetVersion: '2026.10.07.1',
+    drivers: 33,
+    mappings: 94,
+    acknowledged: 7,
+    pendingKeys: Object.freeze([
+      'rafael_camara',
+      'gabriele_mini',
+      'freddie_slater',
+      'nikola_tsolov',
+    ]),
+    reviewedAddition: null,
+  }),
+  Object.freeze({
+    name: 'P0',
+    datasetVersion: '2026.11.22.1',
+    drivers: 34,
+    mappings: 95,
+    acknowledged: 6,
+    pendingKeys: Object.freeze([
+      'gabriele_mini',
+      'freddie_slater',
+      'nikola_tsolov',
+    ]),
+    reviewedAddition: Object.freeze({
+      driver: Object.freeze({
+        id: 'rafael-camara',
+        fullName: 'Rafael Câmara',
+      }),
+      providerValue: 'rafael_camara',
+    }),
+  }),
+]);
+export function corpusProfileFor(documents: Map<string, Document>) {
+  const version = documents.get('season-metadata')?.datasetVersion;
+  const profile = corpusProfiles.find((p) => p.datasetVersion === version);
+  requireCatalog(profile !== undefined, 'seed-dataset-version');
+  return profile;
+}
 export async function validateSources(
   input: unknown,
 ): Promise<{ sources: RepositorySource[]; documents: Map<string, Document> }> {
@@ -221,20 +283,38 @@ export async function validateSources(
       );
     }
   const meta = documents.get('season-metadata')!;
-  requireCatalog(
-    meta.datasetVersion === '2026.10.07.1',
-    'seed-dataset-version',
+  const profile = corpusProfiles.find(
+    (p) => p.datasetVersion === meta.datasetVersion,
   );
+  requireCatalog(profile !== undefined, 'seed-dataset-version');
   requireCatalog(
-    ids.driver!.size === 33 &&
+    ids.driver!.size === profile.drivers &&
       ids['constructor']!.size === 11 &&
       ids.circuit!.size === 24 &&
       ids.event!.size === 23 &&
-      records(mapping.mappings).length === 94 &&
+      records(mapping.mappings).length === profile.mappings &&
       records(evidence.identities).length === 101 &&
-      records(evidence.acknowledgedUnmapped).length === 7,
+      records(evidence.acknowledgedUnmapped).length === profile.acknowledged,
     'R0-corpus-counts',
   );
+  const addition = profile.reviewedAddition;
+  if (addition)
+    requireCatalog(
+      records(documents.get('driver-registry')!.drivers).some(
+        (d) =>
+          d.id === addition.driver.id &&
+          d.fullName === addition.driver.fullName,
+      ) &&
+        records(mapping.mappings).some(
+          (m) =>
+            m.source === 'jolpica' &&
+            m.entity === 'driver' &&
+            m.providerField === 'driverId' &&
+            m.providerValue === addition.providerValue &&
+            m.gridviewId === addition.driver.id,
+        ),
+      'P0-reviewed-addition',
+    );
   sources.sort((a, b) => (a.path < b.path ? -1 : 1));
   return { sources, documents };
 }

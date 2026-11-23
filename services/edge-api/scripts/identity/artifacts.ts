@@ -10,6 +10,7 @@ import {
   requireCatalog,
   type RepositorySource,
 } from '../../src/identity/catalog/model';
+import { corpusProfiles } from '../../src/identity/catalog/sources';
 export async function artifacts(
   corpus: Omit<RepositorySource, 'semanticHash'>[],
 ) {
@@ -18,10 +19,24 @@ export async function artifacts(
     legacy = providerMappingRegistry();
   const same = (a: unknown, b: unknown) =>
     canonicalJson(a) === canonicalJson(b);
+  // R0 parity is against the R0-era bundled content. The only later bundled
+  // change is P0's reviewed addition, whose key R0 keeps unresolved; for that
+  // key alone R0 compares with its R0-era (unresolved) resolution.
+  const dataset = seed.snapshot.seasonContent[0]!.datasetVersion;
+  const laterAddition =
+    dataset === corpusProfiles[0]!.datasetVersion
+      ? corpusProfiles[1]!.reviewedAddition!.providerValue
+      : null;
+  const legacyEqual = (key: (typeof seed.snapshot.bindings)[number]['key']) =>
+    laterAddition !== null &&
+    key.source === 'jolpica' &&
+    key.providerValue === laterAddition
+      ? indexes.registry.resolve(key).outcome === 'unresolved'
+      : same(indexes.registry.resolve(key), legacy.resolve(key));
   const bindings = seed.snapshot.bindings.map((b) => ({
     key: b.key,
     targetId: b.targetId,
-    equal: same(indexes.registry.resolve(b.key), legacy.resolve(b.key)),
+    equal: legacyEqual(b.key),
   }));
   const drivers = seed.snapshot.drivers.map((d) => ({
     id: d.anchor.driverId,
@@ -47,7 +62,7 @@ export async function artifacts(
   }));
   const unresolved = seed.snapshot.unresolved.map((u) => ({
     key: u.key,
-    equal: same(indexes.registry.resolve(u.key), legacy.resolve(u.key)),
+    equal: legacyEqual(u.key),
     unresolved: indexes.registry.resolve(u.key).outcome === 'unresolved',
   }));
   requireCatalog(
@@ -81,7 +96,7 @@ export async function artifacts(
         evidence: seed.snapshot.evidence.length,
         unresolved: unresolved.length,
       },
-      datasetVersion: '2026.10.07.1',
+      datasetVersion: dataset,
     }),
     'parity.json': canonicalJson({
       format: 'gridview-identity-seed-parity/1',

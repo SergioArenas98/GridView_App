@@ -339,9 +339,12 @@ const evidenceCorpus = JSON.parse(
 const isJolpicaDriver = (record: CuratedRecord): boolean =>
   record.source === 'jolpica' && record.entity === 'driver';
 
-/** Exact diagnostic keys reported on November 12; canonical identities pending. */
+/**
+ * Exact diagnostic keys reported on November 12; canonical identities pending.
+ * `rafael_camara` left this list in P0: reviewed and activated in staging
+ * catalog R1 (U11 Addendum O), then added to the repository sources.
+ */
 const PENDING_DRIVERS = [
-  'rafael_camara',
   'gabriele_mini',
   'freddie_slater',
   'nikola_tsolov',
@@ -386,12 +389,21 @@ function evidenceFor(providerValue: string): string {
  * target the accepted one. The negative controls below feed it defective
  * copies of the committed mappings to show it rejects them.
  */
+/** The one identity and mapping reviewed after this dataset merged (P0). */
+const P0_ROW: AcceptedRow = {
+  driverId: 'rafael_camara',
+  gridviewId: 'rafael-camara',
+  fullName: 'Rafael Câmara',
+};
+/** The current Jolpica driver table: the accepted dataset plus P0. */
+const CURRENT: readonly AcceptedRow[] = [...ACCEPTED, P0_ROW];
+
 function isExactlyTheAcceptedTable(
   mappings: readonly CuratedRecord[],
 ): boolean {
   const rows = mappings.filter(isJolpicaDriver);
-  if (rows.length !== ACCEPTED.length) return false;
-  return ACCEPTED.every(
+  if (rows.length !== CURRENT.length) return false;
+  return CURRENT.every(
     (accepted) =>
       rows.filter(
         (row) =>
@@ -416,8 +428,8 @@ function coversEveryObservedDriver(
     .filter(isJolpicaDriver)
     .map((record) => record.providerValue);
   return (
-    observed.length === ACCEPTED.length + PENDING_DRIVERS.length &&
-    ACCEPTED.every((row) => observed.includes(row.driverId)) &&
+    observed.length === CURRENT.length + PENDING_DRIVERS.length &&
+    CURRENT.every((row) => observed.includes(row.driverId)) &&
     acknowledged
       .filter(isJolpicaDriver)
       .every((record) =>
@@ -435,7 +447,7 @@ function isExactlyTheAcceptedRegistry(rows: readonly RegistryRow[]): boolean {
   const preExisting = new Map<string, string>(
     PRE_EXISTING_ROWS.map((row) => [row.id, JSON.stringify(row)]),
   );
-  if (rows.length !== ACCEPTED.length + 1) return false;
+  if (rows.length !== CURRENT.length + 1) return false;
   for (const row of rows) {
     const id = String(row.id);
     const expected = preExisting.get(id);
@@ -443,7 +455,7 @@ function isExactlyTheAcceptedRegistry(rows: readonly RegistryRow[]): boolean {
       if (JSON.stringify(row) !== expected) return false;
       continue;
     }
-    const accepted = ACCEPTED.find((entry) => entry.gridviewId === id);
+    const accepted = CURRENT.find((entry) => entry.gridviewId === id);
     if (accepted === undefined) return false;
     if (
       JSON.stringify(row) !==
@@ -476,14 +488,14 @@ function keepsTwelveAcknowledgedAndUnmapped(
 // ---------------------------------------------------------------------------
 
 describe('the curated driver registry', () => {
-  it('holds exactly the 32 accepted identities plus jack-doohan', () => {
+  it('holds exactly the 32 accepted identities plus jack-doohan and the P0 rafael-camara', () => {
     const ids = driverRegistry.map((entry) => entry.id as string);
 
-    expect(ids).toHaveLength(33);
-    expect(new Set(ids).size).toBe(33);
-    expect(canonical.driver.size).toBe(33);
+    expect(ids).toHaveLength(34);
+    expect(new Set(ids).size).toBe(34);
+    expect(canonical.driver.size).toBe(34);
     expect([...ids].sort()).toEqual(
-      [...ACCEPTED.map((row) => row.gridviewId), 'jack-doohan'].sort(),
+      [...CURRENT.map((row) => row.gridviewId), 'jack-doohan'].sort(),
     );
     expect(isExactlyTheAcceptedRegistry(driverRegistry)).toBe(true);
   });
@@ -497,13 +509,15 @@ describe('the curated driver registry', () => {
     }
   });
 
-  it('created exactly 25 identities, each carrying only `id` and `fullName`', () => {
+  it('created exactly 25 identities (26 with P0), each carrying only `id` and `fullName`', () => {
     const preExisting = new Set<string>(PRE_EXISTING_ROWS.map((row) => row.id));
     const created = driverRegistry.filter(
       (entry) => !preExisting.has(entry.id as string),
     );
 
-    expect(created.map((entry) => entry.id).sort()).toEqual([...NEW_IDS]);
+    expect(created.map((entry) => entry.id).sort()).toEqual(
+      [...NEW_IDS, P0_ROW.gridviewId].sort(),
+    );
     for (const row of created) {
       // No name parts, code, number, nationality, country, birth details,
       // biography, URL or media: no provider descriptive fact was imported,
@@ -585,16 +599,16 @@ describe('the curated driver registry', () => {
 });
 
 describe('the 2026 Jolpica driver mappings', () => {
-  it('are exactly the 32 accepted associations', () => {
+  it('are exactly the 32 accepted associations plus the P0 rafael_camara', () => {
     expect(mappingDocument.season).toBe(2026);
-    expect(driverMappings).toHaveLength(32);
+    expect(driverMappings).toHaveLength(33);
     expect(isExactlyTheAcceptedTable(mappingDocument.mappings)).toBe(true);
     expect(
       driverMappings
         .map((record) => [record.providerValue, record.gridviewId])
         .sort(),
-    ).toEqual(ACCEPTED.map((row) => [row.driverId, row.gridviewId]).sort());
-    for (const row of ACCEPTED) {
+    ).toEqual(CURRENT.map((row) => [row.driverId, row.gridviewId]).sort());
+    for (const row of CURRENT) {
       expect(resolvedDriver(row.driverId), row.driverId).toBe(row.gridviewId);
     }
   });
@@ -612,8 +626,8 @@ describe('the 2026 Jolpica driver mappings', () => {
     const values = driverMappings.map((record) => record.providerValue);
     const targets = driverMappings.map((record) => String(record.gridviewId));
 
-    expect(new Set(values).size).toBe(32);
-    expect(new Set(targets).size).toBe(32);
+    expect(new Set(values).size).toBe(33);
+    expect(new Set(targets).size).toBe(33);
     for (const target of targets) {
       expect(canonical.driver.has(target), target).toBe(true);
     }
@@ -682,13 +696,13 @@ describe('the 2026 Jolpica driver mappings', () => {
 });
 
 describe('the 2026 driver evidence corpus', () => {
-  it('records the 32 curated identities and four November diagnostic keys', () => {
+  it('records the 32 curated identities, the P0 rafael_camara and three November diagnostic keys', () => {
     expect(evidenceCorpus.season).toBe(2026);
     expect(driverIdentities).toHaveLength(36);
     expect(
       driverIdentities.map((record) => record.providerValue).sort(),
     ).toEqual(
-      [...ACCEPTED.map((row) => row.driverId), ...PENDING_DRIVERS].sort(),
+      [...CURRENT.map((row) => row.driverId), ...PENDING_DRIVERS].sort(),
     );
     expect(
       coversEveryObservedDriver(
@@ -749,7 +763,7 @@ describe('the 2026 driver evidence corpus', () => {
   });
 
   it('keeps the three OpenF1 acknowledgements with accurate reasons', () => {
-    expect(evidenceCorpus.acknowledgedUnmapped).toHaveLength(7);
+    expect(evidenceCorpus.acknowledgedUnmapped).toHaveLength(6);
     expect(
       evidenceCorpus.acknowledgedUnmapped
         .filter((record) => record.source === 'openf1')
@@ -817,10 +831,10 @@ describe('the drivers reach the normalized contract', () => {
       .drivers;
   }
 
-  it('emits all 33 as valid normalized drivers', async () => {
+  it('emits all 34 as valid normalized drivers', async () => {
     const drivers = await loadDrivers();
 
-    expect(drivers).toHaveLength(33);
+    expect(drivers).toHaveLength(34);
     for (const driver of drivers) {
       expect(validateDriver(driver, 'driver'), driver.id).toEqual([]);
     }
@@ -854,10 +868,11 @@ describe('the drivers reach the normalized contract', () => {
 describe('nothing outside the driver dataset moved', () => {
   it('pins the final dataset totals', () => {
     // 93 / 96 / 3 when this dataset merged; the 2026-10-07 off-calendar
-    // circuit `jeddah` (Provider Evaluation §8.13) added one of each.
-    expect(mappingDocument.mappings).toHaveLength(94);
+    // circuit `jeddah` (Provider Evaluation §8.13) added one of each; P0
+    // mapped rafael_camara (one mapping more, one acknowledgement fewer).
+    expect(mappingDocument.mappings).toHaveLength(95);
     expect(evidenceCorpus.identities).toHaveLength(101);
-    expect(evidenceCorpus.acknowledgedUnmapped).toHaveLength(7);
+    expect(evidenceCorpus.acknowledgedUnmapped).toHaveLength(6);
   });
 
   it('leaves constructors, events and circuits at 11 / 23 / 24', () => {
@@ -940,7 +955,7 @@ describe('a defective dataset is rejected', () => {
           !(isJolpicaDriver(record) && record.providerValue === row.driverId),
       );
 
-      expect(partial.filter(isJolpicaDriver), row.driverId).toHaveLength(31);
+      expect(partial.filter(isJolpicaDriver), row.driverId).toHaveLength(32);
       expect(isExactlyTheAcceptedTable(partial), row.driverId).toBe(false);
     }
   });

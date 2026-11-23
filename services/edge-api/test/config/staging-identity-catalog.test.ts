@@ -124,8 +124,13 @@ describe('the proposed staging identity catalog (identity U11)', () => {
     expect(rawConfig).not.toMatch(/^\[\[(?:env\.\w+\.)?migrations\]\]/m);
   });
 
-  it('leaves production, the demonstration Worker and development without any identity declaration', () => {
-    for (const environment of ['', 'production', 'e2e'] as const) {
+  it('gives production its own, distinct installation (U11 P4) and leaves the demonstration Worker and development without any identity declaration', () => {
+    const production = identityVars(resolved('production').vars);
+    expect(production.IDENTITY_INSTALLATION_ID).toMatch(uuidV4);
+    expect(production.IDENTITY_INSTALLATION_ID).not.toBe(
+      identityVars(resolved('staging').vars).IDENTITY_INSTALLATION_ID,
+    );
+    for (const environment of ['', 'e2e'] as const) {
       const config = resolved(environment);
       expect(identityVars(config.vars), environment).toEqual({});
       expect(Object.keys(config.exports ?? {}), environment).not.toContain(
@@ -138,8 +143,9 @@ describe('the proposed staging identity catalog (identity U11)', () => {
         environment,
       ).not.toContain('IDENTITY_CATALOG');
     }
+    // Staging and production, one each.
     expect(rawConfig.match(/^\s*IDENTITY_INSTALLATION_ID\s*=/gm)).toHaveLength(
-      1,
+      2,
     );
   });
 });

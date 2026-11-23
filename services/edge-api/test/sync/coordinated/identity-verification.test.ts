@@ -32,7 +32,7 @@ vi.mock('../../../src/sync/coordinated/composition', async (original) => {
 let seed: SeedArtifact;
 const hosts: ReturnType<typeof sqliteHost>[] = [];
 beforeAll(async () => {
-  seed = await prepareSeed(loadCorpus());
+  seed = await prepareSeed(loadCorpus('p0'));
 });
 beforeEach(forbidNetwork);
 afterEach(() => {

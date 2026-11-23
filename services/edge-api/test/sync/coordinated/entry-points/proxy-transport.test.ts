@@ -128,13 +128,9 @@ function installLimiter(harness: EntryPointHarness) {
 describe('optional egress through Worker entry points', () => {
   it('withholds three resources on the November driver gaps despite 25 HTTP 200 responses, preserving published facts', async () => {
     // Synthetic model of the reported counts, NOT a November capture/replay.
-    // Only these exact diagnostic keys come from the operator's report.
-    const unmapped = [
-      'rafael_camara',
-      'gabriele_mini',
-      'freddie_slater',
-      'nikola_tsolov',
-    ];
+    // Only these exact diagnostic keys come from the operator's report;
+    // `rafael_camara` resolves since P0 (reviewed in staging catalog R1).
+    const unmapped = ['gabriele_mini', 'freddie_slater', 'nikola_tsolov'];
     const harness = await EntryPointHarness.create('local', bind, {
       env: { ...proxy, __PROVIDER_TRANSPORT: undefined },
     });
@@ -217,7 +213,8 @@ describe('optional egress through Worker entry points', () => {
     const mappingFailures = failed.logs.filter(
       (event) => event.operation === 'provider.mapping.resolve',
     );
-    expect(mappingFailures).toHaveLength(12);
+    // Each unmapped key fails once per affected resource: 3 keys x 3.
+    expect(mappingFailures).toHaveLength(9);
     expect(
       failed.logs
         .filter(

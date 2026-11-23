@@ -208,11 +208,20 @@ describe('the resolved configuration', () => {
       'IdentityCatalog',
     ]);
     expect(bindingNames('')).toEqual(['PROVIDER_RATE_LIMITER']);
+    // U11 P4: production binds the ledger and the catalog too.
     expect(bindingNames('production')).toEqual([
       'PROVIDER_RATE_LIMITER',
       'SEASON_PUBLICATION_SEQUENCER',
+      'RECONCILIATION_LEDGER',
+      'IDENTITY_CATALOG',
     ]);
-    for (const environment of ['', 'production'] as const) {
+    expect(Object.keys(resolved('production').exports)).toEqual([
+      'ProviderRateLimiter',
+      'SeasonPublicationSequencer',
+      'ReconciliationLedger',
+      'IdentityCatalog',
+    ]);
+    for (const environment of [''] as const) {
       expect(Object.keys(resolved(environment).exports), environment).toEqual([
         'ProviderRateLimiter',
         'SeasonPublicationSequencer',
@@ -449,11 +458,13 @@ describe('the committed production ingest needs its genesis control', () => {
       const context = await ingestContext();
       context.storage.writeLog.length = 0;
       const spies = publicationSpies();
+      // The control check is authority-independent; under the committed
+      // runtime authority an unbound catalog would refuse first.
       const env = workerEnv(
-        {
+        bundled({
           ...resolvedVars('production'),
           SEASON_PUBLICATION_CUTOVER_CONTROL: control,
-        },
+        }),
         context,
       );
       expect(env.SEASON_BATCH_INGEST).toBe('2026');

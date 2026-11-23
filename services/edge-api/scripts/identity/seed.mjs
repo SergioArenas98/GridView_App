@@ -5,8 +5,18 @@ import { resolve, join, relative, isAbsolute, basename } from 'node:path';
 import { tmpdir } from 'node:os';
 import { createRequire } from 'node:module';
 import { loadCorpus } from './corpus.mjs';
-if (process.argv.length !== 4 || process.argv[2] !== '--out')
-  throw Error('Usage: node scripts/identity/seed.mjs --out <local-directory>');
+// `--corpus p0` builds the initial production seed (U11 P4); default is R0.
+const args = process.argv.slice(2);
+const corpus =
+  args.length === 4 && args[2] === '--corpus' && ['r0', 'p0'].includes(args[3])
+    ? args[3]
+    : args.length === 2
+      ? 'r0'
+      : null;
+if (args[0] !== '--out' || corpus === null)
+  throw Error(
+    'Usage: node scripts/identity/seed.mjs --out <local-directory> [--corpus r0|p0]',
+  );
 globalThis.fetch = () => {
   throw Error('Identity seed tool forbids network');
 };
@@ -22,9 +32,9 @@ try {
     outfile: module,
   });
   const output = await createRequire(import.meta.url)(module).artifacts(
-    loadCorpus(),
+    loadCorpus(corpus),
   );
-  const directory = resolve(process.argv[3]);
+  const directory = resolve(args[1]);
   // Preflight all outputs before writing; never overwrite a different artifact.
   for (const [name, text] of Object.entries(output)) {
     try {

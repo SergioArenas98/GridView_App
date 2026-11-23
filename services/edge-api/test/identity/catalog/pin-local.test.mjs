@@ -24,7 +24,10 @@ it('persists acknowledged pins in actual SQLite DO files and recovers the exact 
       modules: true,
       script: bundle.outputFiles[0].text,
       compatibilityDate: '2026-07-01',
-      bindings: { IDENTITY_INSTALLATION_ID: installation },
+      bindings: {
+        IDENTITY_INSTALLATION_ID: installation,
+        TEST_NOW: '2026-11-23T12:00:00.000Z',
+      },
       durableObjects: {
         IDENTITY_CATALOG: { className: 'U4TestHost', useSQLite: true },
       },
@@ -49,7 +52,7 @@ it('persists acknowledged pins in actual SQLite DO files and recovers the exact 
     });
   try {
     mf = start();
-    const seed = await prepareSeed(loadCorpus());
+    const seed = await prepareSeed(loadCorpus('p0'));
     const r = await call('seed', seed, {
       schemaVersion: 1,
       operationId: crypto.randomUUID(),

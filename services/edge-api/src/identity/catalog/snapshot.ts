@@ -29,7 +29,7 @@ import {
   type ImportDecision,
   type CatalogEvidence,
 } from './model';
-import { records } from './sources';
+import { corpusProfileFor, records } from './sources';
 import { hashSeasonProjection } from './projection';
 
 export const novemberKeys = [
@@ -42,6 +42,8 @@ export async function deriveSnapshot(
   sources: RepositorySource[],
   documents: Map<string, Document>,
 ): Promise<CatalogSnapshot> {
+  // R0 keeps all four November keys pending; P0 maps the reviewed one.
+  const pendingKeys = corpusProfileFor(documents).pendingKeys;
   const get = (kind: string) => documents.get(kind)!;
   const reference = (kind: string, pointer: string): RepositoryReference => {
     const source = sources.find((s) => JSON.parse(s.text).kind === kind)!;
@@ -90,9 +92,8 @@ export async function deriveSnapshot(
       [...text].length <= 2000 && !/\bsynthetic\b/i.test(text),
       'historical-evidence',
     );
-    const pending = novemberKeys.includes(
-      k.providerValue as (typeof novemberKeys)[number],
-    );
+    const pending =
+      k.source === 'jolpica' && pendingKeys.includes(k.providerValue as string);
     requireCatalog(
       !pending ||
         (!mapped.has(canonicalKey(k)) && text.includes('operator-reported')),
@@ -216,7 +217,7 @@ export async function deriveSnapshot(
     })
     .sort((a, b) => compareUtf8(canonicalKey(a.key), canonicalKey(b.key)));
   requireCatalog(
-    novemberKeys.every((v) =>
+    pendingKeys.every((v) =>
       unresolved.some(
         (u) => u.key.source === 'jolpica' && u.key.providerValue === v,
       ),

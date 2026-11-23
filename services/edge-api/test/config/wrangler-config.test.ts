@@ -179,6 +179,12 @@ describe('season 2026 activation-phase configuration (ADR 0025 D12)', () => {
       'SEASON_PUBLICATION_CUTOVER_CONTROL = "genesis:2026"',
       'SEASON_PUBLICATION_AUTHORITY = "sequencer"',
       'SEASON_BATCH_INGEST = "2026"',
+      // U11 P4: production's own identity installation.
+      'IDENTITY_INSTALLATION_ID = "98f14de8-d974-423a-bb78-dafe6251164a"',
+      'IDENTITY_CATALOG_MODE = "runtime"',
+      'IDENTITY_DISCOVERY_MODE = "off"',
+      'IDENTITY_ADMIN_MODE = "read-only"',
+      'IDENTITY_INVENTORY_MODE = "optional-drivers"',
     ]);
   });
 

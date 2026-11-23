@@ -54,7 +54,7 @@ let catalogBytes: Uint8Array;
 // Synthetic corpus preparation and SQLite setup are slow on Windows; this is
 // a test-harness hook limit, not an operational deadline.
 beforeAll(async () => {
-  seed = await prepareSeed(loadCorpus());
+  seed = await prepareSeed(loadCorpus('p0'));
 }, 120000);
 beforeEach(async () => {
   vi.stubGlobal('fetch', () => {

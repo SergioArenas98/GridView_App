@@ -237,7 +237,8 @@ describe('season-batch CLI: end to end, offline', () => {
     expect(status, JSON.stringify(report)).toBe(0);
     expect(report.summary).toMatchObject({
       season: 2026,
-      documentCount: 103,
+      // 103 + the driver document for the reviewed rafael-camara (P0).
+      documentCount: 104,
       classifiedRounds: [1, 2, 3],
     });
 

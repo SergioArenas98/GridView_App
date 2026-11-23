@@ -68,7 +68,7 @@ it('U7 publishes through authenticated Worker ingest with SQLite catalog/lease/s
   };
   try {
     mf = start();
-    const seed = await prepareSeed(loadCorpus());
+    const seed = await prepareSeed(loadCorpus('p0'));
     const revision = await call('seed', seed, {
       schemaVersion: 1,
       operationId: crypto.randomUUID(),

@@ -1,5 +1,5 @@
 import { afterEach, afterAll, describe, expect, it, vi } from 'vitest';
-import { localInstallation, evidence, seedR0, ids } from './support.mjs';
+import { localInstallation, evidence, seedCurrent, ids } from './support.mjs';
 import { verifyCatalogFile } from '../../../scripts/identity/catalog-file';
 import { generateSeasonBatch } from '../../../scripts/season-batch/generate';
 import { inputFor } from '../../season-batch/support';
@@ -141,5 +141,6 @@ it('U8 production-equivalent validation rejects synthetic import decisions, and 
   const refused = await production.raw('/seed', payload);
   expect(refused.status).toBe(422);
   expect((await production.admin('/health')).activeRevisionId).toBeNull();
-  expect((await seedR0()).snapshot.unresolved).toHaveLength(7);
+  // Six in P0: rafael_camara is mapped.
+  expect((await seedCurrent()).snapshot.unresolved).toHaveLength(6);
 });

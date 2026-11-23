@@ -26,6 +26,10 @@ import { ledgerFixture } from '../sync/coordinated/ledger/support';
 import { canonicalJson } from '../../src/ingest/canonical-json';
 import { approvedR0Hash } from '../../src/identity/catalog/batch-admission';
 
+/** The P0 seed content hash (docs/operations/identity-seed-p0/manifest.json). */
+const p0Hash =
+  'sha256:0a1b093a150605221606bb7dd65d7204d074ec4fef031537af100f5c0ab7de91';
+
 let seed: Awaited<ReturnType<typeof prepareSeed>>;
 let host: ReturnType<typeof sqliteHost>;
 let f: Awaited<ReturnType<typeof setup>>;
@@ -33,7 +37,7 @@ let context: Awaited<ReturnType<typeof ingestContext>>;
 let batch: { manifest: Json; artifact: Json; manifestSha256: string };
 let catalogBytes: Uint8Array;
 beforeAll(async () => {
-  seed = await prepareSeed(loadCorpus());
+  seed = await prepareSeed(loadCorpus('p0'));
 });
 beforeEach(async () => {
   vi.stubGlobal('fetch', () => {
@@ -256,7 +260,10 @@ it('rejects catalog disagreement and conflicting reuse of an admitted operation'
   ).toMatchObject({ outcome: 'refused', reason: 'catalog-reference-mismatch' });
 });
 it('refuses new old-revision batches after activation and retains the irreversible U4 v1 closure', async () => {
-  expect(seed.contentHash).toBe(approvedR0Hash);
+  // The current repository corpus is P0 (R0 plus the reviewed Rafael Câmara
+  // identity); runtime batches are generated from its export.
+  expect(seed.contentHash).toBe(p0Hash);
+  expect(seed.contentHash).not.toBe(approvedR0Hash);
   const revision = await profileProposal(f);
   await validateAndActivate(f, revision.revisionId);
   expect(f.workflow.head()).toMatchObject({
@@ -367,7 +374,7 @@ it.each(['drivers', 'constructors', 'circuits', 'calendar'] as const)(
   },
 );
 
-it('requires explicit installation opt-in for runtime v1 and never reopens after a compensating R0-looking profile', async () => {
+it('never admits runtime v1 on a P0 installation, even with the opt-in, and never reopens after a compensating profile', async () => {
   const archived = await syntheticBatch();
   const v1 = decodeSubmission({
     kind: 'gridview-season-batch-submission',
@@ -382,9 +389,11 @@ it('requires explicit installation opt-in for runtime v1 and never reopens after
     outcome: 'refused',
     reason: 'runtime-batch-requires-u7',
   });
+  // The U4 v1 compatibility exists only for an exact, sole-activation R0
+  // head (batch-admission `legacyAllowed`); a P0 seed never qualifies.
   expect(await run(service({ compatibility: true }), v1)).toMatchObject({
-    outcome: 'publication',
-    publication: { status: 'applied' },
+    outcome: 'refused',
+    reason: 'runtime-batch-requires-u7',
   });
   const next = await profileProposal(f);
   await validateAndActivate(f, next.revisionId);

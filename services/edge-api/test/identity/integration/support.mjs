@@ -44,11 +44,13 @@ export function assertNoExternalNetwork() {
 }
 // The byte-identical regeneration is a separate mandatory preflight. Exercise
 // the reviewed package itself here; U5 independently validates it on import.
-export const seedR0 = () =>
+// The current package is P0 (U11 P4): runtime admission requires a catalog
+// built on the deployed bundled base, which is now P0's (R0 + rafael-camara).
+export const seedCurrent = () =>
   (seedPromise ??= readFile(
     resolve(
       import.meta.dirname,
-      '../../../../../docs/operations/identity-seed-r0/seed.json',
+      '../../../../../docs/operations/identity-seed-p0/seed.json',
     ),
     'utf8',
   ).then(JSON.parse));
@@ -218,7 +220,7 @@ export async function localInstallation(index = 0, options = {}) {
       expect(r.status).toBe(200);
     },
     async seed(input) {
-      const seed = input ?? (await seedR0());
+      const seed = input ?? (await seedCurrent());
       const started = performance.now();
       const head = await h.admin('/health');
       expect(head.activeRevisionId).toBeNull();

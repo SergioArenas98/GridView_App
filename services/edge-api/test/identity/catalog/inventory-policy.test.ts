@@ -271,7 +271,7 @@ describe('U10 policy vocabulary', () => {
   });
 });
 
-describe('committed environments select the optional policy only in staging (acceptance 37, U11 P3)', () => {
+describe('committed environments select the optional policy only in staging and production (acceptance 37, U11 P3/P4)', () => {
   const root = join(__dirname, '..', '..', '..');
   const assignment = /^\s*IDENTITY_INVENTORY_MODE\s*=/m;
   it('no other wrangler configuration or committed env file sets IDENTITY_INVENTORY_MODE', () => {
@@ -287,9 +287,9 @@ describe('committed environments select the optional policy only in staging (acc
       expect(text, name).not.toContain('optional-drivers');
     }
   });
-  it('wrangler.toml assigns it exactly once, inside [env.staging.vars] only', () => {
+  it('wrangler.toml assigns it exactly twice, in [env.staging.vars] and [env.production.vars] only', () => {
     const text = readFileSync(join(root, 'wrangler.toml'), 'utf8');
-    expect(text.match(/^\s*IDENTITY_INVENTORY_MODE\s*=/gm)).toHaveLength(1);
+    expect(text.match(/^\s*IDENTITY_INVENTORY_MODE\s*=/gm)).toHaveLength(2);
     const read = (env?: string) =>
       (
         unstable_readConfig(
@@ -298,7 +298,8 @@ describe('committed environments select the optional policy only in staging (acc
         ).vars as Record<string, unknown>
       ).IDENTITY_INVENTORY_MODE;
     expect(read('staging')).toBe('optional-drivers');
-    for (const env of [undefined, 'production', 'e2e'])
+    expect(read('production')).toBe('optional-drivers');
+    for (const env of [undefined, 'e2e'])
       expect(read(env), env ?? 'development').toBeUndefined();
   });
 });

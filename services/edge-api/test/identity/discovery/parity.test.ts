@@ -317,13 +317,18 @@ describe('normalizer parity and evidence provenance', () => {
     await expect(candidateIdFor(key as ProviderMappingKey)).rejects.toThrow();
     expect(getter).not.toHaveBeenCalled();
   });
-  it('preserves all four November keys as unresolved without changing their content', async () => {
-    const keys = [
-      'rafael_camara',
-      'gabriele_mini',
-      'freddie_slater',
-      'nikola_tsolov',
-    ];
+  it('preserves the three remaining November keys as unresolved without changing their content', async () => {
+    // rafael_camara is mapped since P0 (reviewed in staging catalog R1).
+    expect(
+      registry.resolve({
+        season: 2026,
+        source: 'jolpica',
+        entity: 'driver',
+        providerField: 'driverId',
+        providerValue: 'rafael_camara',
+      } as ProviderMappingKey),
+    ).toMatchObject({ outcome: 'resolved', gridviewId: 'rafael-camara' });
+    const keys = ['gabriele_mini', 'freddie_slater', 'nikola_tsolov'];
     const body = driversEnvelope(keys.map((driverId) => ({ driverId })));
     const result = await extractJolpicaObservations(
       driverInput(body),

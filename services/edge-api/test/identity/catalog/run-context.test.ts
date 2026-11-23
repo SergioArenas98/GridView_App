@@ -52,7 +52,7 @@ const request = (): PinRequest => ({
 });
 const logger = new CapturingLogger();
 beforeAll(async () => {
-  seed = await prepareSeed(loadCorpus());
+  seed = await prepareSeed(loadCorpus('p0'));
 });
 beforeEach(forbidNetwork);
 afterEach(() => {

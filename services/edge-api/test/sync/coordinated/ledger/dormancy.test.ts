@@ -17,9 +17,11 @@ import * as entryPoint from '../../../../src/index';
 import { ReconciliationLedger } from '../../../../src/sync/coordinated/ledger';
 import { resolveReconciliationLedger } from '../../../../src/sync/coordinated/ledger-port';
 import {
+  AUTOMATIC_ENVIRONMENTS,
   demonstrationSection,
   environmentSection,
   withoutAutomatic,
+  withoutEnvironments,
 } from '../../../config/demonstration-environment';
 
 const edgeApiRoot = join(
@@ -49,7 +51,7 @@ function declarations(): string {
     .join('\n');
 }
 
-describe('the reconciliation ledger is exported, resolvable and bound only by the demonstration Worker and staging', () => {
+describe('the reconciliation ledger is exported, resolvable and bound only by the demonstration Worker, staging and production', () => {
   it('is a named export of the Worker entry point', () => {
     expect(entryPoint.ReconciliationLedger).toBe(ReconciliationLedger);
     expect(source('src/index.ts')).toContain(
@@ -57,9 +59,14 @@ describe('the reconciliation ledger is exported, resolvable and bound only by th
     );
   });
 
-  it('is declared by no exports entry, migration or binding outside the demonstration Worker and staging', () => {
+  it('is declared by no exports entry, migration or binding outside the demonstration Worker, staging and production', () => {
     const declared = declarations();
-    const elsewhere = withoutAutomatic(declared);
+    // U11 P4: production binds the ledger for the season lease of its
+    // runtime batch ingest; its provider mode stays `none` (below).
+    const elsewhere = withoutEnvironments(declared, [
+      ...AUTOMATIC_ENVIRONMENTS,
+      'production',
+    ]);
     expect(elsewhere).not.toMatch(/ReconciliationLedger/);
     expect(elsewhere).not.toMatch(/RECONCILIATION/i);
     expect(declared).not.toMatch(/\[\[migrations\]\]/);
@@ -70,7 +77,7 @@ describe('the reconciliation ledger is exported, resolvable and bound only by th
     ]);
     // The demonstration Worker and staging each register the class and bind
     // it once.
-    for (const name of ['e2e', 'staging']) {
+    for (const name of ['e2e', 'staging', 'production']) {
       const section = environmentSection(declared, name);
       expect(section.match(/ReconciliationLedger/g), name).toHaveLength(2);
       expect(section, name).toContain(

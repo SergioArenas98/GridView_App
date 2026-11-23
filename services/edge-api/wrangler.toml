@@ -360,6 +360,26 @@ SEASON_PUBLICATION_AUTHORITY = "sequencer"
 # guard and the `prepare` CAS bound to its `expectedActiveVersion`.
 SEASON_BATCH_INGEST = "2026"
 
+# Identity catalog (U11 P4, owner decision 2026-11-22). Production's own
+# installation: a fresh random UUID v4, never shared with staging
+# (`c45d60b8-…`), E2E or the drill Worker. Its catalog is seeded once from the
+# reviewed P0 package (`docs/operations/identity-seed-p0`: R0 plus the
+# reviewed Rafael Câmara identity, equal in identity content to staging R1).
+# Catalog `runtime`: a guarded batch ingest requires a v2 batch generated from
+# the verified production export, the catalog binding and the ledger lease;
+# without an active catalog every ingest is refused. Discovery `off`. Admin
+# `read-only`: individual credentials may read; every identity write is
+# refused (seeding uses a separately reviewed temporary `review` build).
+# Inventory `optional-drivers`: a season driver left unmapped by the catalog
+# no longer ends the participants resource; race classifications and driver
+# standings still require every driver to resolve (inventory-policy
+# acceptance 37 allows exactly staging and production).
+IDENTITY_INSTALLATION_ID = "98f14de8-d974-423a-bb78-dafe6251164a"
+IDENTITY_CATALOG_MODE = "runtime"
+IDENTITY_DISCOVERY_MODE = "off"
+IDENTITY_ADMIN_MODE = "read-only"
+IDENTITY_INVENTORY_MODE = "optional-drivers"
+
 # Bindings are not inherited by named environments, so each one redeclares it.
 [[env.production.durable_objects.bindings]]
 name = "PROVIDER_RATE_LIMITER"
@@ -371,8 +391,40 @@ class_name = "ProviderRateLimiter"
 name = "SEASON_PUBLICATION_SEQUENCER"
 class_name = "SeasonPublicationSequencer"
 
+# U11 P4: production declares its four classes explicitly (a named
+# environment's exports replace the inherited top-level two, which stay).
+# Deploying adds two classes, each with a fresh SQLite namespace:
+# ReconciliationLedger (the season lease a runtime batch ingest takes; no
+# provider mode uses it here) and IdentityCatalog.
+[env.production.exports.ProviderRateLimiter]
+type = "durable-object"
+storage = "sqlite"
+
+[env.production.exports.SeasonPublicationSequencer]
+type = "durable-object"
+storage = "sqlite"
+
+[env.production.exports.ReconciliationLedger]
+type = "durable-object"
+storage = "sqlite"
+
+[[env.production.durable_objects.bindings]]
+name = "RECONCILIATION_LEDGER"
+class_name = "ReconciliationLedger"
+
+[env.production.exports.IdentityCatalog]
+type = "durable-object"
+storage = "sqlite"
+
+[[env.production.durable_objects.bindings]]
+name = "IDENTITY_CATALOG"
+class_name = "IdentityCatalog"
+
+# IDENTITY_REVIEWER_CREDENTIALS: production's own closed, digest-only JSON
+# array (U5 contract), put as a secret before the first deploy; never
+# committed and never shared with staging.
 [env.production.secrets]
-required = ["ADMIN_TOKEN"]
+required = ["ADMIN_TOKEN", "IDENTITY_REVIEWER_CREDENTIALS"]
 
 # `gridview-snapshots-production`, created on 2026-10-22 (release plan W2).
 # The id is required: Wrangler 4 creates a new namespace on deploy for a KV

@@ -55,7 +55,7 @@ it('imports R0 atomically in real SQLite DO storage and preserves seed, provenan
     ).toBeNull();
     await mf.dispose();
     mf = start();
-    const body = driversEnvelope([{ driverId: 'rafael_camara' }]);
+    const body = driversEnvelope([{ driverId: 'gabriele_mini' }]);
     const observations = (
       await extractJolpicaObservations(
         driverInput(body),

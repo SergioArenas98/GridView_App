@@ -19,6 +19,7 @@ export class U4TestHost extends IdentityCatalog {
     env: IdentityEnvironment & {
       TEST_U2_ONLY?: boolean;
       TEST_FAIL_WRITE?: number;
+      TEST_NOW?: string;
     },
   ) {
     super(state, env, true);
@@ -44,7 +45,8 @@ export class U4TestHost extends IdentityCatalog {
           storage,
           env.IDENTITY_INSTALLATION_ID!,
           a.authority,
-          () => Date.parse('2026-11-14T12:00:00.000Z'),
+          // A P0 (2026.11.22.1) seed needs a later fixed instant.
+          () => Date.parse(env.TEST_NOW ?? '2026-11-14T12:00:00.000Z'),
         );
   }
   override async fetch(request: Request): Promise<Response> {

@@ -7,7 +7,7 @@ import {
   it,
   vi,
 } from 'vitest';
-import { localInstallation, evidence, seedR0 } from './support.mjs';
+import { localInstallation, evidence, seedCurrent } from './support.mjs';
 import { verifyCatalogFile } from '../../../scripts/identity/catalog-file';
 import { contextFromPin } from '../../../src/identity/catalog/run-context';
 import { guardNetwork, assertNoExternalNetwork } from './support.mjs';
@@ -54,13 +54,14 @@ describe.sequential('U8 real SQLite lifecycle', () => {
     );
     h.timings.exportValidationMs = performance.now() - started;
     expect(verified.reference.exportSha256).toBe(wrapper.exportHash);
+    // P0 (identity-seed-p0); its season projection equals staging R1's.
     expect(verified.context.catalogHash).toBe(
-      'sha256:8a2a62d8412fdfd71cfd5138b4f87682f33a690d21c3d5eec46153bfbda39851',
+      'sha256:0a1b093a150605221606bb7dd65d7204d074ec4fef031537af100f5c0ab7de91',
     );
     expect(verified.context.seasonProjectionHash).toBe(
-      'sha256:ab953da8b44e80f7d9bc87fd948a32b0c67785eaa15c4d50348f0a4f8b7cc746',
+      'sha256:bec52f0976c603cb5f2e10e4635b4a8f871fbc6cdea32d5c5a42e84344dbe33e',
     );
-    expect(wrapper.revision.snapshot).toEqual((await seedR0()).snapshot);
+    expect(wrapper.revision.snapshot).toEqual((await seedCurrent()).snapshot);
     before = await h.inspect();
   });
   it('recovers exact pin, history and receipts after actual workerd restart', async () => {

@@ -47,7 +47,7 @@ const old = {
   events: curatedEventNames(),
 };
 beforeAll(async () => {
-  seed = await prepareSeed(loadCorpus());
+  seed = await prepareSeed(loadCorpus('p0'));
   catalog = await catalogIndexes(seed);
 });
 beforeEach(forbidNetwork);

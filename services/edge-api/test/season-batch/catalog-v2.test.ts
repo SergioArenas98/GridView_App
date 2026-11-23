@@ -17,7 +17,7 @@ let bytes: Uint8Array;
 beforeAll(async () => {
   const h = sqliteHost();
   try {
-    const f = await setup(h.storage, await prepareSeed(loadCorpus()));
+    const f = await setup(h.storage, await prepareSeed(loadCorpus('p0')));
     const lineage = JSON.parse(
       await f.workflow.exportRevision(f.root.revisionId),
     );

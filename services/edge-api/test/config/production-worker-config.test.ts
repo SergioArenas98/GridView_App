@@ -53,6 +53,7 @@ import { FixedClock } from '../../src/runtime/clock';
 import { MemorySnapshotStorage } from '../../src/storage/local';
 import { syncStateKey } from '../../src/storage/keys';
 import { runtimeSnapshotValidator } from '../../src/validation/snapshot-validator';
+import { identityConfiguration } from '../../src/identity/catalog/run-context';
 import { submissionFor, syntheticBatch, type Batch } from '../ingest/support';
 import { checkpointFor } from '../publication/cutover/support';
 
@@ -80,6 +81,28 @@ function resolved(environment: 'staging' | 'production' | 'e2e') {
 }
 
 /** The resolved variables of one environment, as the Worker receives them. */
+/** Production's identity installation (U11 P4); never staging's or E2E's. */
+const PRODUCTION_INSTALLATION = '98f14de8-d974-423a-bb78-dafe6251164a';
+
+/**
+ * U11 P4: production commits runtime catalog authority with the optional
+ * inventory, which needs the catalog binding and an activated catalog; the
+ * runtime ingest path is exercised end to end by the identity integration
+ * tests. The genesis and ingest mechanics below are authority-independent and
+ * run, as before P4, under explicit bundled authority with no inventory
+ * variable (a bundled catalog cannot select it).
+ */
+function preCatalogMechanics(vars: Partial<Env>): Partial<Env> {
+  return {
+    ...Object.fromEntries(
+      Object.entries(vars).filter(
+        ([name]) => name !== 'IDENTITY_INVENTORY_MODE',
+      ),
+    ),
+    IDENTITY_CATALOG_MODE: 'bundled',
+  };
+}
+
 function resolvedVars(environment: 'staging' | 'production'): Partial<Env> {
   return Object.fromEntries(
     Object.entries(resolved(environment).vars).map(([name, value]) => [
@@ -113,6 +136,12 @@ describe('the resolved production configuration', () => {
       SEASON_PUBLICATION_CUTOVER_CONTROL: 'genesis:2026',
       SEASON_PUBLICATION_AUTHORITY: 'sequencer',
       SEASON_BATCH_INGEST: '2026',
+      // U11 P4: production's own identity installation.
+      IDENTITY_INSTALLATION_ID: PRODUCTION_INSTALLATION,
+      IDENTITY_CATALOG_MODE: 'runtime',
+      IDENTITY_DISCOVERY_MODE: 'off',
+      IDENTITY_ADMIN_MODE: 'read-only',
+      IDENTITY_INVENTORY_MODE: 'optional-drivers',
     });
     const config = resolveRuntimeConfig(resolvedVars('production'));
     expect(config.environment).toBe('production');
@@ -124,7 +153,7 @@ describe('the resolved production configuration', () => {
     });
   });
 
-  it('binds both Durable Objects to the existing SQLite exports, with no migrations', () => {
+  it('binds its four Durable Objects to SQLite exports, with no migrations (U11 P4 adds the ledger and the catalog)', () => {
     const production = resolved('production');
     expect(production.durable_objects.bindings).toEqual([
       { name: 'PROVIDER_RATE_LIMITER', class_name: 'ProviderRateLimiter' },
@@ -132,21 +161,42 @@ describe('the resolved production configuration', () => {
         name: 'SEASON_PUBLICATION_SEQUENCER',
         class_name: 'SeasonPublicationSequencer',
       },
+      { name: 'RECONCILIATION_LEDGER', class_name: 'ReconciliationLedger' },
+      { name: 'IDENTITY_CATALOG', class_name: 'IdentityCatalog' },
     ]);
     expect(Object.keys(production.exports)).toEqual([
       'ProviderRateLimiter',
       'SeasonPublicationSequencer',
+      'ReconciliationLedger',
+      'IdentityCatalog',
     ]);
+    for (const value of Object.values(production.exports))
+      expect(value).toEqual({ type: 'durable-object', storage: 'sqlite' });
     expect(production.migrations).toEqual([]);
     expect(JSON.stringify(production.vars)).not.toMatch(/RECONCILIATION/);
   });
 
-  it('requires ADMIN_TOKEN without committing a value', () => {
+  it('requires ADMIN_TOKEN and its own reviewer credentials without committing a value', () => {
     expect(resolved('production').secrets).toEqual({
-      required: ['ADMIN_TOKEN'],
+      required: ['ADMIN_TOKEN', 'IDENTITY_REVIEWER_CREDENTIALS'],
     });
     expect(rawConfig).toMatch(
-      /^\[env\.production\.secrets\]\nrequired = \["ADMIN_TOKEN"\]$/m,
+      /^\[env\.production\.secrets\]\nrequired = \["ADMIN_TOKEN", "IDENTITY_REVIEWER_CREDENTIALS"\]$/m,
+    );
+    expect(rawConfig).not.toMatch(/^\s*IDENTITY_REVIEWER_CREDENTIALS\s*=/m);
+  });
+
+  it('resolves runtime authority with the optional inventory only with the deployed catalog binding (U11 P4)', () => {
+    const vars = resolvedVars('production');
+    expect(PRODUCTION_INSTALLATION).not.toBe(
+      'c45d60b8-a723-4b6e-8530-750592af2b94',
+    );
+    const namespace = { idFromName: () => ({}), get: () => ({}) };
+    expect(
+      identityConfiguration({ ...vars, IDENTITY_CATALOG: namespace } as never),
+    ).toMatchObject({ mode: 'runtime', inventoryMode: 'optional-drivers' });
+    expect(() => identityConfiguration(vars as never)).toThrow(
+      /requires a catalog binding/,
     );
     expect(rawConfig).not.toContain('Bearer ');
   });
@@ -267,7 +317,7 @@ function production() {
   );
   const logger = new CapturingLogger();
   const env = {
-    ...resolvedVars('production'),
+    ...preCatalogMechanics(resolvedVars('production')),
     ADMIN_TOKEN,
     __LOCAL_STORAGE: storage,
     __SEASON_PUBLICATION_SEQUENCER: port,
@@ -342,7 +392,10 @@ function publicationSpies() {
 
 describe('the committed production variables without the KV binding', () => {
   it('fail closed on every route instead of serving or accepting anything', async () => {
-    const env = { ...resolvedVars('production'), ADMIN_TOKEN } as Env;
+    const env = {
+      ...preCatalogMechanics(resolvedVars('production')),
+      ADMIN_TOKEN,
+    } as Env;
     expect(env.GRIDVIEW_DATA).toBeUndefined();
     // The failure is the missing binding itself, not some other configuration
     // error: the committed variables resolve cleanly (above).

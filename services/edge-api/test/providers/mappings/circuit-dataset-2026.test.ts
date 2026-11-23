@@ -280,6 +280,8 @@ const OTHER_MAPPINGS: readonly (readonly [string, string, string, string])[] = [
   ['jolpica', 'driver', 'ayumu_iwasa', 'ayumu-iwasa'],
   ['jolpica', 'driver', 'bearman', 'oliver-bearman'],
   ['jolpica', 'driver', 'bortoleto', 'gabriel-bortoleto'],
+  // P0 (U11): reviewed in staging catalog R1, after both circuit passes.
+  ['jolpica', 'driver', 'rafael_camara', 'rafael-camara'],
   ['jolpica', 'driver', 'bottas', 'valtteri-bottas'],
   ['jolpica', 'driver', 'colapinto', 'franco-colapinto'],
   ['jolpica', 'driver', 'colton_herta', 'colton-herta'],
@@ -748,9 +750,10 @@ describe('nothing outside the circuit dataset moved', () => {
     expect(mappingDocument.mappings).toHaveLength(
       OTHER_MAPPINGS.length + ALL_ASSOCIATIONS.length + 23,
     );
-    expect(mappingDocument.mappings).toHaveLength(94);
+    // 94 / 7 before P0 (U11) mapped rafael_camara.
+    expect(mappingDocument.mappings).toHaveLength(95);
     expect(evidenceCorpus.identities).toHaveLength(101);
-    expect(evidenceCorpus.acknowledgedUnmapped).toHaveLength(7);
+    expect(evidenceCorpus.acknowledgedUnmapped).toHaveLength(6);
   });
 
   it('keeps every stated mapping total in the Implementation Plan true', () => {
@@ -777,9 +780,9 @@ describe('nothing outside the circuit dataset moved', () => {
     ].map(([, word]) => word);
     expect(acknowledged.length).toBeGreaterThan(0);
     for (const word of acknowledged) {
-      expect(word).toBe('seven');
+      expect(word).toBe('six');
     }
-    expect(evidenceCorpus.acknowledgedUnmapped).toHaveLength(7);
+    expect(evidenceCorpus.acknowledgedUnmapped).toHaveLength(6);
   });
 });
 
@@ -1008,8 +1011,10 @@ describe('the off-calendar circuit (Provider Evaluation §8.13)', () => {
       ),
     ) as { datasetVersion: string };
 
-    expect(metadata.datasetVersion).toBe(DATASET_VERSION);
-    // A version is never reused: the initial curated version is retired.
+    // P0 (U11) later issued 2026.11.22.1 for the reviewed rafael-camara
+    // identity; a version is never reused, so both earlier ones are retired.
+    expect(metadata.datasetVersion).toBe('2026.11.22.1');
+    expect(metadata.datasetVersion).not.toBe(DATASET_VERSION);
     expect(metadata.datasetVersion).not.toBe('2026.09.29.1');
   });
 });

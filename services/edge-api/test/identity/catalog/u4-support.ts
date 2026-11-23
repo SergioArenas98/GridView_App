@@ -12,10 +12,23 @@ import { context, driverInput, driversEnvelope } from '../discovery/support';
 import { hashIdentityProjection } from '../../../src/identity/discovery/keys';
 import { localAuthority } from './u4-authority';
 export const installation = '33333333-3333-4333-8333-333333333333';
+/**
+ * The default local clock: one fixed instant after the seed's dataset date
+ * (R0 `2026.10.07.1`, P0 `2026.11.22.1`), so later revisions never regress
+ * the dataset-version clock.
+ */
+export function seedClock(seed: SeedArtifact): () => number {
+  const dataset = seed.snapshot.seasonContent[0]!.datasetVersion;
+  const instant =
+    dataset >= '2026.11.22'
+      ? '2026-11-23T12:00:00.000Z'
+      : '2026-11-14T12:00:00.000Z';
+  return () => Date.parse(instant);
+}
 export async function setup(
   storage: IdentityStorage,
   seed: SeedArtifact,
-  now = () => Date.parse('2026-11-14T12:00:00.000Z'),
+  now = seedClock(seed),
 ) {
   const a = localAuthority(),
     cap = a.issue(),

@@ -353,7 +353,7 @@ describe.each(sequencerTransports)(
           'content:manifest',
         );
         expect(manifest?.data).toMatchObject({
-          contentVersion: '2026.10.07.1',
+          contentVersion: '2026.11.22.1',
           mediaVersion: null,
           attributionVersion: 'data-sources-v3',
         });
