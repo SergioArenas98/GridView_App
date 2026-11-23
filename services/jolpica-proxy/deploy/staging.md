@@ -9,12 +9,14 @@ upload and provider probe below needs separate authorization. Work only in
 Operator-verified baseline supplied for this preparation:
 
 - Active staging version: `de0dc58a-5c09-4b16-8ce4-aae56199dbde`.
-- Proxy: `https://gridviewjol.vps.webdock.cloud`; VPS egress: `193.180.210.75`.
+- Proxy: `https://<proxy-host>`; VPS egress: `<vps-egress-ip>`.
+  The real host, address, SSH user and key file name are kept in the private
+  operator note, not in this public repository.
 - Authenticated races GET: 200; unauthenticated: 401; public health: 404.
 - Node service and Caddy active. Existing staging secret: `ADMIN_TOKEN`.
 
 The configuration adds only staging `JOLPICA_TRANSPORT=proxy`,
-`JOLPICA_PROXY_ORIGIN=https://gridviewjol.vps.webdock.cloud`, and the required
+`JOLPICA_PROXY_ORIGIN=https://<proxy-host>`, and the required
 secret name `JOLPICA_PROXY_TOKEN`. No token value belongs in Wrangler vars.
 The existing `ADMIN_TOKEN` remains required and is not replaced.
 
@@ -54,10 +56,10 @@ chat, environment variable, repository file, or command-line argument.
 
 ### 1. Prepare a private copy on the VPS
 
-Use Windows OpenSSH `ssh.exe` and `scp.exe` as `gridviewadmin`, with the
-already verified ED25519 host key for `gridviewjol.vps.webdock.cloud`. All
+Use Windows OpenSSH `ssh.exe` and `scp.exe` as `<ssh-admin-user>`, with the
+already verified ED25519 host key for `<proxy-host>`. All
 connections use that hostname, IPv4 and the existing private key at
-`$env:USERPROFILE\.ssh\gridview_webdock`. Do not substitute the IPv4 address
+`$env:USERPROFILE\.ssh\<ssh-key-file>`. Do not substitute the IPv4 address
 as the SSH destination, disable host-key checking, or accept a changed key.
 
 No SSH agent is required: `IdentityAgent=none` disables agent use,
@@ -73,8 +75,8 @@ must already be authorized to read the root-owned token with sudo.
 In **terminal A**, connect to the VPS:
 
 ```powershell
-$sshKey = Join-Path $env:USERPROFILE '.ssh\gridview_webdock'
-ssh.exe -4 -i $sshKey -o StrictHostKeyChecking=yes -o IdentitiesOnly=yes -o IdentityAgent=none -o BatchMode=no -o PreferredAuthentications=publickey -o ForwardAgent=no -p 22 gridviewadmin@gridviewjol.vps.webdock.cloud
+$sshKey = Join-Path $env:USERPROFILE '.ssh\<ssh-key-file>'
+ssh.exe -4 -i $sshKey -o StrictHostKeyChecking=yes -o IdentitiesOnly=yes -o IdentityAgent=none -o BatchMode=no -o PreferredAuthentications=publickey -o ForwardAgent=no -p 22 <ssh-admin-user>@<proxy-host>
 ```
 
 Start a dedicated `bash` shell there, then paste this Bash block. Keep this
@@ -127,13 +129,13 @@ protected machine. File deletion is not guaranteed secure erasure on an SSD.
 $ErrorActionPreference = 'Stop'
 $env:WRANGLER_SEND_METRICS = 'false'
 $env:WRANGLER_LOG = 'warn'
-$sshAdmin = 'gridviewadmin'
+$sshAdmin = Read-Host 'SSH admin user (private operator note)'
 $sshPort = 22
-$sshKey = Join-Path $env:USERPROFILE '.ssh\gridview_webdock'
+$sshKey = Join-Path $env:USERPROFILE '.ssh\<ssh-key-file>'
 if ($sshAdmin -cnotmatch '^[a-z_][a-z0-9_-]*$' -or $sshPort -lt 1 -or $sshPort -gt 65535) {
     throw 'Set the actual SSH admin and port before continuing.'
 }
-$sshTarget = $sshAdmin + '@gridviewjol.vps.webdock.cloud'
+$sshTarget = $sshAdmin + '@' + (Read-Host 'Proxy host (private operator note)')
 $remoteDir = Read-Host 'Temporary VPS directory printed in terminal A (not the token)'
 if ($remoteDir -cnotmatch '^/tmp/gridview-jolpica-transfer\.[A-Za-z0-9]{8}$') {
     throw 'Unexpected transfer directory; clean up terminal A and stop.'
@@ -283,7 +285,7 @@ References: [Cloudflare secrets](https://developers.cloudflare.com/workers/confi
    Inspect the response's `data.outcome`, not just its outer HTTP 200. Expected:
    `observed`, `fresh=true`, address class `other-ipv4`, `testCounterOver=false`.
    Non-Cloudflare addresses are intentionally redacted: this route cannot prove
-   the exact address `193.180.210.75`; correlate with the independently verified
+   the exact address `<vps-egress-ip>`; correlate with the independently verified
    VPS address/routing and prior origin-observed IPv4 evidence. If that evidence
    is absent, obtain a separately approved bounded VPS identity test.
 5. Stop on deferral, refusal, unknown freshness, TLS/network errors, 401, or 429.
