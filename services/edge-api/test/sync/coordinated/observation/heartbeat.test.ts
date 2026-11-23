@@ -85,6 +85,43 @@ describe.each(sequencerTransports)(
       expect(await lastCompleted(harness)).toBe(PRE_SEASON);
     });
 
+    it('still beats when the calendar succeeds and a later check is refused with a 429, so only results-late can see it', async () => {
+      // The direct Worker path, 2026-11-05: Jolpica's calendar is usually a
+      // Cloudflare cache hit, while an uncached resource reaching Jolpica's
+      // origin is refused by its nginx with an HTML 429. That run published
+      // nothing, yet one check succeeded, so a scheduled run of that shape
+      // beats (ADR 0028 D7). The monitor's heartbeat stays fresh;
+      // `results-late` (12 h after the race start) is what alerts.
+      const harness = await harnessFor();
+      await harness.run(PRE_SEASON);
+      const nginx429 =
+        '<html>\r\n<head><title>429 Too Many Requests</title></head>\r\n<body>\r\n' +
+        '<center><h1>429 Too Many Requests</h1></center>\r\n' +
+        '<hr><center>nginx/1.27.5</center>\r\n</body>\r\n</html>\r\n';
+      harness.server.answers.set('/circuits/', () => ({
+        kind: 'status',
+        status: 429,
+        headers: { 'Content-Type': 'text/html' },
+        body: nginx429,
+      }));
+
+      const run = await harness.run(FIRST_PUBLICATION);
+
+      expect(run.requests.slice(0, 2)).toEqual(['/races/', '/circuits/']);
+      // The local hold stops the run at the refusal: nothing after it is sent.
+      expect(run.requests).toHaveLength(2);
+      expect(run.outcome.status).toBe('observed');
+      expect(harness.releases()).toEqual([]);
+      // The beat moved even though nothing was published.
+      expect(await lastCompleted(harness)).toBe(
+        harness.clock.now().toISOString(),
+      );
+      expect(
+        (await harness.storage.getSyncState(SEASON))?.lastPublicationVersion ??
+          null,
+      ).toBeNull();
+    });
+
     it('lets no idle tick beat after a failed observation, until one succeeds again', async () => {
       const harness = await harnessFor();
       await harness.run(PRE_SEASON);

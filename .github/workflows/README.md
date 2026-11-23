@@ -4,9 +4,9 @@ GitHub Actions pipelines for GridView.
 
 Workflows (see `../../docs/technical/GridView_TRD.md` section 34):
 
-- `automation-monitor.yml` (manual only) - the outside-in monitor of the
-  automatic updates (ADR 0028 D9): three public GETs, no secret. Its hourly
-  `schedule:` is a separately authorized step (AU-5).
+- `automation-monitor.yml` (hourly for staging at minute 47, and manual) -
+  the outside-in monitor of the automatic updates (ADR 0028 D9): three public
+  GETs, no secret. The schedule is gate AU-5; production's is AU-7.
 - `pull_request.yml` (active) - runs on pull requests and pushes to master:
   Flutter format/analyze/test + dev debug APK, edge API
   typecheck/lint/format/test, and a gitleaks secret scan. Uses no private
