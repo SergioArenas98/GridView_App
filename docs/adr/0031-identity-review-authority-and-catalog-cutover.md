@@ -280,8 +280,13 @@ Durable Object; both 2 s attempts of the first scheduled run timed out (the
 second queued behind the first), and the run failed closed as
 `catalog-unavailable` before any provider request. Each attempt's deadline is
 now 10 s, still with at most one identical retry, and both attempts still
-consume the 240-second coordination budget. The offline catalog file verifier
+consume the 240-second coordination budget. Batch admission returns the same
+pinned catalog and takes the same deadline. The offline catalog file verifier
 bounds a complete file at twice one revision export, as the runtime pin
 response already did, because the file repeats the revision and decisions
-beside the lineage. Making the pin's cost independent of history is a later
-change.
+beside the lineage.
+
+**Recorded follow-up (performance, owner decision 2026-11-23):** make the pin's
+cost independent of history, for example by storing each immutable revision's
+canonical lineage once instead of rebuilding it on every pin. The 10 s
+deadline is accepted for the 2026 rollout; no other change is made now.
