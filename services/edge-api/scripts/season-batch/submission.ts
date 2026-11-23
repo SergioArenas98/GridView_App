@@ -35,6 +35,7 @@ import {
 } from '../../src/ingest/submission';
 import { curatedSeasonMetadata } from '../../src/sync/coordinated/outcome/metadata';
 import { verifyCatalogFile } from '../identity/catalog-file';
+import { inventoryPolicyVersionFor } from '../../src/identity/inventory/model';
 
 /** Every reason a batch is refused here. Closed; safe to print. */
 export type SubmissionBuildFailure =
@@ -42,12 +43,20 @@ export type SubmissionBuildFailure =
   | 'batch-malformed'
   | 'expected-version-invalid'
   | 'submission-oversized'
+  | 'inventory-policy-invalid'
   | BatchVerificationFailure;
 
 export interface SubmissionBuildInput {
   readonly catalogExport?: Uint8Array;
   readonly installationId?: string;
   readonly operationId?: string;
+  /**
+   * The installation's effective inventory policy, exactly as the generator
+   * takes it (`strict-v1` or `optional-driver-inventory-v1`); absent is
+   * strict. The Worker uses its own trusted policy; this only lets the local
+   * verification bind the same context the generator did.
+   */
+  readonly inventoryPolicy?: string;
   readonly manifestBytes: Uint8Array;
   readonly artifactBytes: Uint8Array;
   /** The SHA-256 of the manifest the operator reviewed, lower-case hex. */
@@ -152,10 +161,15 @@ export async function buildSubmission(
   let context;
   if ((manifest as Record<string, unknown>).schemaVersion === 2) {
     if (!input.catalogExport) return refuse('catalog-context-required');
+    const inventoryPolicy = inventoryPolicyVersionFor(
+      input.inventoryPolicy ?? 'strict-v1',
+    );
+    if (inventoryPolicy === null) return refuse('inventory-policy-invalid');
     try {
       const catalog = await verifyCatalogFile(input.catalogExport, {
         installationId: input.installationId ?? '',
         season,
+        inventoryPolicy,
       });
       context = catalog.context;
       const ref = (manifest as { identityCatalog?: { exportSha256?: unknown } })

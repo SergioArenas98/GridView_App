@@ -199,6 +199,51 @@ it('keeps v2 public documents and Flutter fixture DTOs identical to bundled v1 a
   ).toBeNull();
 });
 
+it('builds an optional-inventory first-release submission only under the explicit installation policy', async () => {
+  const optional = await generateSeasonBatch({
+    ...inputFor(),
+    identityMode: 'runtime',
+    installationId: installation,
+    catalogExport: bytes,
+    inventoryPolicy: 'optional-driver-inventory-v1',
+  });
+  if (!optional.ok) throw Error('generation failed');
+  const build = (inventoryPolicy?: string) =>
+    buildSubmission({
+      manifestBytes: new TextEncoder().encode(optional.manifest.text),
+      artifactBytes: new TextEncoder().encode(optional.artifact.text),
+      reviewedManifestSha256: optional.manifest.sha256,
+      expectedActiveVersion: null,
+      now: new Date('2026-11-15T00:00:00.000Z'),
+      catalogExport: bytes,
+      installationId: installation,
+      operationId: crypto.randomUUID(),
+      ...(inventoryPolicy === undefined ? {} : { inventoryPolicy }),
+    });
+  // Absent is strict, as in the generator: a strict context never matches.
+  expect(await build()).toMatchObject({
+    ok: false,
+    failure: 'catalog-reference-mismatch',
+  });
+  expect(await build('strict-v1')).toMatchObject({
+    ok: false,
+    failure: 'catalog-reference-mismatch',
+  });
+  expect(await build('optional')).toMatchObject({
+    ok: false,
+    failure: 'inventory-policy-invalid',
+  });
+  const result = await build('optional-driver-inventory-v1');
+  expect(result.ok).toBe(true);
+  if (!result.ok) throw Error(result.failure);
+  const wire = JSON.parse(result.text);
+  expect(wire.expectedActiveVersion).toBeNull();
+  expect(wire.manifest.identityCatalog.inventoryPolicy).toBe(
+    'optional-driver-inventory-v1',
+  );
+  expect(decodeSubmission(wire)).not.toBeNull();
+});
+
 it('rejects oversized local files and runtime fallback attempts', async () => {
   await expect(
     verifyCatalogFile(new Uint8Array(2 * 1024 * 1024 + 1), {

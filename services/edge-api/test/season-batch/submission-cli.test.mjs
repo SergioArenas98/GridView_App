@@ -123,6 +123,29 @@ describe('submission builder CLI: arguments', () => {
     );
   });
 
+  it('passes --inventory-policy through, single-use and optional', () => {
+    const policy = [
+      ...valid,
+      '--inventory-policy',
+      'optional-driver-inventory-v1',
+    ];
+    expect(parseSubmissionArguments(policy)).toEqual({
+      ok: true,
+      batch: 'b',
+      manifestSha256: SHA,
+      expectedActiveVersion: 'v1',
+      out: 'o.json',
+      inventoryPolicy: 'optional-driver-inventory-v1',
+    });
+    expect(
+      parseSubmissionArguments([...policy, '--inventory-policy', 'strict-v1'])
+        .reason,
+    ).toBe('repeated-argument');
+    expect(
+      parseSubmissionArguments([...valid, '--inventory-policy']).reason,
+    ).toBe('missing-value');
+  });
+
   it('refuses missing, repeated, unknown or invalid arguments', () => {
     expect(parseSubmissionArguments(valid.slice(0, 6)).reason).toBe(
       'missing-argument',

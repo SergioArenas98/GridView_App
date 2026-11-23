@@ -148,6 +148,7 @@ async function main() {
       : undefined,
     installationId: parsed.installationId,
     operationId: parsed.operationId,
+    inventoryPolicy: parsed.inventoryPolicy,
   });
   if (!result.ok) refuse(result.failure);
 

@@ -28,6 +28,10 @@ name but generation and ingest refuse it.
 
 For a v2 submission, additionally pass `--catalog-export`, `--installation-id`
 and an explicit stable `--operation-id <uuid>` to `season-batch:submission`.
+A batch generated with `--inventory-policy optional-driver-inventory-v1` also
+needs the same `--inventory-policy` there: absent is strict, as in the
+generator, and a strict context refuses an optional batch as
+`catalog-reference-mismatch`. The Worker still applies its own trusted policy.
 Retain that operation ID and the exact submission for uncertain-response retry.
 The submission schema version must match both reviewed files. Its artifact and
 manifest digests, predecessor fence, authentication and guarded publication

@@ -4,7 +4,7 @@
 import { isInside } from './cli-guards.mjs';
 
 export const submissionUsage =
-  'Usage: npm run season-batch:submission -- --batch <dir> --manifest-sha256 <hex> (--expected-active-version <version> | --first-release) --out <file>';
+  'Usage: npm run season-batch:submission -- --batch <dir> --manifest-sha256 <hex> (--expected-active-version <version> | --first-release) --out <file> [--catalog-export <file> --installation-id <uuid> --operation-id <uuid> [--inventory-policy <policy>]]';
 
 const valued = [
   '--batch',
@@ -14,6 +14,7 @@ const valued = [
   '--catalog-export',
   '--installation-id',
   '--operation-id',
+  '--inventory-policy',
 ];
 
 /**
@@ -56,7 +57,12 @@ export function parseSubmissionArguments(argv) {
   if (named && first) return { ok: false, reason: 'conflicting-arguments' };
   for (const name of valued) {
     if (
-      ['--catalog-export', '--installation-id', '--operation-id'].includes(name)
+      [
+        '--catalog-export',
+        '--installation-id',
+        '--operation-id',
+        '--inventory-policy',
+      ].includes(name)
     )
       continue;
     if (name === '--expected-active-version' && first) continue;
@@ -79,6 +85,9 @@ export function parseSubmissionArguments(argv) {
       : {}),
     ...(values['--operation-id']
       ? { operationId: values['--operation-id'] }
+      : {}),
+    ...(values['--inventory-policy']
+      ? { inventoryPolicy: values['--inventory-policy'] }
       : {}),
   };
 }
