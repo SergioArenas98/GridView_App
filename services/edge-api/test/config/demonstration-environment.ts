@@ -2,10 +2,11 @@
  * Environment sections of `wrangler.toml`, for the pins that allow a
  * declaration in named environments only.
  *
- * Two environments are allowed to select the automatic path and bind the
+ * Three environments are allowed to select the automatic path and bind the
  * reconciliation ledger: the isolated demonstration Worker (`[env.e2e]`,
- * release gate AU-3; `docs/release/automatic-updates.md` §8.1) and, since
- * gate AU-4, live staging (`[env.staging]`, §8.3). Only the demonstration
+ * release gate AU-3; `docs/release/automatic-updates.md` §8.1), live staging
+ * (`[env.staging]`, gate AU-4, §8.3) and production (`[env.production]`,
+ * gate AU-7, §8.4). Only the demonstration
  * Worker may read a controlled provider source. The dormancy pins that forbid
  * those everywhere else read the file through `withoutDemonstration` or
  * `withoutAutomatic`, so a declaration can be excused only by sitting inside
@@ -15,7 +16,11 @@
 export const DEMONSTRATION_ENVIRONMENT = 'e2e';
 
 /** The environments that select `coordinated` and bind the ledger. */
-export const AUTOMATIC_ENVIRONMENTS = ['staging', DEMONSTRATION_ENVIRONMENT];
+export const AUTOMATIC_ENVIRONMENTS = [
+  'staging',
+  'production',
+  DEMONSTRATION_ENVIRONMENT,
+];
 
 /** Whether a table header line belongs to the named environment. */
 function isEnvironmentHeader(line: string, name: string): boolean {

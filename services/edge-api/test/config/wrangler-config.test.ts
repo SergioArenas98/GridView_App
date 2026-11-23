@@ -28,7 +28,7 @@ describe('wrangler staging configuration', () => {
     expect(Object.keys(jsoncConfig)).toHaveLength(0);
   });
 
-  it('declares the staging Worker, workers.dev endpoint, KV binding and an explicitly empty cron', () => {
+  it('declares the staging Worker, workers.dev endpoint, KV binding and its minute-47 hourly cron', () => {
     expect(config).toMatch(
       /\[env\.staging\][\s\S]*name = "gridview-api-staging"/,
     );
@@ -39,7 +39,9 @@ describe('wrangler staging configuration', () => {
     expect(config).toMatch(
       /\[\[env\.staging\.kv_namespaces\]\][\s\S]*binding = "GRIDVIEW_DATA"[\s\S]*id = "1d0fb55486a745a1ad12e03d9f04942b"/,
     );
-    expect(config).toMatch(/\[env\.staging\.triggers\]\ncrons = \[\]\n/);
+    expect(config).toMatch(
+      /\[env\.staging\.triggers\]\ncrons = \["47 \* \* \* \*"\]\n/,
+    );
   });
 
   it('requires the staging secrets without committing their values', () => {
@@ -49,8 +51,14 @@ describe('wrangler staging configuration', () => {
     expect(config).not.toContain('Bearer ');
     expect(config).not.toContain('replace-with-disposable-local-token');
     expect(config).not.toMatch(/^\s*JOLPICA_PROXY_TOKEN\s*=/m);
-    expect(config.match(/^JOLPICA_TRANSPORT\s*=/gm)).toHaveLength(1);
-    expect(config.match(/^JOLPICA_PROXY_ORIGIN\s*=/gm)).toHaveLength(1);
+    // Staging and production (AU-7) name the same proxy; nothing else does.
+    expect(config.match(/^JOLPICA_TRANSPORT\s*=/gm)).toHaveLength(2);
+    expect(config.match(/^JOLPICA_PROXY_ORIGIN\s*=/gm)).toHaveLength(2);
+    expect(new Set(config.match(/^JOLPICA_PROXY_ORIGIN\s*=.*$/gm))).toEqual(
+      new Set([
+        'JOLPICA_PROXY_ORIGIN = "https://gridviewjol.vps.webdock.cloud"',
+      ]),
+    );
   });
 
   it('adds no account ID and binds production only to its own KV namespace', () => {
@@ -59,7 +67,7 @@ describe('wrangler staging configuration', () => {
       /\[\[env\.production\.kv_namespaces\]\]\nbinding = "GRIDVIEW_DATA"\nid = "d76328b37da343db92d927142c072593"/,
     );
     expect(config).toMatch(
-      /\[env\.production\.vars\][\s\S]*ENVIRONMENT = "production"[\s\S]*PROVIDER_MODE = "none"/,
+      /\[env\.production\.vars\][\s\S]*ENVIRONMENT = "production"[\s\S]*PROVIDER_MODE = "coordinated"/,
     );
   });
 });
@@ -171,11 +179,13 @@ describe('season 2026 activation-phase configuration (ADR 0025 D12)', () => {
     }
   });
 
-  it('pins the production variables to the genesis configuration (W1)', () => {
+  it('pins the production variables to the genesis configuration with the automatic path (AU-7)', () => {
     expect(assignments(productionVarsBlock(config))).toEqual([
       'ENVIRONMENT = "production"',
-      'PROVIDER_MODE = "none"',
+      'PROVIDER_MODE = "coordinated"',
       'PUBLIC_BASE_URL = "https://gridview-api-production.sejuma18.workers.dev"',
+      'JOLPICA_TRANSPORT = "proxy"',
+      'JOLPICA_PROXY_ORIGIN = "https://gridviewjol.vps.webdock.cloud"',
       'SEASON_PUBLICATION_CUTOVER_CONTROL = "genesis:2026"',
       'SEASON_PUBLICATION_AUTHORITY = "sequencer"',
       'SEASON_BATCH_INGEST = "2026"',
@@ -222,7 +232,7 @@ describe('season 2026 activation-phase configuration (ADR 0025 D12)', () => {
     });
   });
 
-  it('keeps both existing staging bindings, the secret and observability, adds only the ledger, and keeps an empty cron', () => {
+  it('keeps both existing staging bindings, the secret and observability, adds only the ledger, and schedules minute 47', () => {
     expect(config).toMatch(
       /\[\[env\.staging\.durable_objects\.bindings\]\]\nname = "PROVIDER_RATE_LIMITER"\nclass_name = "ProviderRateLimiter"/,
     );
@@ -242,7 +252,9 @@ describe('season 2026 activation-phase configuration (ADR 0025 D12)', () => {
     expect(config).toMatch(
       /\[env\.staging\.secrets\]\nrequired = \["ADMIN_TOKEN", "JOLPICA_PROXY_TOKEN", "IDENTITY_REVIEWER_CREDENTIALS"\]/,
     );
-    expect(config).toMatch(/\[env\.staging\.triggers\]\ncrons = \[\]\n/);
+    expect(config).toMatch(
+      /\[env\.staging\.triggers\]\ncrons = \["47 \* \* \* \*"\]\n/,
+    );
     expect(config).toMatch(
       /\[env\.staging\.observability\]\nenabled = true\nhead_sampling_rate = 1\n\n\[env\.staging\.observability\.logs\]\nenabled = true\npersist = true\ninvocation_logs = false/,
     );

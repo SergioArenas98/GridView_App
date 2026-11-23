@@ -62,11 +62,8 @@ describe('the reconciliation ledger is exported, resolvable and bound only by th
   it('is declared by no exports entry, migration or binding outside the demonstration Worker, staging and production', () => {
     const declared = declarations();
     // U11 P4: production binds the ledger for the season lease of its
-    // runtime batch ingest; its provider mode stays `none` (below).
-    const elsewhere = withoutEnvironments(declared, [
-      ...AUTOMATIC_ENVIRONMENTS,
-      'production',
-    ]);
+    // runtime batch ingest, and for its automatic runs from gate AU-7.
+    const elsewhere = withoutEnvironments(declared, AUTOMATIC_ENVIRONMENTS);
     expect(elsewhere).not.toMatch(/ReconciliationLedger/);
     expect(elsewhere).not.toMatch(/RECONCILIATION/i);
     expect(declared).not.toMatch(/\[\[migrations\]\]/);
@@ -89,15 +86,16 @@ describe('the reconciliation ledger is exported, resolvable and bound only by th
     }
   });
 
-  it('keeps every committed provider mode but the demonstration Worker and staging off the coordinated path, and schedules nothing', () => {
+  it('keeps every committed provider mode but the demonstration Worker, staging and production off the coordinated path, and schedules only staging and production', () => {
     const declared = declarations();
     // Staging: `mock`, then `none` from the season-batch ingest
-    // configuration, then `coordinated` at gate AU-4. Production stays off.
+    // configuration, then `coordinated` at gate AU-4. Production: `none`,
+    // then `coordinated` at gate AU-7.
     expect(declared).toMatch(
       /\[env\.staging\.vars\]\nENVIRONMENT = "staging"\nPROVIDER_MODE = "coordinated"\n/,
     );
     expect(declared).toMatch(
-      /\[env\.production\.vars\][\s\S]*PROVIDER_MODE = "none"/,
+      /\[env\.production\.vars\][\s\S]*PROVIDER_MODE = "coordinated"/,
     );
     expect(withoutAutomatic(declared)).not.toMatch(
       /PROVIDER_MODE = "coordinated"/,
@@ -105,11 +103,15 @@ describe('the reconciliation ledger is exported, resolvable and bound only by th
     expect(demonstrationSection(declared)).toContain(
       'PROVIDER_MODE = "coordinated"',
     );
-    // The staging cron was removed (an explicit empty list) by the same
-    // configuration; no environment schedules a run, the demonstration Worker
-    // included since AU-3 passed.
-    expect(declared).toContain('crons = []');
-    expect(declared).not.toMatch(/crons = \[\s*"/);
+    // Staging (minute 47) and production (minute 17) schedule the hourly
+    // run; the demonstration Worker is unscheduled since AU-3 passed.
+    expect(declared.match(/crons = \[\s*"/g)).toHaveLength(2);
+    expect(environmentSection(declared, 'staging')).toContain(
+      'crons = ["47 * * * *"]',
+    );
+    expect(environmentSection(declared, 'production')).toContain(
+      'crons = ["17 * * * *"]',
+    );
     expect(demonstrationSection(declared)).toContain('crons = []');
   });
 

@@ -86,7 +86,7 @@ function bindingNames(config: ReturnType<typeof resolved>): string[] {
   );
 }
 
-describe('the committed configuration declares the reconciliation ledger in staging and the demonstration Worker only, as Wrangler resolves it', () => {
+describe('the committed configuration declares the reconciliation ledger in staging, production and the demonstration Worker, as Wrangler resolves it', () => {
   it('resolves staging to the four registrations and bindings, the ledger and identity catalog included, with no migration', () => {
     const staging = resolved('staging');
     expect(staging.exports).toEqual(stagingExports);
@@ -151,16 +151,16 @@ describe('the committed configuration declares the reconciliation ledger in stag
     expect(production.migrations).toEqual([]);
   });
 
-  it('selects coordinated in staging, keeps production on none, and schedules nothing anywhere', () => {
+  it('selects coordinated in staging and production (AU-7), each with its hourly schedule', () => {
     const staging = resolved('staging');
     const production = resolved('production');
     expect(staging.vars.PROVIDER_MODE).toBe('coordinated');
-    expect(production.vars.PROVIDER_MODE).toBe('none');
+    expect(production.vars.PROVIDER_MODE).toBe('coordinated');
     expect(JSON.stringify(production.vars)).not.toMatch(/RECONCILIATION/);
     expect(resolved('').vars).toEqual({ ENVIRONMENT: 'development' });
-    // Explicitly empty: the hourly schedule is AU-4 step 3, its own change.
-    expect(staging.triggers.crons).toEqual([]);
-    expect(production.triggers.crons).toEqual([]);
+    // Offset minutes, so the two paced runs never share the proxy at once.
+    expect(staging.triggers.crons).toEqual(['47 * * * *']);
+    expect(production.triggers.crons).toEqual(['17 * * * *']);
     expect(resolved('e2e').triggers.crons).toEqual([]);
     expect(resolved('').triggers.crons).toBeUndefined();
   });
@@ -231,21 +231,26 @@ function committedVars(environment: 'staging' | 'production'): Partial<Env> {
 }
 
 /**
- * The variables of each `none` deployment the ledger can sit beside:
- * production as committed, and staging's documented fallback to manual
- * batches, which keeps the ledger binding and changes only the mode.
+ * The variables of each `none` deployment the ledger can sit beside: the
+ * documented fallback to manual batches of production (how it was born, and
+ * what re-admits its ingest) and of staging, each keeping the ledger binding
+ * and changing only the mode.
  */
 const noneDeployments: readonly [string, () => Partial<Env>][] = [
   [
-    'production',
+    "production's fallback to manual batches",
     // No catalog is bound here, so the optional-driver inventory (U11 P4,
     // which requires one) is left out; the ledger behaviour is unchanged.
-    () =>
-      Object.fromEntries(
+    // The proxy variables stay, so their secret does too.
+    () => ({
+      ...Object.fromEntries(
         Object.entries(committedVars('production')).filter(
           ([name]) => name !== 'IDENTITY_INVENTORY_MODE',
         ),
       ),
+      PROVIDER_MODE: 'none',
+      JOLPICA_PROXY_TOKEN: 'disposable-proxy-test-token',
+    }),
   ],
   [
     "staging's fallback to manual batches",
@@ -334,9 +339,8 @@ afterEach(() => {
 });
 
 /**
- * A `none` Worker beside a bound ledger: production should a later change
- * bind one before its mode, and staging after falling back to manual batches.
- * Neither may reach it.
+ * A `none` Worker beside a bound ledger: production or staging after falling
+ * back to manual batches. Neither may reach it.
  */
 describe('the none provider mode with a bound RECONCILIATION_LEDGER namespace', () => {
   it.each(noneDeployments)(

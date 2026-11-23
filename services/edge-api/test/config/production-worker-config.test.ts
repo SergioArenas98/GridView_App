@@ -1,21 +1,24 @@
 /**
- * The production Worker configuration (release plan W1, submission path A:
- * Workers Paid), as Wrangler itself resolves `wrangler.toml`, driven through
- * the real Worker entry points.
+ * The production Worker configuration (release plan W1-W3, submission path A:
+ * Workers Paid; gate AU-7), as Wrangler itself resolves `wrangler.toml`,
+ * driven through the real Worker entry points.
  *
  * `env.production` selects the sequencer authority, the `genesis:2026`
- * control and the guarded season-batch ingest for 2026, binds both Durable
- * Objects, requires `ADMIN_TOKEN`, schedules nothing and turns persisted
- * Workers Logs off. It deliberately declares **no KV binding**: no production
- * namespace exists, and Wrangler 4 would create one on deploy for a binding
- * without an `id`. This file proves that the resolved configuration:
+ * control, the coordinated runtime over the Jolpica proxy (AU-7) with the
+ * hourly schedule, keeps the guarded season-batch ingest for 2026 as the
+ * fallback, binds its four Durable Objects and its W2 KV namespace, and
+ * persists Worker lines only. This file proves that the resolved
+ * configuration:
  *
- * - schedules nothing, and says so explicitly;
+ * - schedules exactly the hourly minute-17 tick, and staging minute 47;
+ * - resolves the proxy transport only with its secret, and refuses the
+ *   ingest under the committed mode (`provider-mode-coordinated`);
  * - fails closed while the KV binding is missing;
- * - serves no season before genesis, nor between genesis and the first
- *   reviewed batch, and serves the season only once that batch commits;
- * - refuses the staging seed and activation, and every provider-driven sync;
- * - leaves staging exactly as it was.
+ * - under the fallback `PROVIDER_MODE = "none"` (how production was born on
+ *   2026-11-23): serves no season before genesis, nor between genesis and the
+ *   first reviewed batch, and serves the season only once that batch commits;
+ *   refuses the staging seed and activation, and every provider-driven sync;
+ * - leaves staging's publication controls as they were.
  *
  * `unstable_readConfig` only reads the file. Nothing here deploys, provisions
  * or contacts Cloudflare; every sequencer is in process, every storage in
@@ -39,7 +42,10 @@ import { unstable_readConfig } from 'wrangler';
 import rawConfig from '../../wrangler.toml?raw';
 import worker, { type Env } from '../../src/index';
 import { MemoryCachePurgeAdapter } from '../../src/cache/purge';
-import { resolveRuntimeConfig } from '../../src/config/environment';
+import {
+  resolveJolpicaTransport,
+  resolveRuntimeConfig,
+} from '../../src/config/environment';
 import { resolveStorage } from '../../src/storage/factory';
 import { CapturingLogger } from '../../src/logging/logger';
 import { SnapshotPublisher } from '../../src/publication/publisher';
@@ -112,6 +118,18 @@ function resolvedVars(environment: 'staging' | 'production'): Partial<Env> {
   );
 }
 
+/**
+ * The committed production variables with the documented fallback,
+ * `PROVIDER_MODE = "none"`: the configuration genesis and the first batch ran
+ * under (f1700b39, 2026-11-23), and the one that re-admits the ingest.
+ */
+function fallbackVars(): Partial<Env> {
+  return { ...resolvedVars('production'), PROVIDER_MODE: 'none' };
+}
+
+const PROXY_ORIGIN = 'https://gridviewjol.vps.webdock.cloud';
+const PROXY_TEST_TOKEN = 'disposable-proxy-test-token';
+
 /** The TOML's configured lines, with every comment line dropped. */
 const declaredConfig = rawConfig
   .split('\n')
@@ -128,11 +146,13 @@ describe('the resolved production configuration', () => {
     expect(declaredConfig).not.toMatch(/^account_id\s*=/m);
   });
 
-  it('sets exactly the genesis, sequencer and ingest variables', () => {
+  it('sets exactly the automatic (AU-7), genesis, sequencer and ingest variables', () => {
     expect(resolved('production').vars).toEqual({
       ENVIRONMENT: 'production',
-      PROVIDER_MODE: 'none',
+      PROVIDER_MODE: 'coordinated',
       PUBLIC_BASE_URL: 'https://gridview-api-production.sejuma18.workers.dev',
+      JOLPICA_TRANSPORT: 'proxy',
+      JOLPICA_PROXY_ORIGIN: PROXY_ORIGIN,
       SEASON_PUBLICATION_CUTOVER_CONTROL: 'genesis:2026',
       SEASON_PUBLICATION_AUTHORITY: 'sequencer',
       SEASON_BATCH_INGEST: '2026',
@@ -145,7 +165,7 @@ describe('the resolved production configuration', () => {
     });
     const config = resolveRuntimeConfig(resolvedVars('production'));
     expect(config.environment).toBe('production');
-    expect(config.providerMode).toBe('none');
+    expect(config.providerMode).toBe('coordinated');
     expect(config.publicationAuthorityMode).toBe('sequencer');
     expect(config.publicationCutoverControl).toEqual({
       kind: 'genesis',
@@ -176,14 +196,38 @@ describe('the resolved production configuration', () => {
     expect(JSON.stringify(production.vars)).not.toMatch(/RECONCILIATION/);
   });
 
-  it('requires ADMIN_TOKEN and its own reviewer credentials without committing a value', () => {
+  it('requires ADMIN_TOKEN, its own reviewer credentials and the proxy token without committing a value', () => {
     expect(resolved('production').secrets).toEqual({
-      required: ['ADMIN_TOKEN', 'IDENTITY_REVIEWER_CREDENTIALS'],
+      required: [
+        'ADMIN_TOKEN',
+        'IDENTITY_REVIEWER_CREDENTIALS',
+        'JOLPICA_PROXY_TOKEN',
+      ],
     });
     expect(rawConfig).toMatch(
-      /^\[env\.production\.secrets\]\nrequired = \["ADMIN_TOKEN", "IDENTITY_REVIEWER_CREDENTIALS"\]$/m,
+      /^\[env\.production\.secrets\]\nrequired = \["ADMIN_TOKEN", "IDENTITY_REVIEWER_CREDENTIALS", "JOLPICA_PROXY_TOKEN"\]$/m,
     );
     expect(rawConfig).not.toMatch(/^\s*IDENTITY_REVIEWER_CREDENTIALS\s*=/m);
+    expect(rawConfig).not.toMatch(/^\s*JOLPICA_PROXY_TOKEN\s*=/m);
+  });
+
+  it('resolves the proxy transport only with its secret (AU-7)', () => {
+    const vars = resolvedVars('production') as Env;
+    expect(() => resolveJolpicaTransport(vars)).toThrow(
+      'JOLPICA_PROXY_TOKEN must be a bearer token.',
+    );
+    expect(
+      resolveJolpicaTransport({
+        ...vars,
+        JOLPICA_PROXY_TOKEN: 'disposable-proxy-test-token',
+      }),
+    ).toEqual({
+      mode: 'proxy',
+      origin: PROXY_ORIGIN,
+      token: 'disposable-proxy-test-token',
+    });
+    // Production never names a controlled source.
+    expect(vars.CONTROLLED_PROVIDER_SOURCE).toBeUndefined();
   });
 
   it('resolves runtime authority with the optional inventory only with the deployed catalog binding (U11 P4)', () => {
@@ -201,14 +245,16 @@ describe('the resolved production configuration', () => {
     expect(rawConfig).not.toContain('Bearer ');
   });
 
-  it('schedules nothing, with an explicitly empty cron list', () => {
-    // Empty, not absent: `wrangler deploy` sets the schedules only when
-    // `crons` is set.
-    expect(resolved('production').triggers).toEqual({ crons: [] });
-    expect(rawConfig).toMatch(/^\[env\.production\.triggers\]\ncrons = \[\]$/m);
-    // No environment declares a schedule, the demonstration included since
-    // AU-3 passed.
-    expect(rawConfig).not.toMatch(/^\s*crons\s*=\s*\[\s*"/m);
+  it('schedules the hourly minute-17 tick (AU-7), and staging minute 47', () => {
+    expect(resolved('production').triggers).toEqual({
+      crons: ['17 * * * *'],
+    });
+    expect(rawConfig).toMatch(
+      /^\[env\.production\.triggers\]\ncrons = \["17 \* \* \* \*"\]$/m,
+    );
+    expect(resolved('staging').triggers).toEqual({ crons: ['47 * * * *'] });
+    // Exactly two schedules in the file; the demonstration stays unscheduled.
+    expect(rawConfig.match(/^\s*crons\s*=\s*\[\s*"/gm)).toHaveLength(2);
   });
 
   it('persists the Worker lines, never the invocation logs or traces (ADR 0028 D8)', () => {
@@ -274,7 +320,7 @@ describe('the resolved production configuration', () => {
     expect(staging.kv_namespaces).toEqual([
       { binding: 'GRIDVIEW_DATA', id: STAGING_KV_ID },
     ]);
-    expect(staging.triggers).toEqual({ crons: [] });
+    expect(staging.triggers).toEqual({ crons: ['47 * * * *'] });
     expect(staging.observability).toEqual({
       enabled: true,
       head_sampling_rate: 1,
@@ -305,9 +351,9 @@ beforeAll(async () => {
 });
 
 /**
- * A fresh production Worker env carrying the committed variables over an
- * empty in-memory namespace and an in-process sequencer that has never seen
- * the season, as a newly provisioned production would be.
+ * A fresh production Worker env carrying the committed variables under the
+ * fallback `none` over an empty in-memory namespace and an in-process
+ * sequencer that has never seen the season, as production was before genesis.
  */
 function production() {
   const clock = new FixedClock(new Date(NOW));
@@ -317,8 +363,10 @@ function production() {
   );
   const logger = new CapturingLogger();
   const env = {
-    ...preCatalogMechanics(resolvedVars('production')),
+    ...preCatalogMechanics(fallbackVars()),
     ADMIN_TOKEN,
+    // Required with the committed proxy transport (AU-7); never a real value.
+    JOLPICA_PROXY_TOKEN: PROXY_TEST_TOKEN,
     __LOCAL_STORAGE: storage,
     __SEASON_PUBLICATION_SEQUENCER: port,
     __CLOCK: clock,
@@ -393,7 +441,7 @@ function publicationSpies() {
 describe('the committed production variables without the KV binding', () => {
   it('fail closed on every route instead of serving or accepting anything', async () => {
     const env = {
-      ...preCatalogMechanics(resolvedVars('production')),
+      ...preCatalogMechanics(fallbackVars()),
       ADMIN_TOKEN,
     } as Env;
     expect(env.GRIDVIEW_DATA).toBeUndefined();
@@ -415,7 +463,51 @@ describe('the committed production variables without the KV binding', () => {
   });
 });
 
-describe('the committed production variables before genesis', () => {
+describe('the committed production variables under the coordinated mode', () => {
+  it('refuse a valid, authenticated submission as provider-mode-coordinated, before reading it', async () => {
+    const { env, storage, port } = production();
+    const committed = { ...env, PROVIDER_MODE: 'coordinated' } as Env;
+    const spies = publicationSpies();
+    const post = admin(
+      '/internal/admin/season/ingest',
+      submissionFor(batch, null),
+    );
+    const response = await worker.fetch(post, committed);
+    expect(response.status).toBe(409);
+    expect(await response.json()).toMatchObject({
+      data: {
+        outcome: 'refused',
+        stage: 'admission',
+        reason: 'provider-mode-coordinated',
+      },
+    });
+    expect(post.bodyUsed).toBe(false);
+    expect(spies.guardedPublish).not.toHaveBeenCalled();
+    expect(storage.writeLog).toEqual([]);
+    expect((await port.readAuthority(SEASON)).cutoverState).toBe(
+      'uninitialized',
+    );
+  });
+
+  it('fail closed on an admin route while the proxy token is missing, echoing nothing', async () => {
+    const { env, storage } = production();
+    const missing = {
+      ...env,
+      PROVIDER_MODE: 'coordinated',
+      JOLPICA_PROXY_TOKEN: undefined,
+    } as Env;
+    const response = await worker.fetch(
+      admin('/internal/admin/sync/full', {}),
+      missing,
+    );
+    expect(response.status).toBe(500);
+    expect(await response.text()).not.toContain(PROXY_ORIGIN);
+    expect(storage.writeLog).toEqual([]);
+    expect(globalFetch).not.toHaveBeenCalled();
+  });
+});
+
+describe('the production fallback variables (none) before genesis', () => {
   it('serve no season', async () => {
     const { env, port } = production();
     await expectNoSeasonServed(env, 'before-genesis');
@@ -503,7 +595,7 @@ describe('the committed production variables before genesis', () => {
   });
 });
 
-describe('the committed production variables through genesis and the first batch', () => {
+describe('the production fallback variables (none) through genesis and the first batch', () => {
   it('serve the season only once the first reviewed batch commits', async () => {
     const { env, storage, port } = production();
 

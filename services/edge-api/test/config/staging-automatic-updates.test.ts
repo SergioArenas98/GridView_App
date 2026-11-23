@@ -1,12 +1,14 @@
 /**
- * Release gate AU-4 step 1 (`docs/release/automatic-updates.md` §8.3): the
- * committed `[env.staging]` selects the automatic path by itself, as
- * Wrangler resolves it, and still schedules nothing.
+ * Release gates AU-4 (`docs/release/automatic-updates.md` §8.3) and AU-7
+ * (§8.4): the committed `[env.staging]` and `[env.production]` select the
+ * automatic path by themselves, as Wrangler resolves them, each with its
+ * hourly schedule.
  *
  * - The activation delta the AU-3 stage adds to committed staging
- *   (`AUTOMATIC_ACTIVATION_DELTA`) is now part of the committed
- *   configuration: `coordinated`, the ledger class and binding. The cron is
- *   not: it is step 3, its own change.
+ *   (`AUTOMATIC_ACTIVATION_DELTA`) is part of both committed
+ *   configurations: `coordinated`, the ledger class and binding, and an
+ *   hourly cron: production at the delta's minute 17, staging at minute 47,
+ *   so that their paced runs never share the Jolpica proxy at once.
  * - Staging reads Jolpica from the network, never from a controlled source;
  *   only the demonstration Worker does.
  * - With the binding, a scheduled run of the committed variables reaches the
@@ -42,7 +44,7 @@ const configPath = join(
   'wrangler.toml',
 );
 
-function resolved(environment: 'staging' | 'e2e') {
+function resolved(environment: 'staging' | 'production' | 'e2e') {
   return unstable_readConfig(
     { config: configPath, env: environment },
     { hideWarnings: true },
@@ -64,26 +66,34 @@ afterEach(() => {
 });
 
 describe('the committed staging configuration (gate AU-4 step 1)', () => {
-  it('commits the activation delta but the cron', () => {
-    const staging = resolved('staging');
-    expect(committedVars('staging').PROVIDER_MODE).toBe(
-      AUTOMATIC_ACTIVATION_DELTA.PROVIDER_MODE,
-    );
-    expect(
-      staging.durable_objects.bindings.map(
-        (binding: { readonly name: string }) => binding.name,
-      ),
-    ).toContain(AUTOMATIC_ACTIVATION_DELTA.ledgerBinding);
-    expect(staging.triggers.crons).toEqual([]);
-    expect(staging.triggers.crons).not.toContain(
-      AUTOMATIC_ACTIVATION_DELTA.cron,
-    );
-  });
+  it.each([
+    ['staging', ['47 * * * *']],
+    ['production', [AUTOMATIC_ACTIVATION_DELTA.cron]],
+  ] as const)(
+    'commits the activation delta in %s, with its hourly schedule',
+    (environment, crons) => {
+      const config = resolved(environment);
+      expect(config.vars.PROVIDER_MODE).toBe(
+        AUTOMATIC_ACTIVATION_DELTA.PROVIDER_MODE,
+      );
+      expect(
+        config.durable_objects.bindings.map(
+          (binding: { readonly name: string }) => binding.name,
+        ),
+      ).toContain(AUTOMATIC_ACTIVATION_DELTA.ledgerBinding);
+      expect(config.triggers.crons).toEqual(crons);
+    },
+  );
 
   it('reads Jolpica from the network: only the demonstration Worker selects a controlled source', () => {
-    expect(resolved('staging').vars).not.toHaveProperty(
-      'CONTROLLED_PROVIDER_SOURCE',
-    );
+    for (const environment of ['staging', 'production'] as const) {
+      expect(resolved(environment).vars, environment).not.toHaveProperty(
+        'CONTROLLED_PROVIDER_SOURCE',
+      );
+      expect(resolved(environment).vars, environment).toMatchObject({
+        JOLPICA_TRANSPORT: 'proxy',
+      });
+    }
     expect(resolved('e2e').vars).toMatchObject({
       CONTROLLED_PROVIDER_SOURCE: 'kv',
     });

@@ -418,14 +418,14 @@ describe('runtime provider modes are unchanged by Phase 9B-1', () => {
     );
   });
 
-  it('pins production to none in the deployed wrangler configuration', () => {
+  it('pins production to the coordinated runtime (gate AU-7) and never a direct provider mode', () => {
     const wrangler = readFileSync(
       join(repoRoot, 'services', 'edge-api', 'wrangler.toml'),
       'utf8',
     );
 
     expect(wrangler).toMatch(
-      /\[env\.production\.vars\][\s\S]*PROVIDER_MODE = "none"/,
+      /\[env\.production\.vars\][\s\S]*PROVIDER_MODE = "coordinated"/,
     );
     expect(wrangler).not.toMatch(
       /PROVIDER_MODE = "(jolpica|openf1|live|dual)"/,

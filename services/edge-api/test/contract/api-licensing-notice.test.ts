@@ -257,12 +257,14 @@ describe('the API documentation licence notice', () => {
     expect(demonstration).toMatch(/^CONTROLLED_PROVIDER_SOURCE = "kv"$/m);
   });
 
-  it('keeps production off the automatic path until its own gate (AU-7)', () => {
-    // The notice covers an environment without automatic updates; production
-    // is one until AU-7 commits its own coordinated configuration.
+  it('commits production to the automatic path at its own gate (AU-7), which the environment-neutral notice already covers', () => {
+    // The notice describes both paths ("Where automatic updates are ...
+    // enabled" and "not enabled"), so production's AU-7 configuration keeps
+    // it true without a wording change.
     expect(modesIn(environmentSection(wrangler, 'production'))).toEqual([
-      'none',
+      'coordinated',
     ]);
+    expect(description).toContain('Where automatic updates are not enabled');
   });
   it('never reverts to blanket ownership or a single blanket licence', () => {
     for (const phrase of [
