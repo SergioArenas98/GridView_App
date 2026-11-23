@@ -279,11 +279,13 @@ required = ["ADMIN_TOKEN", "JOLPICA_PROXY_TOKEN", "IDENTITY_REVIEWER_CREDENTIALS
 binding = "GRIDVIEW_DATA"
 id = "1d0fb55486a745a1ad12e03d9f04942b"
 
-# The hourly schedule of automatic updates (ADR 0028; gate AU-4 step 3),
-# COMMITTED, NOT DEPLOYED. Live staging answered `[]` since 2026-10-13
-# (re-read 2026-11-23). At minute 47, so that its paced runs never share the
-# Jolpica proxy's egress with production's minute-17 runs: staging is the
-# scheduled-path verification and canary for production (gate AU-7).
+# No schedule (owner decision 2026-11-23). Staging verified the scheduled
+# path for AU-7 with `47 * * * *` on 2026-11-23 (version `b8d7c462`: pin,
+# 27 Jolpica requests, heartbeat, no publication), then the schedule was
+# removed so that production is the only scheduled user of the Jolpica
+# proxy's egress address. A later staging check re-enables it with
+# `crons = ["47 * * * *"]` and `wrangler triggers deploy --env staging`,
+# never at minute 17, where production runs.
 #
 # Wrangler replaces the Worker's schedules on deploy only when `crons` is
 # set: a list installs exactly these, an empty list removes every schedule,
@@ -293,7 +295,7 @@ id = "1d0fb55486a745a1ad12e03d9f04942b"
 # it. Stopping it is `crons = []` plus `wrangler triggers deploy --env
 # staging`, which changes no code.
 [env.staging.triggers]
-crons = ["47 * * * *"]
+crons = []
 
 [env.staging.observability]
 enabled = true

@@ -67,7 +67,7 @@ afterEach(() => {
 
 describe('the committed staging configuration (gate AU-4 step 1)', () => {
   it.each([
-    ['staging', ['47 * * * *']],
+    ['staging', []],
     ['production', [AUTOMATIC_ACTIVATION_DELTA.cron]],
   ] as const)(
     'commits the activation delta in %s, with its hourly schedule',

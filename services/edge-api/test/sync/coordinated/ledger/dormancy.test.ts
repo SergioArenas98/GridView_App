@@ -103,12 +103,11 @@ describe('the reconciliation ledger is exported, resolvable and bound only by th
     expect(demonstrationSection(declared)).toContain(
       'PROVIDER_MODE = "coordinated"',
     );
-    // Staging (minute 47) and production (minute 17) schedule the hourly
-    // run; the demonstration Worker is unscheduled since AU-3 passed.
-    expect(declared.match(/crons = \[\s*"/g)).toHaveLength(2);
-    expect(environmentSection(declared, 'staging')).toContain(
-      'crons = ["47 * * * *"]',
-    );
+    // Only production (minute 17) schedules the hourly run; staging is
+    // unscheduled since its 2026-11-23 verification, and the demonstration
+    // Worker since AU-3 passed.
+    expect(declared.match(/crons = \[\s*"/g)).toHaveLength(1);
+    expect(environmentSection(declared, 'staging')).toContain('crons = []');
     expect(environmentSection(declared, 'production')).toContain(
       'crons = ["17 * * * *"]',
     );

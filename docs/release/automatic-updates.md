@@ -760,9 +760,11 @@ dry-run bundle is still `6acb6230…`:
   `JOLPICA_PROXY_ORIGIN`;
 - `JOLPICA_PROXY_TOKEN` added to the required secrets, so Wrangler refuses a
   deploy without it;
-- `crons = ["17 * * * *"]` for production and `["47 * * * *"]` for staging.
-  The two environments share the proxy's egress address, so their paced runs
-  never overlap;
+- `crons = ["17 * * * *"]` for production. Staging verified the scheduled
+  path with `47 * * * *` on 2026-11-23 (version `b8d7c462`: catalog pin in
+  4.65 s, 27 Jolpica requests, heartbeat written, no publication) and is
+  committed unscheduled again (`crons = []`), so production is the only
+  scheduled user of the proxy's egress address;
 - no class, binding or KV change. While this mode is deployed, the ingest
   refuses every batch (`provider-mode-coordinated`).
 
