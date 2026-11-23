@@ -1999,3 +1999,147 @@ C2). Evidence: `~/.gridview/evidence/identity-u11-p3-2026-11-22/`
 - Open: the offline GnuPG copy of the R1 export (owner); the unresolved
   candidates for Mini, Slater and Tsolov (no curation needed while they stay
   inventory-only); production (P4) needs separate confirmation.
+
+---
+
+## Addendum Q - 2026-11-23: production (P4) prepared; nothing in production changed
+
+Owner decision 2026-11-22: carry Rafael Câmara into the repository identity
+sources before the initial production seed; staging R1 is the source of
+truth. Evidence: `~/.gridview/evidence/identity-p4-production-2026-11-22/`.
+
+### Q1. Repository identity sources (P0)
+
+- Commits `b2c8b31`, `9477d75` and `685b57e` (the P0 anchor) add exactly:
+  - driver `rafael-camara`, "Rafael Câmara" (fullName only);
+  - Jolpica 2026 `driverId rafael_camara → rafael-camara`, with provenance
+    citing this report (Addendum O, R1 revision `8723d5ec`);
+  - the removal of its November acknowledgement; Mini, Slater and Tsolov
+    stay acknowledged and unmapped;
+  - dataset version `2026.11.22.1`.
+- **R0 preserved.** `loadCorpus()` reads R0 from git at `027da5d` (and the
+  R0 evidence file at `6d39d48`, byte-identical to R0's `9ab5c486…`), never
+  the working tree. Regenerated R0 `seed.json`, `manifest.json` and
+  `parity.json` are byte-identical to the committed files.
+- **P0 seed** (`docs/operations/identity-seed-p0/`, `loadCorpus('p0')`,
+  `seed.mjs --corpus p0`): content hash `0a1b093a…`, 34 drivers, 95
+  bindings, 101 evidence, 6 unresolved. The loader refuses any P0 source
+  difference from R0 other than the delta above.
+- **P0 equals staging R1** in every identity field: driver IDs, profiles and
+  profile hashes, all 95 key→target bindings, unresolved keys, constructors,
+  circuits, events, the season projection (`bec52f09…`) and the dataset
+  version. Only provenance differs: Câmara is `repository-import` (citing
+  R1) instead of `reviewed-new`, and P0 carries no review decisions (no
+  approval was invented).
+
+### Q2. Code (closed, reviewed)
+
+- The seed validator accepts exactly two corpus profiles, by dataset version:
+  R0 (`2026.10.07.1`, 33/94/7, four pending keys) and P0 (`2026.11.22.1`,
+  34/95/6, three pending keys, with the exact added identity and binding).
+  Anything else is refused.
+- Runtime admission already requires a catalog's base digest to equal the
+  deployed bundled sources (`unsupported-runtime-base`), so only an
+  unaltered P0 catalog can serve production.
+- **Staging consequence:** staging R1 has R0's base. Before staging deploys
+  this code it must import the P0 base as R2 (`import-base`, allowed:
+  Câmara and his binding already exist in R1). Staging stays on `51f7667`
+  until then.
+- Tests follow the change. R0 stays the default fixture for the lifecycle
+  mechanics; suites that pair a catalog with current content use P0. The
+  dataset tests count the one later reviewed row. The whole-season baseline
+  changed only in storage and body digests, asserted against the amended
+  recording. The production behaviour tests run their genesis and ingest
+  mechanics under explicit bundled authority; a new test pins runtime and
+  optional inventory with the binding, and a configuration error without it.
+
+### Q3. Production configuration
+
+- New installation `98f14de8-d974-423a-bb78-dafe6251164a` (never staging's
+  or E2E's); catalog `runtime`, discovery `off`, admin `read-only`,
+  inventory `optional-drivers`.
+- Production now declares four exports. **Two new classes:**
+  `ReconciliationLedger` (the season lease a runtime batch ingest needs) and
+  `IdentityCatalog`, each with its own binding.
+- `IDENTITY_REVIEWER_CREDENTIALS` is required (production's own digest-only
+  value). `PROVIDER_MODE` stays `none`, `genesis:2026` and crons `[]` stay
+  as they are.
+- **Acceptance 37** now allows exactly staging and production; E2E and
+  development stay forbidden. Race-classification and driver-standings
+  identity guards are unchanged.
+
+### Q4. Existing production state (read-only baseline, 2026-11-22 21:48Z)
+
+- Worker `62bf40e9` (code `09e0686`, 2026-10-22), crons `[]`.
+- Sequencer `uninitialized`, phase `genesis`, admission closed; nothing
+  published (sync status empty).
+- KV `d76328b3…` holds 0 keys (snapshot digest = empty).
+- Public season routes 404/503; `/v1/status` 200.
+- So existing production state recovers trivially: an empty KV and an
+  uninitialized sequencer.
+
+### Q5. Prepared artifacts (local; verified)
+
+- Code `9535a04` (consolidated targeted run: 5,511 passed / 11 skipped / 0
+  failed across 290 files; eslint and both `tsc` projects clean). Clean
+  deployment worktree `%TEMP%\gv-p4-prod`.
+- Dry-runs: committed build bundle `6acb6230…`; the temporary `review`
+  build and the RP4 recovery builds `b88f2577…`, which equal `6acb6230…`
+  after path-label normalization.
+- Credentials `prd-po-{read,review,activate}-1` (expiry 2027-02-28) and the
+  seed-only `prd-po-bootstrap-1` (backstop expiry 2026-11-23T20:00Z), all
+  DPAPI. Secret values: 4-entry `5bcd3af1…`, 3-entry `51c0cb7b…`. Every token
+  authenticates to exactly its credential through the Worker's own
+  `authenticate()`; the bootstrap token is refused by the 3-entry value.
+- Seed request `production-p0-reviewed-seed.json` (op `2bc4a2d5`, P0
+  `seed.json` `e50a64db…`, non-synthetic dossier); CLI contract check passed.
+
+### Q6. Operations (each needs the owner's live confirmation)
+
+1. Put the 4-entry secret on `gridview-api-production` (a new version of
+   the current `62bf40e9` code; nothing else changes).
+2. Deploy the temporary `review` build from `9535a04`. This creates the
+   `ReconciliationLedger` and `IdentityCatalog` classes. Runtime ingest stays
+   refused while no catalog is active.
+3. Seed P0 with the bootstrap credential.
+4. Put the 3-entry secret (bootstrap revoked); verify that bootstrap gets
+   401 and the role credentials get 200.
+5. Validate and activate P0 with the activator credential.
+6. Deploy the committed build (admin `read-only`); probe A3 must return
+   403 `IDENTITY_WRITES_DISABLED`.
+7. Export with the reader credential, verify offline, store in custody
+   (`production-p0-export-*`); take PITR bookmarks of catalog, ledger and
+   sequencer, and a KV snapshot.
+
+After each step: Cloudflare state diff, production public ETags, and
+staging, E2E and production KV unchanged. No retry, and stop on any
+deviation.
+
+### Q7. Recovery
+
+- **Existing state:** an empty KV and an uninitialized sequencer (Q4);
+  nothing to restore.
+- **Forward builds:** RP4-strict (no optional inventory) and RP4-unbound
+  (catalog unbound, every runtime ingest refused before reading a body), both
+  dry-run.
+- **Catalog:** PITR to the step-7 bookmarks, or a reseed from the committed
+  P0 package (deterministic). Production catalog data is fully reproducible
+  until a season is published.
+- **Rolling back to `62bf40e9`** would undeclare the two new classes. That
+  is acceptable only while they hold nothing of value; the forward builds
+  are preferred.
+
+### Q8. Remaining blockers and limits
+
+- **Not in scope:** genesis and the first production season batch (a v2
+  batch from the production export and a fresh capture) need a separate
+  confirmation.
+- **Large code step:** production moves from `09e0686` (2026-10-22) to
+  `9535a04`. All of it is covered by the suites above; public behaviour
+  while nothing is published stays 404/503.
+- **Staging:** staging must import the P0 base (R2) before it deploys this
+  code (Q2).
+- **Local commits:** the commits are not pushed, so production would run
+  code that exists only locally until the owner authorizes a push.
+- **Single operator:** SOE-P (production single-operator exception) is
+  still a draft; the owner's live confirmation is the only approval.
