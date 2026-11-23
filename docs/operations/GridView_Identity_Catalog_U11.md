@@ -2143,3 +2143,52 @@ deviation.
   code that exists only locally until the owner authorizes a push.
 - **Single operator:** SOE-P (production single-operator exception) is
   still a draft; the owner's live confirmation is the only approval.
+
+---
+
+## Addendum R - 2026-11-23: production P4 executed and verified
+
+The owner confirmed steps 0-7 live. Code `9535a04` came from the clean
+worktree `%TEMP%\gv-p4-prod`. Evidence:
+`~/.gridview/evidence/identity-p4-production-2026-11-22/`.
+
+| Step                              | Time (UTC)          | Result                                                                                                                                                                                              |
+| --------------------------------- | ------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 0 pre-check (reads)               | 08:12               | identical to the post-P3 state; production `62bf40e9`, sequencer `uninitialized/genesis`, KV 0 keys, 14 ETags identical                                                                             |
+| 1 secret, 4 entries (`5bcd3af1…`) | 08:13:16            | version `0ececf38` (same script etag and exports, secret added). Wrangler's record was not saved because of a log-name bug in the script after Wrangler exited; the outcome was verified from state |
+| 2 deploy `review` build           | 08:14:04            | version `b0bfdaa2`, bundle `b88f2577…` (= dry-run); "Created: IdentityCatalog, ReconciliationLedger" (namespaces `575fdee7…`, `c2e5ce1b…`); staging and E2E unchanged                               |
+| 3 seed P0 (bootstrap)             | 08:15:46            | proposal `75c87f54-aa21-48ea-bef0-1248c0f6815a`, catalog `0a1b093a…`, `exactSeed: true`, 95 bindings, 34 profiles                                                                                   |
+| 4 secret, 3 entries (`51c0cb7b…`) | 08:16:00            | version `398795ed`; bootstrap `UNAUTHORIZED`, reader, reviewer and activator authenticate; local bootstrap token deleted                                                                            |
+| 5 validate and activate           | 08:16:59 / 08:17:15 | valid, no issues, report `a09e8a05…`; **P0 active at sequence 1**, dataset `2026.11.22.1`, projection `bec52f09…`                                                                                   |
+| 6 deploy the committed build      | 08:17:49            | version **`f1700b39`**, bundle `6acb6230…` (= committed dry-run); admin `read-only`; A3 403 `IDENTITY_WRITES_DISABLED`, A1 401                                                                      |
+| 7 export, custody, baseline       | 08:18-08:20         | see below                                                                                                                                                                                           |
+
+**Verification:**
+
+- The catalog's base digest `923719d2…` equals the deployed bundled-source
+  digest, so runtime admission accepts it.
+- Export: `exportHash 0e7b5593…`, file sha `313228fd…`, 1,619,482 bytes.
+  Offline `verifyCatalogFile` passed, the export reconstructs exactly from
+  `loadCorpus('p0')` (0 differing paths), and its creators include
+  `reviewer`.
+- Custody: `~/.gridview/custody/identity-production/production-p0-export-20261123.*`
+  (new folder). The staging R0 and R1 files are untouched. Offline GnuPG
+  copy pending (owner).
+- Bookmarks: catalog `00000001-00000004-0000512c-f54e…`, ledger
+  `00000000-00000000-0000512c-8989…`, sequencer
+  `00000020-00000000-0000512c-89f8…`. Post-P4 KV snapshot: 0 keys.
+- Sequencer still `uninitialized/genesis`, nothing published, 14 public
+  ETags identical, crons `[]` everywhere. Staging (`5ee3b49c`, KV
+  unchanged) and E2E (`6b52bc02`) are untouched.
+
+**Status:** production runs `f1700b39` (code `9535a04`) with catalog P0
+active, runtime authority, optional-driver inventory and read-only admin.
+`PROVIDER_MODE=none`, no season published.
+
+**Next steps, each needing separate confirmation:**
+
+- genesis plus the first v2 season batch, generated from the production
+  export;
+- the staging P0 base import (R2) before staging takes this code;
+- pushing the commits;
+- the offline copies.
