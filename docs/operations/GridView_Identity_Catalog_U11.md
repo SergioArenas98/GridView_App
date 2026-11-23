@@ -2192,3 +2192,58 @@ active, runtime authority, optional-driver inventory and read-only admin.
 - the staging P0 base import (R2) before staging takes this code;
 - pushing the commits;
 - the offline copies.
+
+## Addendum S - 2026-11-23: production genesis, first release and U11 closure
+
+The owner confirmed the preparation, then Part B live, on the same day.
+Evidence: `~/.gridview/evidence/production-genesis-2026-11-23/`
+(`00-LIVE-SEQUENCE.md`, `01-EXECUTION-RECORD.md`, `SHA256SUMS`).
+
+**Tool fix found in preparation (`962873c`, scripts only, bundle
+unchanged).** `season-batch:submission` never passed the inventory policy to
+`verifyCatalogFile`, so it refused every optional-driver batch as
+`catalog-reference-mismatch`. It now takes `--inventory-policy`. The P3 batch
+of Addendum P was built by hand, which hid the bug.
+
+**Part A (capture, generate, build).** Jolpica's origin did not answer from
+08:29Z to 08:55Z (7 requests in total, none answered). It was answering again
+from 12:52Z, and the capture ran once at about 14:29Z: 27 requests, 27 `200`,
+rounds 1-21 with 22 results each. Capture `06992a76…`, manifest `55985ba7…`,
+artifact `49d77370…` (122 documents, 462 facts), submission `861c42be…`
+(459,747 bytes, operation `8d27b995-…`). Compared with staging
+`pm1-000000000001e-3aa0228f`: 120 documents identical, 2 different only in
+freshness (`bootstrap`, `home`), none different in content.
+
+**Part B (production), 14:33-14:35Z, one request each, no retry:**
+
+| Step     | Result                                                                                                                                                          |
+| -------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| B0 reads | `f1700b39`, crons `[]` (production, E2E), sequencer `uninitialized/genesis`, KV 0 keys, 14 ETags as before                                                      |
+| B1       | genesis `200 created`, fingerprint `genesis1:37386368…6a0a`; `/v1/seasons/2026` still `503 SNAPSHOT_NOT_READY`                                                  |
+| B2       | ingest **applied**: **`pm1-0000000000001-15abf90e`**, previous `null`, 122 documents, rounds 1-21, 263 URLs purged                                              |
+| B3       | 55/55 public paths `200`, equal to staging `…1e` apart from freshness; content `2026.11.22.1`, attribution `data-sources-v3`; Rafael Câmara published           |
+| B4       | bookmarks catalog `00000002-00000008-…769c`, ledger `00000001-00000006-…3cd1`, sequencer `00000024-00000008-…f41a`; KV 126 keys (`9e73eebe…`); others unchanged |
+
+The first release cannot be rolled back (nothing precedes it). Its forward
+fix is a later release.
+
+**Repository.** With the owner's approval, `feat/jolpica-egress-proxy` was
+pushed at `28a1c80`, which also removes the proxy host, egress address and
+SSH user from public documents. History was not rewritten: `corpus.mjs`,
+the P0 seed and the production catalog hash pin `027da5d`, `6d39d48` and
+`685b57e`. The branch therefore has to merge with a merge commit, never a
+squash or a rebase.
+
+**U11 status at closure:**
+
+| Item                                                          | State                                                                                  |
+| ------------------------------------------------------------- | -------------------------------------------------------------------------------------- |
+| U1-U10 code, G1-G5 staging, R1, P3, P4 production             | done (Addenda I-R)                                                                     |
+| Production genesis and first release                          | done (this addendum)                                                                   |
+| GnuPG offline copies of the staging R1 and production exports | owner step; commands in `~/.gridview/custody/GNUPG-OFFLINE-COPIES-PENDING.md`          |
+| Staging P0 base import (R2)                                   | prepared (`~/.gridview/evidence/staging-r2-prep-2026-11-23/`), needs live confirmation |
+| Recovery-drill Worker `gridview-recovery-drill`               | still deployed; deleting it needs confirmation                                         |
+| Merge into `master`                                           | pending review, merge commit only                                                      |
+
+Production updates continue under ADR 0028 (automatic updates, gate AU-7),
+outside U11.
