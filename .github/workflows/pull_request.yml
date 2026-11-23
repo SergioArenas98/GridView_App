@@ -205,6 +205,11 @@ jobs:
         working-directory: services/edge-api
     steps:
       - uses: actions/checkout@v4
+        with:
+          # The identity corpus reads R0/P0 sources from pinned commits
+          # (scripts/identity/corpus.mjs: 027da5d, 6d39d48, 685b57e); a
+          # shallow checkout lacks them and those tests fail.
+          fetch-depth: 0
 
       - uses: actions/setup-node@v4
         with:
