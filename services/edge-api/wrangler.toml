@@ -4,11 +4,15 @@
 # by environment and is recorded in docs/technical/GridView_Environments.md -
 # a declaration in this file is not evidence that anything is provisioned:
 # - `env.staging` is deployed to Cloudflare (first in Phase 5B, 2026-07-20).
-#   The 2026-09-12 staging deployment provisioned both Durable Object bindings
-#   declared for it below; no code path in that configuration looks either up.
-# - `env.production` has never been deployed: no production Worker, Durable
-#   Object namespace, R2 bucket, route, domain or secret exists. Only its KV
-#   namespace exists (release plan W2); see the section itself.
+#   Read-only check of 2026-11-17: version `1d858d56-…` (2026-11-12, a
+#   secret-only version over the code of `027da5d`) runs the automatic-updates
+#   runtime over the Jolpica proxy transport, with three Durable Object
+#   namespaces (rate limiter, publication sequencer, reconciliation ledger).
+#   The identity catalog declared for it below is PROPOSED, NOT PROVISIONED.
+# - `env.production` is live: version `f1700b39-…` (2026-11-23, code
+#   `9535a04`) serves season 2026, born by genesis and published through the
+#   guarded ingest as `pm1-0000000000001-15abf90e`. The section below commits
+#   gate AU-7's automatic configuration, NOT DEPLOYED; see the section.
 # - `env.e2e` is the isolated demonstration Worker of release gate AU-3,
 #   deployed on 2026-10-21. AU-3 passed on it on 2026-11-03, and it is
 #   unscheduled. See the section.
@@ -28,10 +32,10 @@ ENVIRONMENT = "development"
 # provisioning is not use: the staging namespace was provisioned by the
 # 2026-09-12 staging deployment. Only the automatic-updates runtime constructs
 # the provider HTTP client, which reserves through this binding: the
-# demonstration Worker (controlled source, never the network) and, once
-# AU-4 step 1 is deployed, staging. Live staging (`none`) and production
-# (`none`) build no provider. Wherever the namespace is absent, the resolver
-# fails closed and no provider request is issued.
+# demonstration Worker (controlled source, never the network) and staging
+# (live as read on 2026-11-17); production builds it once its committed
+# automatic configuration (gate AU-7) is deployed. Wherever the namespace is absent, the resolver fails closed and
+# no provider request is issued.
 [[durable_objects.bindings]]
 name = "PROVIDER_RATE_LIMITER"
 class_name = "ProviderRateLimiter"
@@ -56,8 +60,8 @@ storage = "sqlite"
 # therefore the authority for season 2026's publication, rollback and public
 # reads in staging; every other season stays on the legacy KV pointers.
 # Development selects no authority. Production declares the binding and the
-# `sequencer` authority for production genesis (below), but has never been
-# deployed, so no production namespace exists.
+# `sequencer` authority (below); its namespace was created by W3 and season
+# 2026 was born there by genesis on 2026-11-23.
 #
 # Deploying a Worker built with the D14-D16 publication guard (ADR 0026)
 # changes how staging publishes and rolls back season 2026: every sequenced
@@ -82,11 +86,10 @@ preview_urls = false
 [env.staging.vars]
 ENVIRONMENT = "staging"
 # Automatic updates (ADR 0028; release gate AU-4,
-# `docs/release/automatic-updates.md` section 8.3). COMMITTED, NOT YET
-# DEPLOYED: the live version `453af4fb-…` (2026-10-19, from `d351118`) still
-# runs `none`, the interim state committed and deployed on 2026-10-13, under
-# which season data reached staging only through the guarded season-batch
-# ingest below.
+# `docs/release/automatic-updates.md` section 8.3). LIVE IN STAGING: the
+# read-only check of 2026-11-17 found `coordinated` in the deployed version
+# `1d858d56-…`. The earlier interim value `none` (2026-10-13) let season data
+# reach staging only through the guarded season-batch ingest below.
 #
 # `coordinated` selects the coordinated runtime against the network: staging
 # sets no `CONTROLLED_PROVIDER_SOURCE`, so its Jolpica transport is the
@@ -103,6 +106,11 @@ ENVIRONMENT = "staging"
 # `PROVIDER_MODE = "none"` that keeps the ledger class and binding.
 PROVIDER_MODE = "coordinated"
 PUBLIC_BASE_URL = "https://gridview-api-staging.sejuma18.workers.dev"
+
+# Staging only. LIVE as read on 2026-11-17 (deployed 2026-11-12, version
+# `1d858d56-…`). The token is a Cloudflare secret, never a plain var.
+JOLPICA_TRANSPORT = "proxy"
+JOLPICA_PROXY_ORIGIN = "https://gridviewjol.vps.webdock.cloud"
 
 # Season 2026 cutover phase (ADR 0025 D12) - ACTIVATION PHASE, LIVE IN STAGING
 # since 2026-09-16 (version `c297d260-c81b-4110-bdf2-7572e1206af3`). DO NOT
@@ -136,8 +144,8 @@ SEASON_PUBLICATION_AUTHORITY = "sequencer"
 
 # The one season the guarded season-batch ingest accepts
 # (`POST /internal/admin/season/ingest`, decision pack 2026-10-07 PR-4).
-# STAGING ONLY; LIVE since 2026-10-13 (version `3b3b8273-…`), kept by
-# `453af4fb-…`; two batches have committed through it (2026-10-14 and
+# STAGING ONLY; LIVE since 2026-10-13 (version `3b3b8273-…`), still set in
+# `1d858d56-…` (2026-11-17); two batches have committed through it (2026-10-14 and
 # 2026-10-19). The value must be exactly the
 # four-digit season `2026`, which has curated season metadata; anything else
 # (`2026 `, `2099`, `abcd`) is refused as `ingest-misconfigured`. Setting it
@@ -152,6 +160,41 @@ SEASON_PUBLICATION_AUTHORITY = "sequencer"
 # separately authorized (staging runbook, section 6, "Guarded season-batch
 # ingest"). Development and production do not set it.
 SEASON_BATCH_INGEST = "2026"
+
+# Identity catalog (ADRs 0029-0031; identity U11). Staging history: G1
+# (bundled/off/off) 2026-11-22; P1 (G2 credentials and admin review, G3 R0
+# seed, validation and activation) 2026-11-22, staging 59a882a0.
+# This commit is the G5 runtime-strict cutover configuration. Deploying it
+# needs the owner's live confirmation under U11 amendment A1.
+#
+# Catalog `runtime`: coordinated runs pin the active staging catalog revision
+# and fail closed (`catalog-unavailable`, no provider request, no bundled
+# fallback) if the catalog is unbound or unreadable. Discovery `off` builds no
+# collector. Admin `read-only` (owner decision D14): individual credentials
+# may read the catalog; every identity write is refused
+# (`IDENTITY_WRITES_DISABLED`); re-enabling `review` is a separate decision.
+# In `read-only` the shared ADMIN_TOKEN reaches only the U2 discovery-health
+# compatibility read, never catalog routes. With no valid credentials secret
+# the catalog routes answer 503 `CATALOG_UNAVAILABLE`.
+# Inventory `optional-drivers` (U11 P3, staging only; owner decision
+# 2026-11-22 after catalog R1): a season driver whose exact Jolpica key the
+# catalog leaves unmapped no longer ends the participants resource; it is
+# accounted for as optional inventory. Race classifications and driver
+# standings still require every driver to resolve, so an unmapped driver there
+# still blocks that resource and its publication. Runtime authority is a
+# precondition (`resolveOperationalInventoryMode`). Staging is the only
+# committed environment allowed to name it (inventory-policy acceptance 37);
+# production, E2E and development stay strict.
+#
+# The installation ID is a fresh random UUID v4 proposed on 2026-11-17 for
+# staging alone, never derived from `ENVIRONMENT` (E2E shares that value) and
+# never to be reused by E2E or production. It binds the catalog object
+# `identity:<id>`; a different persisted ID refuses initialization.
+IDENTITY_INSTALLATION_ID = "c45d60b8-a723-4b6e-8530-750592af2b94"
+IDENTITY_CATALOG_MODE = "runtime"
+IDENTITY_DISCOVERY_MODE = "off"
+IDENTITY_ADMIN_MODE = "read-only"
+IDENTITY_INVENTORY_MODE = "optional-drivers"
 
 # Bindings are not inherited by named environments, so each one redeclares it.
 [[env.staging.durable_objects.bindings]]
@@ -172,7 +215,8 @@ class_name = "SeasonPublicationSequencer"
 
 # The reconciliation ledger (ADR 0020, ADR 0028 D2): the coordinated runtime's
 # durable record of what it observed, what is due and what it published.
-# COMMITTED FOR AU-4 STEP 1, NOT YET DEPLOYED.
+# LIVE IN STAGING: namespace `f4ebd45f0745433488c0ec90585796dd`, bound in the
+# deployed version as read on 2026-11-17.
 #
 # A named environment's exports table replaces the top-level one, so staging
 # restates both top-level classes (unchanged: the namespaces the 2026-09-12
@@ -203,28 +247,53 @@ storage = "sqlite"
 name = "RECONCILIATION_LEDGER"
 class_name = "ReconciliationLedger"
 
+# The identity catalog class (identity U11). LIVE IN STAGING since G1
+# (2026-11-22, version 13c3a90c): namespace
+# `541e9043dfeb4e46aa9362fd198bae5a`, empty until a separately approved seed.
+#
+# Staging only: production and E2E declare nothing for it, and the top-level
+# exports table is unchanged. All three exports above are kept.
+#
+# IRREVERSIBLE FOR ROLLBACK, like the ledger. The first deploy of this class
+# creates a fourth staging namespace and permanently blocks `wrangler rollback`
+# to every earlier version (including `1d858d56-…`). Recovery from then on is
+# a forward deploy of a commit that keeps all four exports, with the identity
+# variables above restored to bundled/off/off. Removing only the binding below
+# stops every catalog lookup while keeping the data. Never remove the exports
+# entry: a deleted class and its data are gone permanently.
+[env.staging.exports.IdentityCatalog]
+type = "durable-object"
+storage = "sqlite"
+
+[[env.staging.durable_objects.bindings]]
+name = "IDENTITY_CATALOG"
+class_name = "IdentityCatalog"
+
+# IDENTITY_REVIEWER_CREDENTIALS (U11 G2) is the closed JSON array of
+# individual identity credentials: digests, roles and expiry only, never a
+# token. It is put before the first deploy that requires it.
 [env.staging.secrets]
-required = ["ADMIN_TOKEN"]
+required = ["ADMIN_TOKEN", "JOLPICA_PROXY_TOKEN", "IDENTITY_REVIEWER_CREDENTIALS"]
 
 [[env.staging.kv_namespaces]]
 binding = "GRIDVIEW_DATA"
 id = "1d0fb55486a745a1ad12e03d9f04942b"
 
-# No scheduled trigger. LIVE since 2026-10-13: that deployment removed the
-# nightly `17 3 * * *` the Stage A version had, and the schedules API has
-# answered `[]` since (re-read 2026-10-21). Under
-# `PROVIDER_MODE = "none"` a nightly run could only record `sync.failed` and
-# rewrite the season's failure state every night, so the season-batch ingest
-# configuration removes it. The hourly schedule of automatic updates is a
-# separate, separately authorized change.
+# No schedule (owner decision 2026-11-23). Staging verified the scheduled
+# path for AU-7 with `47 * * * *` on 2026-11-23 (version `b8d7c462`: pin,
+# 27 Jolpica requests, heartbeat, no publication), then the schedule was
+# removed so that production is the only scheduled user of the Jolpica
+# proxy's egress address. A later staging check re-enables it with
+# `crons = ["47 * * * *"]` and `wrangler triggers deploy --env staging`,
+# never at minute 17, where production runs.
 #
-# The empty list is deliberate and must stay explicit. Wrangler replaces the
-# Worker's schedules on deploy only when `crons` is set: an empty list removes
-# every schedule, while an absent key leaves the live one in place. Schedules
-# are script settings, not part of a version, so neither this deploy nor a
-# later `wrangler rollback` to an earlier version restores
-# `17 3 * * *`; restoring it is a separate `wrangler triggers deploy`
-# (staging runbook, section 6, "Guarded season-batch ingest").
+# Wrangler replaces the Worker's schedules on deploy only when `crons` is
+# set: a list installs exactly these, an empty list removes every schedule,
+# and an absent key leaves the live one in place. Schedules are script
+# settings, not part of a version, so any `wrangler deploy --env staging` of
+# this file installs the schedule, and a `wrangler rollback` does not remove
+# it. Stopping it is `crons = []` plus `wrangler triggers deploy --env
+# staging`, which changes no code.
 [env.staging.triggers]
 crons = []
 
@@ -240,20 +309,25 @@ invocation_logs = false
 [env.staging.observability.traces]
 enabled = false
 
-# Production (release plan W1 and W2; submission path A, Workers Paid). NEVER
-# DEPLOYED: no `gridview-api-production` Worker, Durable Object namespace or
-# secret exists on the Cloudflare account. Only its KV namespace exists,
-# `gridview-snapshots-production`, created on 2026-10-22 (W2) and bound below.
+# Production (release plan W1-W3; submission path A, Workers Paid). LIVE:
+# version `f1700b39-…` (2026-11-23, code `9535a04`, U11 P4). Season 2026 was
+# born by genesis and published through the guarded ingest on 2026-11-23 as
+# `pm1-0000000000001-15abf90e` (rounds 1-21).
 #
-# DO NOT DEPLOY without W3's authorization. A first `wrangler deploy` refuses
-# for the missing required secret unless one is supplied with
-# `--secrets-file`. Each production deployment (W3) is separately authorized.
+# This section commits gate AU-7's automatic configuration
+# (`docs/release/automatic-updates.md` section 8.4), NOT DEPLOYED: the
+# coordinated runtime against the network through the Jolpica proxy, and the
+# hourly schedule. It changes variables, one required secret and the schedule
+# only: no class, binding or code. Deploying it needs the owner's live
+# confirmation. Under it the guarded ingest refuses every batch
+# (`provider-mode-coordinated`).
 #
-# This is the bootstrap configuration: `PROVIDER_MODE = "none"`, no
-# reconciliation ledger and no schedule, so data arrives only through the
-# guarded ingest. The automatic-updates configuration belongs to the later
-# gate AU-7 (`docs/release/automatic-updates.md` section 8.4), its own
-# authorized change.
+# Recovery, none of which needs a Worker rollback:
+# - stop the schedule: `crons = []` plus `wrangler triggers deploy --env
+#   production` (no code change; nothing runs or publishes afterwards);
+# - fall back to manual batches: deploy `PROVIDER_MODE = "none"` with every
+#   class and binding kept; the ingest is admitted again;
+# - a bad automatic release: reconciliation hold, then rollback (runbook §6).
 #
 # Season 2026 is born through production genesis (ADR 0025 D12, "Amendment
 # (2026-10-20)"), never through the staging seed and activation:
@@ -273,11 +347,19 @@ preview_urls = false
 
 [env.production.vars]
 ENVIRONMENT = "production"
-# No provider, as in staging: the whole-season sync routes and the scheduled
-# handler build no provider and fail fast as `provider-unavailable`. Season
-# data reaches production only through the guarded season-batch ingest.
-PROVIDER_MODE = "none"
+# Automatic updates (ADR 0028, gate AU-7), as staging since AU-4: the
+# coordinated runtime against the network, reading the Jolpica proxy below
+# through the hardened HTTP client and the global `ProviderRateLimiter`, and
+# recording every observation in the reconciliation ledger bound below. The
+# value `none` is the fallback to the guarded ingest.
+PROVIDER_MODE = "coordinated"
 PUBLIC_BASE_URL = "https://gridview-api-production.sejuma18.workers.dev"
+# The Jolpica proxy (staging's since 2026-11-12): an egress address of its
+# own, outside Cloudflare's shared Worker addresses. The token is the
+# Cloudflare secret `JOLPICA_PROXY_TOKEN`, never a plain var. The proxy holds
+# one token, so production carries the same value as staging.
+JOLPICA_TRANSPORT = "proxy"
+JOLPICA_PROXY_ORIGIN = "https://gridviewjol.vps.webdock.cloud"
 # The genesis phase for season 2026. It permits the one authenticated,
 # confirmed `POST /internal/admin/publication/cutover/genesis`, refuses the
 # staging seed and activation (`phase-not-permitted`), and is the control the
@@ -286,25 +368,79 @@ SEASON_PUBLICATION_CUTOVER_CONTROL = "genesis:2026"
 # Every season reads and publishes through the sequencer once the sequencer
 # reports it `genesis` or `active`. Genesis and the ingest refuse otherwise.
 SEASON_PUBLICATION_AUTHORITY = "sequencer"
-# The one season the guarded ingest accepts. Every admitted batch still needs
+# The one season the guarded ingest accepts, kept so that the fallback to
+# `none` admits batches again; under `coordinated` it refuses every batch.
+# Every admitted batch still needs
 # `ADMIN_TOKEN`, the genesis control above, a sequenced season and a Jolpica
 # attribution record marked `active`, and publishes only through the D14-D16
 # guard and the `prepare` CAS bound to its `expectedActiveVersion`.
 SEASON_BATCH_INGEST = "2026"
+
+# Identity catalog (U11 P4, owner decision 2026-11-22). Production's own
+# installation: a fresh random UUID v4, never shared with staging
+# (`c45d60b8-…`), E2E or the drill Worker. Its catalog is seeded once from the
+# reviewed P0 package (`docs/operations/identity-seed-p0`: R0 plus the
+# reviewed Rafael Câmara identity, equal in identity content to staging R1).
+# Catalog `runtime`: a guarded batch ingest requires a v2 batch generated from
+# the verified production export, the catalog binding and the ledger lease;
+# without an active catalog every ingest is refused. Discovery `off`. Admin
+# `read-only`: individual credentials may read; every identity write is
+# refused (seeding uses a separately reviewed temporary `review` build).
+# Inventory `optional-drivers`: a season driver left unmapped by the catalog
+# no longer ends the participants resource; race classifications and driver
+# standings still require every driver to resolve (inventory-policy
+# acceptance 37 allows exactly staging and production).
+IDENTITY_INSTALLATION_ID = "98f14de8-d974-423a-bb78-dafe6251164a"
+IDENTITY_CATALOG_MODE = "runtime"
+IDENTITY_DISCOVERY_MODE = "off"
+IDENTITY_ADMIN_MODE = "read-only"
+IDENTITY_INVENTORY_MODE = "optional-drivers"
 
 # Bindings are not inherited by named environments, so each one redeclares it.
 [[env.production.durable_objects.bindings]]
 name = "PROVIDER_RATE_LIMITER"
 class_name = "ProviderRateLimiter"
 
-# The production season-publication authority. Declaring it provisions
-# nothing until W3's authorized deploy creates the namespace.
+# The production season-publication authority (namespace created by W3).
 [[env.production.durable_objects.bindings]]
 name = "SEASON_PUBLICATION_SEQUENCER"
 class_name = "SeasonPublicationSequencer"
 
+# U11 P4: production declares its four classes explicitly (a named
+# environment's exports replace the inherited top-level two, which stay).
+# P4 (2026-11-23) created the last two namespaces: ReconciliationLedger (the
+# season lease a runtime batch ingest takes, and the automatic runtime's
+# record under gate AU-7) and IdentityCatalog. Never remove an exports entry:
+# a deleted class and its data are gone permanently.
+[env.production.exports.ProviderRateLimiter]
+type = "durable-object"
+storage = "sqlite"
+
+[env.production.exports.SeasonPublicationSequencer]
+type = "durable-object"
+storage = "sqlite"
+
+[env.production.exports.ReconciliationLedger]
+type = "durable-object"
+storage = "sqlite"
+
+[[env.production.durable_objects.bindings]]
+name = "RECONCILIATION_LEDGER"
+class_name = "ReconciliationLedger"
+
+[env.production.exports.IdentityCatalog]
+type = "durable-object"
+storage = "sqlite"
+
+[[env.production.durable_objects.bindings]]
+name = "IDENTITY_CATALOG"
+class_name = "IdentityCatalog"
+
+# IDENTITY_REVIEWER_CREDENTIALS: production's own closed, digest-only JSON
+# array (U5 contract); never committed and never shared with staging.
+# JOLPICA_PROXY_TOKEN (gate AU-7) is put before the deploy that requires it.
 [env.production.secrets]
-required = ["ADMIN_TOKEN"]
+required = ["ADMIN_TOKEN", "IDENTITY_REVIEWER_CREDENTIALS", "JOLPICA_PROXY_TOKEN"]
 
 # `gridview-snapshots-production`, created on 2026-10-22 (release plan W2).
 # The id is required: Wrangler 4 creates a new namespace on deploy for a KV
@@ -313,10 +449,14 @@ required = ["ADMIN_TOKEN"]
 binding = "GRIDVIEW_DATA"
 id = "d76328b37da343db92d927142c072593"
 
-# No scheduled trigger, explicitly: an empty list makes `wrangler deploy` set
-# no schedule, where an absent key would leave any existing one in place.
+# The hourly schedule of automatic updates (gate AU-7), COMMITTED, NOT
+# DEPLOYED; live production answers `[]`. Any `wrangler deploy --env
+# production` of this file installs it. The planner decides from the season
+# calendar and the ledger what is due; a tick with nothing due sends nothing.
+# Stopping it is `crons = []` plus `wrangler triggers deploy --env
+# production`.
 [env.production.triggers]
-crons = []
+crons = ["17 * * * *"]
 
 # Persisted Workers Logs ON for the automatic path's observability (ADR 0028
 # D8, which resolves release plan decision D-L). Persisted lines carry no

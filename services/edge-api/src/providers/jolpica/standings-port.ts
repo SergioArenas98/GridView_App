@@ -39,6 +39,10 @@
  */
 
 import type { Logger } from '../../logging/logger';
+import {
+  captureDiscovery,
+  type DiscoverySink,
+} from '../../identity/discovery/persist';
 import type {
   CoordinatedPayload,
   CoordinatedSourceId,
@@ -94,6 +98,7 @@ const standingsPaths: Readonly<
 };
 
 export interface JolpicaStandingsPortOptions {
+  readonly discovery?: DiscoverySink;
   /** The hardened outbound boundary. Injected; never defaulted to `fetch`. */
   readonly client: ProviderHttpClient;
   readonly logger: Logger;
@@ -133,10 +138,12 @@ export class JolpicaStandingsPort implements ProviderResourcePort {
   private readonly client: ProviderHttpClient;
   private readonly logger: Logger;
   private readonly registry: ProviderMappingRegistry;
+  private readonly discovery: DiscoverySink | undefined;
   private readonly reference: () => string;
   private sequence = 0;
 
   constructor(options: JolpicaStandingsPortOptions) {
+    this.discovery = options.discovery;
     this.client = options.client;
     this.logger = options.logger;
     this.registry = options.registry ?? providerMappingRegistry();
@@ -192,6 +199,31 @@ export class JolpicaStandingsPort implements ProviderResourcePort {
       return this.invalidPayload(kind, season, attempt, decoded.problem);
     }
 
+    if (decoded.kind === 'driver-standings') {
+      captureDiscovery(
+        this.discovery,
+        {
+          endpointKind: decoded.kind,
+          season,
+          requestedLimit: standingsPageLimit,
+          decoded: { ok: true, round: decoded.round, rows: decoded.rows },
+        },
+        result.data,
+        this.registry,
+      );
+    } else {
+      captureDiscovery(
+        this.discovery,
+        {
+          endpointKind: decoded.kind,
+          season,
+          requestedLimit: standingsPageLimit,
+          decoded: { ok: true, round: decoded.round, rows: decoded.rows },
+        },
+        result.data,
+        this.registry,
+      );
+    }
     let table: Table;
     try {
       table = this.normalize(decoded, season);

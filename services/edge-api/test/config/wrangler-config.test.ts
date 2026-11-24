@@ -28,7 +28,7 @@ describe('wrangler staging configuration', () => {
     expect(Object.keys(jsoncConfig)).toHaveLength(0);
   });
 
-  it('declares the staging Worker, workers.dev endpoint, KV binding and an explicitly empty cron', () => {
+  it('declares the staging Worker, workers.dev endpoint, KV binding and its explicitly empty schedule', () => {
     expect(config).toMatch(
       /\[env\.staging\][\s\S]*name = "gridview-api-staging"/,
     );
@@ -42,12 +42,21 @@ describe('wrangler staging configuration', () => {
     expect(config).toMatch(/\[env\.staging\.triggers\]\ncrons = \[\]\n/);
   });
 
-  it('declares ADMIN_TOKEN as a required staging secret without committing its value', () => {
+  it('requires the staging secrets without committing their values', () => {
     expect(config).toMatch(
-      /\[env\.staging\.secrets\][\s\S]*required = \["ADMIN_TOKEN"\]/,
+      /\[env\.staging\.secrets\]\nrequired = \["ADMIN_TOKEN", "JOLPICA_PROXY_TOKEN", "IDENTITY_REVIEWER_CREDENTIALS"\]/,
     );
     expect(config).not.toContain('Bearer ');
     expect(config).not.toContain('replace-with-disposable-local-token');
+    expect(config).not.toMatch(/^\s*JOLPICA_PROXY_TOKEN\s*=/m);
+    // Staging and production (AU-7) name the same proxy; nothing else does.
+    expect(config.match(/^JOLPICA_TRANSPORT\s*=/gm)).toHaveLength(2);
+    expect(config.match(/^JOLPICA_PROXY_ORIGIN\s*=/gm)).toHaveLength(2);
+    expect(new Set(config.match(/^JOLPICA_PROXY_ORIGIN\s*=.*$/gm))).toEqual(
+      new Set([
+        'JOLPICA_PROXY_ORIGIN = "https://gridviewjol.vps.webdock.cloud"',
+      ]),
+    );
   });
 
   it('adds no account ID and binds production only to its own KV namespace', () => {
@@ -56,7 +65,7 @@ describe('wrangler staging configuration', () => {
       /\[\[env\.production\.kv_namespaces\]\]\nbinding = "GRIDVIEW_DATA"\nid = "d76328b37da343db92d927142c072593"/,
     );
     expect(config).toMatch(
-      /\[env\.production\.vars\][\s\S]*ENVIRONMENT = "production"[\s\S]*PROVIDER_MODE = "none"/,
+      /\[env\.production\.vars\][\s\S]*ENVIRONMENT = "production"[\s\S]*PROVIDER_MODE = "coordinated"/,
     );
   });
 });
@@ -135,9 +144,18 @@ describe('season 2026 activation-phase configuration (ADR 0025 D12)', () => {
       'ENVIRONMENT = "staging"',
       'PROVIDER_MODE = "coordinated"',
       'PUBLIC_BASE_URL = "https://gridview-api-staging.sejuma18.workers.dev"',
+      'JOLPICA_TRANSPORT = "proxy"',
+      'JOLPICA_PROXY_ORIGIN = "https://gridviewjol.vps.webdock.cloud"',
       'SEASON_PUBLICATION_CUTOVER_CONTROL = "activate:2026"',
       'SEASON_PUBLICATION_AUTHORITY = "sequencer"',
       'SEASON_BATCH_INGEST = "2026"',
+      // Identity U11: the staging installation, runtime authority, and the
+      // optional-driver inventory policy (P3; staging only).
+      'IDENTITY_INSTALLATION_ID = "c45d60b8-a723-4b6e-8530-750592af2b94"',
+      'IDENTITY_CATALOG_MODE = "runtime"',
+      'IDENTITY_DISCOVERY_MODE = "off"',
+      'IDENTITY_ADMIN_MODE = "read-only"',
+      'IDENTITY_INVENTORY_MODE = "optional-drivers"',
     ]);
     // The seed phase is no longer configured anywhere.
     expect(config).not.toMatch(/^[^#\n]*"seed:/m);
@@ -159,14 +177,22 @@ describe('season 2026 activation-phase configuration (ADR 0025 D12)', () => {
     }
   });
 
-  it('pins the production variables to the genesis configuration (W1)', () => {
+  it('pins the production variables to the genesis configuration with the automatic path (AU-7)', () => {
     expect(assignments(productionVarsBlock(config))).toEqual([
       'ENVIRONMENT = "production"',
-      'PROVIDER_MODE = "none"',
+      'PROVIDER_MODE = "coordinated"',
       'PUBLIC_BASE_URL = "https://gridview-api-production.sejuma18.workers.dev"',
+      'JOLPICA_TRANSPORT = "proxy"',
+      'JOLPICA_PROXY_ORIGIN = "https://gridviewjol.vps.webdock.cloud"',
       'SEASON_PUBLICATION_CUTOVER_CONTROL = "genesis:2026"',
       'SEASON_PUBLICATION_AUTHORITY = "sequencer"',
       'SEASON_BATCH_INGEST = "2026"',
+      // U11 P4: production's own identity installation.
+      'IDENTITY_INSTALLATION_ID = "98f14de8-d974-423a-bb78-dafe6251164a"',
+      'IDENTITY_CATALOG_MODE = "runtime"',
+      'IDENTITY_DISCOVERY_MODE = "off"',
+      'IDENTITY_ADMIN_MODE = "read-only"',
+      'IDENTITY_INVENTORY_MODE = "optional-drivers"',
     ]);
   });
 
@@ -204,7 +230,7 @@ describe('season 2026 activation-phase configuration (ADR 0025 D12)', () => {
     });
   });
 
-  it('keeps both existing staging bindings, the secret and observability, adds only the ledger, and keeps an empty cron', () => {
+  it('keeps both existing staging bindings, the secret and observability, adds only the ledger, and keeps the schedule explicitly empty', () => {
     expect(config).toMatch(
       /\[\[env\.staging\.durable_objects\.bindings\]\]\nname = "PROVIDER_RATE_LIMITER"\nclass_name = "ProviderRateLimiter"/,
     );
@@ -222,7 +248,7 @@ describe('season 2026 activation-phase configuration (ADR 0025 D12)', () => {
       /\[\[env\.staging\.kv_namespaces\]\]\nbinding = "GRIDVIEW_DATA"\nid = "1d0fb55486a745a1ad12e03d9f04942b"/,
     );
     expect(config).toMatch(
-      /\[env\.staging\.secrets\]\nrequired = \["ADMIN_TOKEN"\]/,
+      /\[env\.staging\.secrets\]\nrequired = \["ADMIN_TOKEN", "JOLPICA_PROXY_TOKEN", "IDENTITY_REVIEWER_CREDENTIALS"\]/,
     );
     expect(config).toMatch(/\[env\.staging\.triggers\]\ncrons = \[\]\n/);
     expect(config).toMatch(

@@ -49,7 +49,6 @@ import {
   artifactKind,
   batchVersion,
   manifestKind,
-  seasonBatchSchemaVersion,
 } from './batch-format';
 import {
   canonicalJson,
@@ -58,9 +57,18 @@ import {
   utf8,
 } from './canonical-json';
 import { sourceRefusal, type SourceRefusal } from './source-validation';
+import {
+  decodeCatalogReference,
+  matchesCatalog,
+  catalogProfilesMatch,
+} from './catalog-reference';
+import type { IdentityRunContext } from '../identity/catalog/run-context';
 
 /** Every reason a batch is refused. Closed; safe to log and return. */
 export const batchVerificationFailures = [
+  'catalog-reference-mismatch',
+  'catalog-profile-mismatch',
+  'catalog-context-required',
   'manifest-digest-mismatch',
   'manifest-malformed',
   'manifest-tree-dirty',
@@ -93,6 +101,7 @@ export interface SourceAttribution {
 }
 
 export interface BatchVerificationInput {
+  readonly identityContext?: IdentityRunContext;
   /** The parsed `manifest.json`, untrusted. */
   readonly manifest: unknown;
   /** The parsed `artifact.json`, untrusted. */
@@ -211,6 +220,7 @@ interface DocumentDigest {
 }
 
 interface BatchManifest {
+  readonly schemaVersion: 1 | 2;
   readonly season: number;
   readonly observedAt: string;
   readonly classificationRounds: readonly number[];
@@ -302,15 +312,23 @@ function isDigestList(value: unknown): value is DocumentDigest[] {
 
 function hasManifestEnvelope(value: unknown, season: number): value is Json {
   return (
-    hasExactKeys(value, manifestKeys) &&
+    isRecord(value) &&
+    (value.schemaVersion === 1 || value.schemaVersion === 2) &&
+    hasExactKeys(
+      value,
+      value.schemaVersion === 2
+        ? [...manifestKeys, 'identityCatalog']
+        : manifestKeys,
+    ) &&
+    (value.schemaVersion !== 2 ||
+      decodeCatalogReference(value.identityCatalog) !== null) &&
     value.kind === manifestKind &&
-    value.schemaVersion === seasonBatchSchemaVersion &&
     value.season === season &&
     value.use === 'review-only' &&
     hasExactKeys(value.review, ['status']) &&
     hasExactKeys(value.generator, generatorKeys) &&
     value.generator.name === 'gridview-season-batch' &&
-    value.generator.schemaVersion === seasonBatchSchemaVersion &&
+    value.generator.schemaVersion === value.schemaVersion &&
     typeof value.generator.gitCommit === 'string' &&
     gitCommitPattern.test(value.generator.gitCommit) &&
     typeof value.generator.treeClean === 'boolean' &&
@@ -367,6 +385,7 @@ async function verifiedManifest(
     return refuse('capture-digest-inconsistent');
   }
   return {
+    schemaVersion: value.schemaVersion as 1 | 2,
     season: input.season,
     observedAt: capture.observedAt as string,
     classificationRounds: capture.classificationRounds as number[],
@@ -444,7 +463,12 @@ async function verifiedArtifact(
   }
   const value = input.artifact;
   if (
-    !hasExactKeys(value, artifactKeys) ||
+    !hasExactKeys(
+      value,
+      manifest.schemaVersion === 2
+        ? [...artifactKeys, 'identityCatalog']
+        : artifactKeys,
+    ) ||
     !hasExactKeys(value.release, releaseKeys)
   ) {
     return refuse('artifact-malformed');
@@ -454,7 +478,7 @@ async function verifiedArtifact(
   const release = value.release;
   if (
     value.kind !== artifactKind ||
-    value.schemaVersion !== seasonBatchSchemaVersion ||
+    value.schemaVersion !== manifest.schemaVersion ||
     value.season !== manifest.season ||
     value.observedAt !== manifest.observedAt ||
     release.version !== batchVersion(manifest.observedAt) ||
@@ -625,6 +649,23 @@ export async function verifySeasonBatch(
   if ('ok' in manifest) return manifest;
   const artifact = await verifiedArtifact(input, manifest);
   if ('ok' in artifact) return artifact;
+  if (manifest.schemaVersion === 2) {
+    const reference = decodeCatalogReference(
+      (input.manifest as Json).identityCatalog,
+    );
+    const other = decodeCatalogReference(
+      (input.artifact as Json).identityCatalog,
+    );
+    if (
+      !reference ||
+      !other ||
+      canonicalJson(reference) !== canonicalJson(other)
+    )
+      return refuse('catalog-reference-mismatch');
+    if (!input.identityContext) return refuse('catalog-context-required');
+    if (!matchesCatalog(reference, input.identityContext, input.season))
+      return refuse('catalog-reference-mismatch');
+  }
   const { release } = artifact;
 
   if (Date.parse(manifest.observedAt) > input.now.getTime()) {
@@ -645,6 +686,11 @@ export async function verifySeasonBatch(
   );
   if (invalid !== null) return refuse(invalid);
   const source = artifact.source as ProviderSeasonSource;
+  if (
+    input.identityContext &&
+    !catalogProfilesMatch(source, input.identityContext)
+  )
+    return refuse('catalog-profile-mismatch');
   if (!sourceLabelsMatch(source, release)) {
     return refuse('artifact-inconsistent');
   }

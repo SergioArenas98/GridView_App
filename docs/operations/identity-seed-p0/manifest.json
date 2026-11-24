@@ -1,0 +1,108 @@
+{
+  "contentHash": "sha256:0a1b093a150605221606bb7dd65d7204d074ec4fef031537af100f5c0ab7de91",
+  "counts": {
+    "bindings": 95,
+    "circuits": 24,
+    "constructors": 11,
+    "drivers": 34,
+    "events": 23,
+    "evidence": 101,
+    "unresolved": 6
+  },
+  "datasetVersion": "2026.11.22.1",
+  "format": "gridview-identity-seed-manifest/1",
+  "snapshotByteLength": 405728,
+  "sources": [
+    {
+      "baseCommit": "685b57e25ca84db14a7bf91a3a816a007c9d35a8",
+      "documentVersion": null,
+      "exactCommit": "685b57e25ca84db14a7bf91a3a816a007c9d35a8",
+      "fileHash": "sha256:e474ce061e0710fca8cacea94bff6084022cc186a9a74ec0b82ee678073bef36",
+      "path": "content/registries/circuits.mock.json",
+      "semanticHash": "sha256:f86fb6c8700fdab2733b540fa8e3fe608b2228c52885f97cfb4a140a9b5b78f8",
+      "sourceStatus": "mock"
+    },
+    {
+      "baseCommit": "685b57e25ca84db14a7bf91a3a816a007c9d35a8",
+      "documentVersion": null,
+      "exactCommit": "685b57e25ca84db14a7bf91a3a816a007c9d35a8",
+      "fileHash": "sha256:a1c54c20f78a44da97e34cf2b9f7d7bd077af729b6af1772fe3575a6c2bd485c",
+      "path": "content/registries/constructors.mock.json",
+      "semanticHash": "sha256:da2b35b5a53b3c62be54ad4d63decd030b81f1b1b7d277d983bd539eb238e84b",
+      "sourceStatus": "mock"
+    },
+    {
+      "baseCommit": "685b57e25ca84db14a7bf91a3a816a007c9d35a8",
+      "documentVersion": null,
+      "exactCommit": "685b57e25ca84db14a7bf91a3a816a007c9d35a8",
+      "fileHash": "sha256:9b9158dbf22015a5664737a6d2577900a41d2b14e0e56f9951fbb036b51e840f",
+      "path": "content/registries/drivers.mock.json",
+      "semanticHash": "sha256:6a1c1d3ac9d7a98411070f65fbcf91c985833cf3f46aeebdc79572e5da830847",
+      "sourceStatus": "mock"
+    },
+    {
+      "baseCommit": "685b57e25ca84db14a7bf91a3a816a007c9d35a8",
+      "documentVersion": null,
+      "exactCommit": "685b57e25ca84db14a7bf91a3a816a007c9d35a8",
+      "fileHash": "sha256:9ee48d82c9f0ea3833d5079921ad855226efad9ff62dfd41c6d657031af3472a",
+      "path": "content/registries/events.development.json",
+      "semanticHash": "sha256:9859a09cdd78e63cfe455fbc1197dd26f3e84d55cfdf09e54fd000bb86270113",
+      "sourceStatus": "development"
+    },
+    {
+      "baseCommit": "685b57e25ca84db14a7bf91a3a816a007c9d35a8",
+      "documentVersion": null,
+      "exactCommit": "685b57e25ca84db14a7bf91a3a816a007c9d35a8",
+      "fileHash": "sha256:e9bca30b932b4988c17858a743a4536b832e3eabff5d90dd7888672e00f59576",
+      "path": "content/seasons/2026/constructor-entries.mock.json",
+      "semanticHash": "sha256:cc267fdb790e26c31e1532b4069201ca605dadd9a30a381e82b5d32adf0d4130",
+      "sourceStatus": "mock"
+    },
+    {
+      "baseCommit": "685b57e25ca84db14a7bf91a3a816a007c9d35a8",
+      "documentVersion": null,
+      "exactCommit": "685b57e25ca84db14a7bf91a3a816a007c9d35a8",
+      "fileHash": "sha256:a8090bd600fa19dd9f4551855a9110c6898280d6306e41f16815017001713e6f",
+      "path": "content/seasons/2026/driver-entries.mock.json",
+      "semanticHash": "sha256:b61bb6ec0acb0d89fd3cea9d48549d0a3ce26423d4eb6cb6b1b350f0e656c8fc",
+      "sourceStatus": "mock"
+    },
+    {
+      "baseCommit": "685b57e25ca84db14a7bf91a3a816a007c9d35a8",
+      "documentVersion": null,
+      "exactCommit": "685b57e25ca84db14a7bf91a3a816a007c9d35a8",
+      "fileHash": "sha256:54f3f33cc850fc5ee6d74b4837c913b285786d014c21c10c59cff66a5f191e3a",
+      "path": "content/seasons/2026/overrides.mock.json",
+      "semanticHash": "sha256:30422e844973f1d1721e04e0919152929279e8087f19097cdef7ba0b8893837d",
+      "sourceStatus": "mock"
+    },
+    {
+      "baseCommit": "685b57e25ca84db14a7bf91a3a816a007c9d35a8",
+      "documentVersion": 1,
+      "exactCommit": "685b57e25ca84db14a7bf91a3a816a007c9d35a8",
+      "fileHash": "sha256:1b192b425cee83b750fb2fa644c9877de7145e6946c5e61b01eb45a7ce4171c9",
+      "path": "content/seasons/2026/provider-evidence.development.json",
+      "semanticHash": "sha256:ba4c4b82e6fe300f037afad0ee10107d0dddde3cb5aea01c61235f0609b63061",
+      "sourceStatus": "development"
+    },
+    {
+      "baseCommit": "685b57e25ca84db14a7bf91a3a816a007c9d35a8",
+      "documentVersion": 2,
+      "exactCommit": "685b57e25ca84db14a7bf91a3a816a007c9d35a8",
+      "fileHash": "sha256:726d22ccff910c14b1d9c59fd6b73d9d5773de231032480ae97010e3809f0df5",
+      "path": "content/seasons/2026/provider-mappings.development.json",
+      "semanticHash": "sha256:26e406486f6eec2b968c17bdc34e9cda0127389a1bd40a7f9f76528633c2c7d4",
+      "sourceStatus": "development"
+    },
+    {
+      "baseCommit": "685b57e25ca84db14a7bf91a3a816a007c9d35a8",
+      "documentVersion": "2026.11.22.1",
+      "exactCommit": "685b57e25ca84db14a7bf91a3a816a007c9d35a8",
+      "fileHash": "sha256:3aaaa0c10642a72e08309cf90f821bbca0bbcf19d66cb71ec5e3aada6c391f76",
+      "path": "content/seasons/2026/season-metadata.development.json",
+      "semanticHash": "sha256:61d29280e87256043113d030fb41cf7df9d7aac6e7a483ef34231f8f976e25a8",
+      "sourceStatus": "development"
+    }
+  ],
+  "state": "prepared-unactivated"
+}

@@ -2,6 +2,12 @@ ENVIRONMENT=development
 PROVIDER_MODE=mock
 ADMIN_TOKEN=replace-with-disposable-local-token
 
+# Optional Jolpica egress for the coordinated runtime (default: direct).
+# This does not enable coordinated mode or provision a proxy. See README.md.
+# JOLPICA_TRANSPORT=direct
+# Proxy mode additionally requires JOLPICA_PROXY_ORIGIN (HTTPS origin only)
+# and JOLPICA_PROXY_TOKEN (a separate bearer secret, never committed).
+
 # Optional local failure simulation:
 # MOCK_PROVIDER_FAILURE=failure
 # MOCK_PROVIDER_FAILURE=rate_limited

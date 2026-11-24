@@ -61,6 +61,7 @@ import {
   type SeasonSnapshotMetadata,
 } from './season-assembly';
 import type { SeasonRelation } from './season-integrity';
+import type { SeasonIdentityContext } from './season-identity-closure';
 
 export const COORDINATED_PUBLICATION_OPERATION =
   'provider.coordination.publication';
@@ -79,6 +80,12 @@ export interface CoordinatedSeasonPublicationOptions {
   /** The guarded sequenced publication; there is no legacy alternative. */
   readonly commands: GuardedPublicationCommands;
   readonly logger: Logger;
+  /**
+   * U10: the run's single admitted inventory policy and pinned driver
+   * profiles. Omitted by legacy direct wiring, which therefore keeps the
+   * strict, pre-U10 assembly exactly.
+   */
+  readonly identity?: SeasonIdentityContext;
 }
 
 /** A generated candidate, ready for exactly one guarded publication. */
@@ -95,12 +102,14 @@ export type CandidatePreparation =
 export class CoordinatedSeasonPublication {
   private readonly commands: GuardedPublicationCommands;
   private readonly logger: Logger;
+  private readonly identity: SeasonIdentityContext | undefined;
   /** Candidates prepared here and not yet handed over. */
   private readonly prepared = new WeakSet<PreparedSeasonCandidate>();
 
   constructor(options: CoordinatedSeasonPublicationOptions) {
     this.commands = options.commands;
     this.logger = options.logger;
+    this.identity = options.identity;
   }
 
   /**
@@ -144,7 +153,7 @@ export class CoordinatedSeasonPublication {
     generatedAt: string,
     version: string,
   ): CandidatePreparation {
-    const assembly = assembleSeasonSource(run, metadata);
+    const assembly = assembleSeasonSource(run, metadata, this.identity);
     if (!assembly.complete) {
       this.logger.warn({
         operation: COORDINATED_PUBLICATION_OPERATION,

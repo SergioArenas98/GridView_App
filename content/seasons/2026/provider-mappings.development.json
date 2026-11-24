@@ -875,6 +875,14 @@
       },
       "gridviewId": "abu-dhabi-grand-prix",
       "evidence": "GridView_Provider_Evaluation.md 8.8 round 23 - Jolpica F1 (CC BY-NC-SA 4.0) https://api.jolpi.ca/ergast/f1/2026/races/?limit=100 at 2026-09-19T19:38:15Z, HTTP 200, 23 of 23, SHA-256 87dd8cad5d33eb67f97aa46de7d024715135b9429707de99f8966c498c8e0bed; official F1 2026 calendar round 23."
+    },
+    {
+      "source": "jolpica",
+      "entity": "driver",
+      "providerField": "driverId",
+      "providerValue": "rafael_camara",
+      "gridviewId": "rafael-camara",
+      "evidence": "GridView_Identity_Catalog_U11.md Addendum O: staging catalog R1 revision 8723d5ec-f779-4ac4-ae11-8b0cc8a41d54 (activated 2026-11-22); Jolpica F1 (CC BY-NC-SA 4.0) rafael_camara seen 2026-11-22 (Haas, #51, rounds 20-21); official F1 driver page and Sao Paulo result. Name: Rafael Câmara."
     }
   ]
 }

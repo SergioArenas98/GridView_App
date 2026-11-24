@@ -12,6 +12,24 @@ export type LogLevel = 'info' | 'warn' | 'error';
  * deliberate edit here, where its boundedness is documented alongside it.
  */
 export interface LogEvent {
+  identityComparison?: 'equal' | 'different' | 'unavailable';
+  /** Bounded aggregate U2 counters; no keys, evidence or names. */
+  identityCollected?: number;
+  identityDropped?: number;
+  identityPersisted?: number;
+  identityReplayed?: number;
+  identitySkippedCaptures?: number;
+  /** U9: bounded count of accounted unmapped inventory rows; no key or ID. */
+  identityUnresolvedCount?: number;
+  /** Closed U2 diagnostics; no evidence, identity key, name or raw error. */
+  identityDiscoveryReason?:
+    | 'unavailable'
+    | 'timeout'
+    | 'invalid-configuration'
+    | 'background-unavailable'
+    | 'extraction-skipped'
+    | 'collector-full'
+    | 'extraction-busy';
   level?: LogLevel;
   requestId?: string;
   operation: string;

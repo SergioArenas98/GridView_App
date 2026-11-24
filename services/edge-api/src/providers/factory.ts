@@ -1,4 +1,5 @@
 import type { Env, RuntimeConfig } from '../config/environment';
+import { resolveIdentityCatalogMode } from '../config/environment';
 import type { Clock } from '../runtime/clock';
 import type { FormulaOneProvider } from './formula-one-provider';
 import { MockFormulaOneProvider } from './mock/mock-provider';
@@ -8,6 +9,9 @@ export function resolveProvider(
   config: RuntimeConfig,
   clock: Clock,
 ): FormulaOneProvider | null {
+  // Runtime authority never enters the legacy bundled provider path.
+  if (resolveIdentityCatalogMode(env.IDENTITY_CATALOG_MODE) === 'runtime')
+    return null;
   if (env.__PROVIDER) return env.__PROVIDER;
   // Only `mock` builds a provider. Every other mode gets none: this seam is
   // the whole-season provider path, and no other mode may run through it.

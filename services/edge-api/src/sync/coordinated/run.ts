@@ -156,19 +156,28 @@ export async function runCoordinatedSync(
     };
   }
 
-  const outcome = await observeCoordinatedSeason(
-    {
-      season: request.season,
-      trigger: request.trigger,
-      ...(request.signal ? { signal: request.signal } : {}),
-    },
-    { ...dependencies, sequencer },
-  );
-  // The orchestration wrote the run's one line, and the attention line for a
-  // scheduled run. Its own composition cannot refuse past the gate above. It
-  // echoes the request's season and trigger, answered here as the run kind.
-  const { season, trigger, ...result } = outcome;
-  return { ...result, season, run: coordinatedRunKind(trigger) };
+  const discovery = dependencies.discovery;
+  try {
+    const outcome = await observeCoordinatedSeason(
+      {
+        season: request.season,
+        trigger: request.trigger,
+        ...(request.signal ? { signal: request.signal } : {}),
+      },
+      { ...dependencies, sequencer, discovery },
+    );
+    // The orchestration wrote the run's one line, and the attention line for a
+    // scheduled run. Its own composition cannot refuse past the gate above. It
+    // echoes the request's season and trigger, answered here as the run kind.
+    const { season, trigger, ...result } = outcome;
+    return { ...result, season, run: coordinatedRunKind(trigger) };
+  } finally {
+    try {
+      discovery?.finish();
+    } catch {
+      /* Background handoff cannot affect the run outcome. */
+    }
+  }
 }
 
 /**

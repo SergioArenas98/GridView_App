@@ -479,3 +479,11 @@ are relied on.)*
 - Cloudflare, *Workers limits* and *Workers Logs* (last updated 2026-10-12);
   Cloudflare blog, observability announcement of 2026-10-02 (custom alerts in
   beta), https://blog.cloudflare.com/one-observability-platform.
+
+## U0 amendment - 2026-11-13
+
+Status: Accepted architecture; implementation and activation pending separate approval.
+
+[ADR 0031](0031-identity-review-authority-and-catalog-cutover.md) adds catalog admission before identity-consuming provider work in D2's path. Every run pins one complete context; an unavailable/invalid required runtime catalog stops new ingestion before provider requests while published snapshots stay readable. Internal catalog provenance does not alter classification hashes, settling, cadence, quotas, holds or publication authority.
+
+[ADR 0030](0030-provider-driver-inventory-and-required-identity-closure.md) is the sole future driver-inventory exception. Automatic update requirements do not authorize automatic identity approval, catalog activation, partial publication or destructive correction. Catalog activation triggers no sync/publication. U0 is documentation only; this ADR's existing operating-model decision does not authorize U1-U11, infrastructure changes or any deployment through the U0 approval.

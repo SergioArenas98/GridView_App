@@ -106,6 +106,20 @@ function fallbackVars(): Partial<Env> {
   return { ...resolvedVars('staging'), PROVIDER_MODE: 'none' };
 }
 
+/**
+ * Identity U11 G5: staging commits runtime catalog authority, under which a
+ * v1 batch is refused (`runtime-batch-requires-u7`) before any later ingest
+ * stage, and the legacy provider path is never built. The guarded ingest
+ * pipeline's own properties below (mode admission, attribution version,
+ * guarded sequencer, staleness, no legacy fallback) are authority-independent
+ * and are exercised under explicit bundled authority, the authority of every
+ * environment without identity variables (production). The committed
+ * runtime behaviour is pinned separately ("under runtime authority").
+ */
+function bundled(vars: Partial<Env>): Partial<Env> {
+  return { ...vars, IDENTITY_CATALOG_MODE: 'bundled' };
+}
+
 function bindingNames(environment: Environment): string[] {
   return resolved(environment).durable_objects.bindings.map(
     (binding: { readonly name: string }) => binding.name,
@@ -118,9 +132,18 @@ describe('the resolved configuration', () => {
       ENVIRONMENT: 'staging',
       PROVIDER_MODE: 'coordinated',
       PUBLIC_BASE_URL: 'https://gridview-api-staging.sejuma18.workers.dev',
+      JOLPICA_TRANSPORT: 'proxy',
+      JOLPICA_PROXY_ORIGIN: 'https://gridviewjol.vps.webdock.cloud',
       SEASON_PUBLICATION_CUTOVER_CONTROL: 'activate:2026',
       SEASON_PUBLICATION_AUTHORITY: 'sequencer',
       SEASON_BATCH_INGEST: '2026',
+      // Identity U11: staging installation, runtime authority with read-only
+      // administration (G5) and optional-driver inventory (P3).
+      IDENTITY_INSTALLATION_ID: 'c45d60b8-a723-4b6e-8530-750592af2b94',
+      IDENTITY_CATALOG_MODE: 'runtime',
+      IDENTITY_DISCOVERY_MODE: 'off',
+      IDENTITY_ADMIN_MODE: 'read-only',
+      IDENTITY_INVENTORY_MODE: 'optional-drivers',
     });
     // Assigned only in staging and production (W1), never in development.
     expect(rawConfig.match(/^\s*SEASON_BATCH_INGEST\s*=/gm)).toHaveLength(2);
@@ -150,16 +173,16 @@ describe('the resolved configuration', () => {
     expect(resolved('').vars).toEqual({ ENVIRONMENT: 'development' });
   });
 
-  it('gives staging, production and the demonstration Worker an explicitly empty cron list and leaves development unscheduled', () => {
-    // Empty, not absent: `wrangler deploy` PUTs the schedules only when
-    // `crons` is set, so `[]` removes the live `17 3 * * *` and an absent key
-    // would silently keep it.
+  it('schedules production hourly (AU-7), leaves staging and the demonstration Worker explicitly empty and development unscheduled', () => {
+    // Set, not absent: `wrangler deploy` PUTs the schedules only when
+    // `crons` is set, so an absent key would silently keep a live one.
     expect(resolved('staging').triggers).toEqual({ crons: [] });
     expect(rawConfig).toMatch(/^\[env\.staging\.triggers\]\ncrons = \[\]\n/m);
-    expect(rawConfig).not.toMatch(/^\s*crons\s*=\s*\[\s*"/m);
-    // Production (W1) schedules nothing, explicitly too. Development declared
-    // no trigger before and still does not.
-    expect(resolved('production').triggers).toEqual({ crons: [] });
+    expect(rawConfig.match(/^\s*crons\s*=\s*\[\s*"/gm)).toHaveLength(1);
+    // Development declared no trigger before and still does not.
+    expect(resolved('production').triggers).toEqual({
+      crons: ['17 * * * *'],
+    });
     // The demonstration Worker ran hourly for AU-3 until it passed and is
     // unscheduled again.
     expect(resolved('e2e').triggers).toEqual({ crons: [] });
@@ -176,18 +199,29 @@ describe('the resolved configuration', () => {
       'PROVIDER_RATE_LIMITER',
       'SEASON_PUBLICATION_SEQUENCER',
       'RECONCILIATION_LEDGER',
+      'IDENTITY_CATALOG',
     ]);
     expect(Object.keys(resolved('staging').exports)).toEqual([
       'ProviderRateLimiter',
       'SeasonPublicationSequencer',
       'ReconciliationLedger',
+      'IdentityCatalog',
     ]);
     expect(bindingNames('')).toEqual(['PROVIDER_RATE_LIMITER']);
+    // U11 P4: production binds the ledger and the catalog too.
     expect(bindingNames('production')).toEqual([
       'PROVIDER_RATE_LIMITER',
       'SEASON_PUBLICATION_SEQUENCER',
+      'RECONCILIATION_LEDGER',
+      'IDENTITY_CATALOG',
     ]);
-    for (const environment of ['', 'production'] as const) {
+    expect(Object.keys(resolved('production').exports)).toEqual([
+      'ProviderRateLimiter',
+      'SeasonPublicationSequencer',
+      'ReconciliationLedger',
+      'IdentityCatalog',
+    ]);
+    for (const environment of [''] as const) {
       expect(Object.keys(resolved(environment).exports), environment).toEqual([
         'ProviderRateLimiter',
         'SeasonPublicationSequencer',
@@ -250,9 +284,18 @@ function workerEnv(
   context: SequencedContext,
   logger = new CapturingLogger(),
 ): Env {
+  // These cases bind no catalog. Committed staging selects the optional-driver
+  // inventory (U11 P3), which requires a catalog binding and is otherwise a
+  // configuration error (pinned in staging-identity-catalog.test.ts); without
+  // a binding the cases below keep exercising the strict policy unchanged.
+  const unbound = Object.fromEntries(
+    Object.entries(vars).filter(([name]) => name !== 'IDENTITY_INVENTORY_MODE'),
+  ) as Partial<Env>;
   return {
-    ...vars,
+    ...unbound,
     ADMIN_TOKEN,
+    // Disposable fixture only; these cases issue no upstream requests.
+    JOLPICA_PROXY_TOKEN: 'offline-proxy-test-token',
     __LOCAL_STORAGE: context.storage,
     __SEASON_PUBLICATION_SEQUENCER: context.port,
     __CLOCK: context.clock,
@@ -357,11 +400,29 @@ describe("staging's fallback variables cannot publish mock data", () => {
 
     await worker.scheduled?.(
       {} as ScheduledController,
-      workerEnv({ ...fallbackVars(), PROVIDER_MODE: 'mock' }, context),
+      workerEnv(bundled({ ...fallbackVars(), PROVIDER_MODE: 'mock' }), context),
     );
 
     expect(spies.mockFetch).toHaveBeenCalledTimes(1);
     expect(spies.sequencedPublish).toHaveBeenCalledTimes(1);
+  });
+
+  it('under the committed runtime authority, even mock mode builds no legacy provider and publishes nothing', async () => {
+    const context = await ingestContext();
+    const before = await context.coordinator.readAuthority(SEASON);
+    const spies = publicationSpies();
+    const env = workerEnv(
+      { ...fallbackVars(), PROVIDER_MODE: 'mock' },
+      context,
+    );
+    expect(env.IDENTITY_CATALOG_MODE).toBe('runtime');
+
+    await worker.scheduled?.({} as ScheduledController, env);
+
+    expect(spies.mockFetch).not.toHaveBeenCalled();
+    expect(spies.sequencedPublish).not.toHaveBeenCalled();
+    expect(spies.legacyPublish).not.toHaveBeenCalled();
+    expect(await context.coordinator.readAuthority(SEASON)).toEqual(before);
   });
 });
 
@@ -397,11 +458,13 @@ describe('the committed production ingest needs its genesis control', () => {
       const context = await ingestContext();
       context.storage.writeLog.length = 0;
       const spies = publicationSpies();
+      // The control check is authority-independent; under the committed
+      // runtime authority an unbound catalog would refuse first.
       const env = workerEnv(
-        {
+        bundled({
           ...resolvedVars('production'),
           SEASON_PUBLICATION_CUTOVER_CONTROL: control,
-        },
+        }),
         context,
       );
       expect(env.SEASON_BATCH_INGEST).toBe('2026');
@@ -427,12 +490,51 @@ describe('the committed production ingest needs its genesis control', () => {
 });
 
 describe('the committed staging ingest under the coordinated mode', () => {
-  it('refuses a valid, authenticated submission as provider-mode-coordinated, before reading it', async () => {
+  it('under runtime authority, refuses a v1 submission as runtime-batch-requires-u7, before reading it', async () => {
     const context = await ingestContext();
     const before = await context.coordinator.readAuthority(SEASON);
     context.storage.writeLog.length = 0;
     const spies = publicationSpies();
     const env = workerEnv(resolvedVars('staging'), context);
+    expect(env.IDENTITY_CATALOG_MODE).toBe('runtime');
+
+    const answer = await ingestResponse(
+      env,
+      adminPost(INGEST, submissionFor(batch, SEED_VERSION)),
+    );
+
+    expect(answer).toEqual({
+      status: 409,
+      data: {
+        outcome: 'refused',
+        stage: 'admission',
+        reason: 'runtime-batch-requires-u7',
+      },
+      bodyUsed: false,
+    });
+    expect(spies.guardedPublish).not.toHaveBeenCalled();
+    expect(context.storage.writeLog).toEqual([]);
+    expect(await context.coordinator.readAuthority(SEASON)).toEqual(before);
+  });
+
+  it('under runtime authority, the fallback to none still refuses a v1 submission', async () => {
+    const context = await ingestContext();
+    const spies = publicationSpies();
+    const answer = await ingestResponse(
+      workerEnv(fallbackVars(), context),
+      adminPost(INGEST, submissionFor(batch, SEED_VERSION)),
+    );
+    expect(answer.status).toBe(409);
+    expect(answer.data).toMatchObject({ reason: 'runtime-batch-requires-u7' });
+    expect(spies.guardedPublish).not.toHaveBeenCalled();
+  });
+
+  it('refuses a valid, authenticated submission as provider-mode-coordinated, before reading it', async () => {
+    const context = await ingestContext();
+    const before = await context.coordinator.readAuthority(SEASON);
+    context.storage.writeLog.length = 0;
+    const spies = publicationSpies();
+    const env = workerEnv(bundled(resolvedVars('staging')), context);
     expect(env.PROVIDER_MODE).toBe('coordinated');
 
     const answer = await ingestResponse(
@@ -457,7 +559,7 @@ describe('the committed staging ingest under the coordinated mode', () => {
   it('is sensitive: the fallback to none admits the same submission', async () => {
     const context = await ingestContext();
     const answer = await ingestResponse(
-      workerEnv(fallbackVars(), context),
+      workerEnv(bundled(fallbackVars()), context),
       adminPost(INGEST, submissionFor(batch, SEED_VERSION)),
     );
     expect(answer.status).toBe(200);
@@ -516,7 +618,7 @@ describe('the forward fallback to manual batches, the ledger kept', () => {
     logger = new CapturingLogger(),
   ): Env {
     return {
-      ...workerEnv(fallbackVars(), context, logger),
+      ...workerEnv(bundled(fallbackVars()), context, logger),
       RECONCILIATION_LEDGER: ledger,
     };
   }
@@ -610,7 +712,7 @@ describe("the staging ingest stays authenticated and guarded (committed token ch
   it('publishes a reviewed batch through the guarded sequencer only, and refuses its resend as stale', async () => {
     const context = await ingestContext();
     const spies = publicationSpies();
-    const env = workerEnv(fallbackVars(), context);
+    const env = workerEnv(bundled(fallbackVars()), context);
 
     const first = await ingestResponse(
       env,
@@ -656,7 +758,7 @@ describe("the staging ingest stays authenticated and guarded (committed token ch
     // fewer classified rounds than the batch, as mock round 12 does against a
     // real capture. D14 refuses any rollback that drops a classified round.
     const context = await ingestContext();
-    const env = workerEnv(fallbackVars(), context);
+    const env = workerEnv(bundled(fallbackVars()), context);
     const first = await ingestResponse(
       env,
       adminPost(INGEST, submissionFor(batch, SEED_VERSION)),
@@ -686,7 +788,7 @@ describe("the staging ingest stays authenticated and guarded (committed token ch
     context.storage.writeLog.length = 0;
     const spies = publicationSpies();
     const env = {
-      ...workerEnv(fallbackVars(), context),
+      ...workerEnv(bundled(fallbackVars()), context),
       __SEASON_PUBLICATION_SEQUENCER: undefined,
     } as Env;
 

@@ -1,5 +1,67 @@
 # GridView 2.0.0 — production release plan
 
+## Release readiness checked 2026-11-24
+
+This dated record supersedes older status statements below; the release
+procedures and acceptance criteria still apply. The owner accepted the verified
+AU-7 production rollout and deferred qualifying-session support to a future
+release. No additional product feature is required for this release.
+
+| Check | Observed result |
+|---|---|
+| Repository integration | PR #112 merged into #111 at `b0a8730981d60316b2c15bde583c5f0c43429290`; PR #111 merged into `master` at `627ff584ac67030b8398d1783da7ae12c348cfee`. Both are two-parent merge commits. The integrated Flutter, Edge API, canonical goldens, secret scan, proxy and three CodeQL analysis jobs passed. The first Edge attempt had one Miniflare `ECONNRESET`; all 15 recovery tests passed locally and the retried job passed. The CodeQL policy check still identified the known regex alert, explicitly scheduled for the next change. All five catalog/evidence/build pins remain ancestors of `master`; no squash or rebase occurred. |
+| Production | First complete automatic release `pm1-0000000000002-7d45ceb6` verified 2026-11-23; owner accepted AU-7 on 2026-11-24. Public production monitor passed on 2026-11-24. No Cloudflare deployment was performed in this preparation. |
+| Monitor | Workflow active on default branch `master`, hourly `47 * * * *` UTC; production heartbeat required, simulation off for scheduled runs. [Production manual check 45469755797](https://github.com/SergioArenas98/GridView_App/actions/runs/45469755797) passed at 19:23:54 UTC, heartbeat `2026-11-24T19:17:40.331Z`. [Production manual drill 45469761810](https://github.com/SergioArenas98/GridView_App/actions/runs/45469761810) failed only with `simulated-failure` at 19:24:04 UTC; owner email receipt is pending. No scheduled production run or scheduled failure-email receipt has yet been observed. The earlier AU-6 staging email receipt remains historical evidence only. |
+| Staging | Deliberately unscheduled after its successful 2026-11-23 tick; heartbeat `2026-11-23T18:49:27.098Z`. It is stale against AU-8's fresh-staging requirement, rather than an unexplained production failure. That requirement needs an explicit disposition before R5; do not silently waive it or redeploy staging. |
+| Android identity | Application ID and namespace `com.sejuma.gridview`; repository version `2.0.0+8`; compile/target API 36. No Android configuration, Firebase identity, AdMob identity or certificate changed. |
+| Signing | Main checkout's ignored `android/key.properties` loads the existing upload keystore. Its SHA-256 certificate matches `98:D7:CC:74:16:2E:50:A3:DB:C5:8E:A0:41:8A:E8:09:C4:1A:D1:0C:6F:09:50:79:93:4E:D6:E7:09:D4:6D:5E`. No credential was copied into Git. |
+| Versioning | Highest Play versionCode **7** was last confirmed on 2026-10-20. Reconfirm the current maximum across all bundles/tracks before producing the signed publishing artifact. Keep 8 only if it is still greater. |
+| Privacy policy | `https://gridview.netlify.app` serves the repository's **5 November 2026** policy, identical except line endings; SHA-256 `7ef8979f7849d287434bae03a328900b68e80ed2cb6156e1eb6e9feb33c918bb`. PR #82 is merged. Publication is no longer a blocker. The outstanding decisions recorded in `privacy-self-assessment.md` are not settled by publication. |
+| Public Play declaration | The IE/English listing shows **Updated on Apr 19, 2025** and **Contains ads**. Its public Data safety page now lists Approximate location, App interactions, Crash logs, Diagnostics and Device or other IDs, with Analytics and Fraud prevention/security/compliance purposes, and **No data shared**. It no longer says no data is collected. Console draft/review status is not observable here. Reconcile these live answers against `data-safety.md` state T: the documented legacy ads sharing/advertising purposes and FCM Developer communications purpose are absent from this public page. |
+| Local Flutter checks | 132 existing release, legacy, preferences and release-convergence tests passed. Existing AAB verifier and A0 recorder: 21 tests passed. The opt-in AU-8 Worker/app gate passed all 22 tests at `87d382c`, with its Flutter child reporting one executed test, no skip. |
+| AAB rehearsal | Clean worktree at `b0a8730`, Flutter 3.44.0, **profile**, production flavor and committed production defines; 43,787,062 bytes, SHA-256 `f128fb59a127bd28dfbde0c39fed5994bf7536c2a49f634a6570f65be51c7ab4`. Existing verifier passes permissions, production-only endpoint, all 18 native libraries' 16 KB alignment and bundletool-generated APK alignment. Identity is correct except expected profile `debuggable=true`; unsigned as expected. This is not A2 or an uploadable release artifact. No mapping upload occurred. |
+| CodeQL alert #7 | `instant.ts` uses a backward scan at both trailing-zero trimming sites. All 99 focused instant tests, type checking, targeted lint and formatting pass, including 100,000-digit zero runs. No timestamp precision limit or calendar behavior changed. Remote CodeQL verification is still due on the fix PR. |
+
+Evidence is retained locally under
+`~/.gridview/evidence/play-release-2026-11-24/`; the existing verifier is in
+`~/.gridview/evidence/release-candidate-offline-kit-2026-11-04/`.
+
+The shortest remaining publishing path uses the existing gates:
+
+1. Integrate the regex fix after its remote checks, then record A0 on
+   the exact merged release commit, including the AU-8 Worker/app gate and
+   the disposition of intentionally stopped staging.
+2. Confirm the current Play versionCode maximum and the actual Console state
+   of Data safety. Settle the remaining owner privacy decisions and submit
+   **state T**, keeping Ads **Yes** while 1.x is distributed. No external
+   privacy review is planned; use the existing self-assessment and declarations.
+3. Run A2 from a fresh checkout of that commit with the ignored signing files,
+   including its authorized Crashlytics mapping upload, and require every
+   existing `verify-aab.py` check to pass. Retain AAB, mapping and hashes.
+4. Complete R4 and submit the verified AAB directly to the existing Production
+   track for the planned **20%** rollout (R5). Run R3's Play-delivered upgrade
+   check before increasing to 100%; no testing track or new application.
+
+R4 release-note drafts for review (race results only):
+
+- **English:** GridView has a refreshed interface with the race calendar,
+  Grand Prix details, drivers, teams, circuits and championship standings.
+  Race results update automatically, and saved data remains available offline.
+  This version contains no ads.
+- **Español:** GridView estrena una interfaz renovada con el calendario,
+  detalles de los Grandes Premios, pilotos, equipos, circuitos y clasificaciones
+  del campeonato. Los resultados de carrera se actualizan automáticamente y
+  los datos guardados siguen disponibles sin conexión. Esta versión no
+  contiene anuncios.
+
+Approved placeholder media and deferred qualifying are not release blockers.
+Portable encrypted backup copies remain independent custody work: staging R1,
+staging R2 and production P0 still need GnuPG encryption/decrypt verification
+and removable-media evidence. All four source hashes match the existing
+custody script, their DPAPI copies exist, and the staging R0 GnuPG copy exists.
+Do not record the missing copies as completed or wait for them to prepare
+the Android release locally.
+
 Prepared 2026-10-20 at `6aefcbf`. This plan takes the reconstruction from its
 current state (staging only, production never deployed) to a staged Google Play
 production rollout of **2.0.0 (versionCode 8)** as an update to the existing

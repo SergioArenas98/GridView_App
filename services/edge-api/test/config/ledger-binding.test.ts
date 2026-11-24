@@ -72,6 +72,13 @@ const ledgerBindings = [
   },
   { name: 'RECONCILIATION_LEDGER', class_name: 'ReconciliationLedger' },
 ];
+// Identity U11: staging alone adds the proposed identity catalog class and its
+// binding after the ledger. The demonstration Worker keeps the ledger set.
+const stagingExports = { ...ledgerExports, IdentityCatalog: sqlite };
+const stagingBindings = [
+  ...ledgerBindings,
+  { name: 'IDENTITY_CATALOG', class_name: 'IdentityCatalog' },
+];
 
 function bindingNames(config: ReturnType<typeof resolved>): string[] {
   return config.durable_objects.bindings.map(
@@ -79,11 +86,11 @@ function bindingNames(config: ReturnType<typeof resolved>): string[] {
   );
 }
 
-describe('the committed configuration declares the reconciliation ledger in staging and the demonstration Worker only, as Wrangler resolves it', () => {
-  it('resolves staging to the three registrations and bindings, the ledger included, with no migration', () => {
+describe('the committed configuration declares the reconciliation ledger in staging, production and the demonstration Worker, as Wrangler resolves it', () => {
+  it('resolves staging to the four registrations and bindings, the ledger and identity catalog included, with no migration', () => {
     const staging = resolved('staging');
-    expect(staging.exports).toEqual(ledgerExports);
-    expect(staging.durable_objects.bindings).toEqual(ledgerBindings);
+    expect(staging.exports).toEqual(stagingExports);
+    expect(staging.durable_objects.bindings).toEqual(stagingBindings);
     expect(staging.migrations).toEqual([]);
   });
 
@@ -93,47 +100,67 @@ describe('the committed configuration declares the reconciliation ledger in stag
     // exactly as declared above it; dropping one would need a deletion.
     const restated = Object.fromEntries(
       Object.entries(resolved('staging').exports).filter(
-        ([name]) => name !== 'ReconciliationLedger',
+        ([name]) =>
+          name !== 'ReconciliationLedger' && name !== 'IdentityCatalog',
       ),
     );
     expect(restated).toEqual(resolved('').exports);
     expect(resolved('').exports).toEqual(topLevelExports);
   });
 
-  it('gives only staging and the demonstration Worker an exports table of their own', () => {
+  it('gives only staging, production (U11 P4) and the demonstration Worker an exports table of their own', () => {
     expect(
       [...rawConfig.matchAll(/^\[env\.([a-z0-9]+)\.exports/gm)].map(
         (match) => match[1],
       ),
-    ).toEqual(['staging', 'staging', 'staging', 'e2e', 'e2e', 'e2e']);
+    ).toEqual([
+      'staging',
+      'staging',
+      'staging',
+      'staging',
+      'production',
+      'production',
+      'production',
+      'production',
+      'e2e',
+      'e2e',
+      'e2e',
+    ]);
   });
 
-  it('leaves development without the season binding, and production with the same two as before', () => {
+  it('leaves development without the season binding, and gives production its ledger and catalog (U11 P4)', () => {
     const development = resolved('');
     expect(development.exports).toEqual(topLevelExports);
     expect(bindingNames(development)).toEqual(['PROVIDER_RATE_LIMITER']);
     expect(development.migrations).toEqual([]);
-    // Production genesis (release plan W1) binds the sequencer too, and
-    // inherits the top-level exports; its ledger is gate AU-7's change.
+    // Production genesis (release plan W1) binds the sequencer too. U11 P4
+    // adds the ledger (the season lease of its runtime batch ingest) and the
+    // identity catalog, declaring all four exports itself.
     const production = resolved('production');
-    expect(production.exports).toEqual(topLevelExports);
+    expect(Object.keys(production.exports)).toEqual([
+      ...Object.keys(topLevelExports),
+      'ReconciliationLedger',
+      'IdentityCatalog',
+    ]);
     expect(bindingNames(production)).toEqual([
       'PROVIDER_RATE_LIMITER',
       'SEASON_PUBLICATION_SEQUENCER',
+      'RECONCILIATION_LEDGER',
+      'IDENTITY_CATALOG',
     ]);
     expect(production.migrations).toEqual([]);
   });
 
-  it('selects coordinated in staging, keeps production on none, and schedules nothing anywhere', () => {
+  it('selects coordinated in staging and production (AU-7), each with its hourly schedule', () => {
     const staging = resolved('staging');
     const production = resolved('production');
     expect(staging.vars.PROVIDER_MODE).toBe('coordinated');
-    expect(production.vars.PROVIDER_MODE).toBe('none');
+    expect(production.vars.PROVIDER_MODE).toBe('coordinated');
     expect(JSON.stringify(production.vars)).not.toMatch(/RECONCILIATION/);
     expect(resolved('').vars).toEqual({ ENVIRONMENT: 'development' });
-    // Explicitly empty: the hourly schedule is AU-4 step 3, its own change.
+    // Production is the proxy egress's only scheduled user.
     expect(staging.triggers.crons).toEqual([]);
-    expect(production.triggers.crons).toEqual([]);
+    expect(production.triggers.crons).toEqual(['17 * * * *']);
     expect(resolved('e2e').triggers.crons).toEqual([]);
     expect(resolved('').triggers.crons).toBeUndefined();
   });
@@ -155,13 +182,8 @@ describe('the committed configuration declares the reconciliation ledger in stag
           countingNamespace(),
         ]),
       ) as Pick<Env, 'RECONCILIATION_LEDGER'>;
-    for (const environment of ['', 'production'] as const) {
-      expect(
-        resolveReconciliationLedger(boundEnv(environment)),
-        environment,
-      ).toBeNull();
-    }
-    for (const environment of ['staging', 'e2e'] as const) {
+    expect(resolveReconciliationLedger(boundEnv('')), 'development').toBeNull();
+    for (const environment of ['staging', 'production', 'e2e'] as const) {
       expect(
         resolveReconciliationLedger(boundEnv(environment)),
         environment,
@@ -209,15 +231,39 @@ function committedVars(environment: 'staging' | 'production'): Partial<Env> {
 }
 
 /**
- * The variables of each `none` deployment the ledger can sit beside:
- * production as committed, and staging's documented fallback to manual
- * batches, which keeps the ledger binding and changes only the mode.
+ * The variables of each `none` deployment the ledger can sit beside: the
+ * documented fallback to manual batches of production (how it was born, and
+ * what re-admits its ingest) and of staging, each keeping the ledger binding
+ * and changing only the mode.
  */
 const noneDeployments: readonly [string, () => Partial<Env>][] = [
-  ['production', () => committedVars('production')],
+  [
+    "production's fallback to manual batches",
+    // No catalog is bound here, so the optional-driver inventory (U11 P4,
+    // which requires one) is left out; the ledger behaviour is unchanged.
+    // The proxy variables stay, so their secret does too.
+    () => ({
+      ...Object.fromEntries(
+        Object.entries(committedVars('production')).filter(
+          ([name]) => name !== 'IDENTITY_INVENTORY_MODE',
+        ),
+      ),
+      PROVIDER_MODE: 'none',
+      JOLPICA_PROXY_TOKEN: 'disposable-proxy-test-token',
+    }),
+  ],
   [
     "staging's fallback to manual batches",
-    () => ({ ...committedVars('staging'), PROVIDER_MODE: 'none' }),
+    // No catalog is bound here, so the optional-driver inventory (U11 P3,
+    // which requires one) is left out; the ledger behaviour is unchanged.
+    () => ({
+      ...Object.fromEntries(
+        Object.entries(committedVars('staging')).filter(
+          ([name]) => name !== 'IDENTITY_INVENTORY_MODE',
+        ),
+      ),
+      PROVIDER_MODE: 'none',
+    }),
   ],
 ];
 
@@ -293,9 +339,8 @@ afterEach(() => {
 });
 
 /**
- * A `none` Worker beside a bound ledger: production should a later change
- * bind one before its mode, and staging after falling back to manual batches.
- * Neither may reach it.
+ * A `none` Worker beside a bound ledger: production or staging after falling
+ * back to manual batches. Neither may reach it.
  */
 describe('the none provider mode with a bound RECONCILIATION_LEDGER namespace', () => {
   it.each(noneDeployments)(

@@ -25,6 +25,10 @@
  */
 
 import dataSources from '../../../../content/attribution/data-sources.json';
+import { verifyCatalogFile } from '../identity/catalog-file';
+import { decodeCatalogReference } from '../../src/ingest/catalog-reference';
+import { verifySeasonBatch } from '../../src/ingest/batch-verification';
+import { attributionCredit } from '../../src/ingest/service';
 import type { ProviderSeasonSource } from '../../src/providers/formula-one-provider';
 import { compareUtf8 } from '../../src/publication/canonical/ordering';
 import { generateSnapshotSet } from '../../src/snapshots/generator';
@@ -62,6 +66,7 @@ export type FixtureOrigin = (typeof fixtureOrigins)[number];
 
 /** Every reason a batch is refused. Closed; safe to print. */
 export const fixtureConversionFailures = [
+  'catalog-reference-mismatch',
   'manifest-digest-mismatch',
   'manifest-malformed',
   'manifest-not-canonical',
@@ -198,6 +203,7 @@ function isCanonical(value: unknown, bytes: Uint8Array): boolean {
 // --- Manifest -------------------------------------------------------------
 
 export interface BatchManifest {
+  readonly schemaVersion: 1 | 2;
   readonly season: number;
   readonly gitCommit: string;
   readonly observedAt: string;
@@ -286,11 +292,26 @@ function decodeDocumentDigests(
 
 /** Decodes the manifest's known shape exactly; anything else is `null`. */
 function decodeManifest(value: unknown): BatchManifest | 'dirty' | null {
-  if (!hasExactKeys(value, manifestKeys)) return null;
+  if (
+    !isRecord(value) ||
+    !hasExactKeys(
+      value,
+      value.schemaVersion === 2
+        ? [...manifestKeys, 'identityCatalog']
+        : manifestKeys,
+    )
+  )
+    return null;
+  if (
+    value.schemaVersion === 2 &&
+    !decodeCatalogReference(value.identityCatalog)
+  )
+    return null;
   const { review, generator, capture, artifact, summary, attribution } = value;
   if (
     value.kind !== manifestKind ||
-    value.schemaVersion !== seasonBatchSchemaVersion ||
+    (value.schemaVersion !== seasonBatchSchemaVersion &&
+      value.schemaVersion !== 2) ||
     !Number.isSafeInteger(value.season) ||
     value.use !== 'review-only' ||
     !hasExactKeys(review, ['status']) ||
@@ -302,7 +323,7 @@ function decodeManifest(value: unknown): BatchManifest | 'dirty' | null {
       'treeClean',
     ]) ||
     generator.name !== 'gridview-season-batch' ||
-    generator.schemaVersion !== seasonBatchSchemaVersion ||
+    generator.schemaVersion !== value.schemaVersion ||
     typeof generator.gitCommit !== 'string' ||
     !gitCommitPattern.test(generator.gitCommit) ||
     typeof generator.treeClean !== 'boolean' ||
@@ -342,6 +363,7 @@ function decodeManifest(value: unknown): BatchManifest | 'dirty' | null {
   // A batch generated from a modified tree is not a reviewable provenance.
   if (generator.treeClean !== true) return 'dirty';
   return {
+    schemaVersion: value.schemaVersion as 1 | 2,
     season: value.season as number,
     gitCommit: generator.gitCommit,
     observedAt: capture.observedAt,
@@ -601,6 +623,8 @@ function creditedSources(
 // --- Conversion -----------------------------------------------------------
 
 export interface FixtureConversionInput {
+  readonly catalogExport?: Uint8Array;
+  readonly installationId?: string;
   readonly manifestBytes: Uint8Array;
   readonly artifactBytes: Uint8Array;
   /** The SHA-256 of the manifest the operator reviewed, lower-case hex. */
@@ -728,7 +752,12 @@ export async function convertSeasonBatch(
   }
   const artifact = decodeJson(input.artifactBytes);
   if (
-    !hasExactKeys(artifact, artifactKeys) ||
+    !hasExactKeys(
+      artifact,
+      manifest.schemaVersion === 2
+        ? [...artifactKeys, 'identityCatalog']
+        : artifactKeys,
+    ) ||
     !hasExactKeys(artifact.release, releaseKeys) ||
     !isRecord(artifact.source)
   ) {
@@ -741,7 +770,7 @@ export async function convertSeasonBatch(
   if (documents === null) return refuse('artifact-malformed');
   if (
     artifact.kind !== artifactKind ||
-    artifact.schemaVersion !== seasonBatchSchemaVersion ||
+    artifact.schemaVersion !== manifest.schemaVersion ||
     artifact.season !== manifest.season ||
     artifact.observedAt !== manifest.observedAt ||
     artifact.release.version !== manifest.version ||
@@ -753,6 +782,33 @@ export async function convertSeasonBatch(
   if (documentProblem !== null) return documentProblem;
   const sourceProblem = sourceRefusal(artifact.source, manifest, documents);
   if (sourceProblem !== null) return sourceProblem;
+  if (manifest.schemaVersion === 2) {
+    try {
+      if (!input.catalogExport) return refuse('catalog-reference-mismatch');
+      const catalog = await verifyCatalogFile(input.catalogExport, {
+        installationId: input.installationId ?? '',
+        season: manifest.season,
+      });
+      if (
+        canonicalJson(catalog.reference) !==
+        canonicalJson(artifact.identityCatalog)
+      )
+        return refuse('catalog-reference-mismatch');
+      const verified = await verifySeasonBatch({
+        manifest: decodeJson(input.manifestBytes),
+        artifact,
+        identityContext: catalog.context,
+        reviewedManifestSha256: input.expectedManifestSha256,
+        season: manifest.season,
+        now: new Date(manifest.observedAt),
+        metadata: catalog.context.seasonMetadata,
+        attribution: attributionCredit(dataSources)?.attribution ?? null,
+      });
+      if (!verified.ok) return refuse('catalog-reference-mismatch');
+    } catch {
+      return refuse('catalog-reference-mismatch');
+    }
+  }
 
   const sources = creditedSources(origin, manifest);
   if (sources === null) return refuse('attribution-mismatch');

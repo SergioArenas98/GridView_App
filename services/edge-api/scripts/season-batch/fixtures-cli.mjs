@@ -189,6 +189,10 @@ async function main() {
     ...input,
     expectedManifestSha256: parsed.manifestSha256,
     origin: parsed.origin,
+    catalogExport: parsed.catalogExport
+      ? await readBatchFile(parsed.catalogExport, 2 * 1024 * 1024)
+      : undefined,
+    installationId: parsed.installationId,
   });
   if (!result.ok) refuse(result.failure);
 

@@ -41,6 +41,19 @@
  */
 
 import type { RaceResult } from '../../contract/types';
+import type { DiscoverySession } from '../../identity/discovery/persist';
+import {
+  assertIdentityRunContext,
+  CatalogAdmissionError,
+  type IdentityRunContext,
+  type IdentityContextConfiguration,
+} from '../../identity/catalog/run-context';
+import { bundledIdentityContent } from '../../identity/catalog/bundled-context';
+import { pinnedDriverProfiles } from '../../identity/catalog/closure-profiles';
+import {
+  inventoryPolicyForContext,
+  strictInventoryPolicy,
+} from '../../identity/inventory/model';
 import type { Logger } from '../../logging/logger';
 import type { PublicationAuthority } from '../../publication/authority';
 import type { GuardedPublicationCommands } from '../../publication/commands';
@@ -109,6 +122,11 @@ export type CoordinatedUnavailableReason =
   (typeof coordinatedUnavailableReasons)[number];
 
 export interface CoordinatedRuntimeDependencies {
+  readonly identity?: IdentityContextConfiguration;
+  readonly discovery?: DiscoverySession;
+  readonly discoveryFactory?: (
+    context: IdentityRunContext,
+  ) => Promise<DiscoverySession | null>;
   /** The limiter client, or `null` when no limiter is bound. */
   readonly limiter: ProviderRateLimiterClient | null;
   /** The resolved publication authority mode. */
@@ -176,9 +194,20 @@ export function missingCoordinatedDependencies(
   return missing;
 }
 
-export function composeCoordinatedRuntime(
+export function composeCoordinatedTransport(
   dependencies: CoordinatedRuntimeDependencies,
-): CoordinatedRuntimeComposition {
+):
+  | {
+      kind: 'unavailable';
+      reasons: readonly [
+        CoordinatedUnavailableReason,
+        ...CoordinatedUnavailableReason[],
+      ];
+    }
+  | {
+      kind: 'composed';
+      runtime: Pick<CoordinatedRuntime, 'client' | 'limiter'>;
+    } {
   const [first, ...rest] = missingCoordinatedDependencies(dependencies);
   if (first !== undefined) {
     return { kind: 'unavailable', reasons: [first, ...rest] };
@@ -202,12 +231,101 @@ export function composeCoordinatedRuntime(
     logger,
     now,
   });
+  return { kind: 'composed' as const, runtime: { client, limiter: pacer } };
+}
+
+export function composeCoordinatedRuntime(
+  dependencies: CoordinatedRuntimeDependencies,
+  context?: IdentityRunContext,
+): CoordinatedRuntimeComposition {
+  const transport = composeCoordinatedTransport(dependencies);
+  if (transport.kind === 'unavailable') return transport;
+  if (context) assertIdentityRunContext(context);
+  if (context?.authority === 'runtime' && context.pin === null)
+    throw new CatalogAdmissionError('catalog-invalid');
+  if (
+    dependencies.identity?.mode === 'runtime' &&
+    context?.authority !== 'runtime'
+  )
+    throw new CatalogAdmissionError('catalog-invalid');
+  if (
+    context?.authority === 'runtime' &&
+    dependencies.identity?.installationId !== context.installationId
+  )
+    throw new CatalogAdmissionError('catalog-invalid');
+  if (
+    !context &&
+    dependencies.identity &&
+    dependencies.identity.mode !== 'bundled'
+  )
+    throw new CatalogAdmissionError('catalog-invalid');
+  // One inventory policy for the whole run, derived from the admitted context
+  // and handed to the participants port, the coordinator and assembly, so
+  // each validates against the trusted value rather than a payload's own
+  // claim. The configuration that selected it and the context whose durable
+  // pin recorded it must agree exactly: a context admitted under another
+  // policy, a legacy direct composition under the optional policy, or any
+  // unknown value is refused, never mapped onto strict.
+  const configured = dependencies.identity?.inventoryMode ?? 'strict';
+  if (configured !== 'strict' && configured !== 'optional-drivers')
+    throw new CatalogAdmissionError('catalog-invalid');
+  if (configured === 'optional-drivers' && !context)
+    throw new CatalogAdmissionError('catalog-invalid');
+  let inventoryPolicy = strictInventoryPolicy;
+  try {
+    if (context) inventoryPolicy = inventoryPolicyForContext(context);
+  } catch {
+    throw new CatalogAdmissionError('catalog-invalid');
+  }
+  if (inventoryPolicy.mode !== configured)
+    throw new CatalogAdmissionError('catalog-invalid');
+  const { client, limiter: pacer } = transport.runtime;
+  const { guarded, ledger, logger } = dependencies;
+  if (!guarded || !ledger)
+    throw new TypeError('Coordinated dependencies are incomplete.');
+  // Legacy direct composition is explicitly bundled. Operational executions
+  // supply the complete admitted context after lease/recovery/planning.
+  const bundled = context ? null : bundledIdentityContent();
+  const registry = context?.registry ?? bundled!.registry;
+  const participants = context?.participants ?? bundled!.participants;
+  const circuits = context?.circuits ?? bundled!.circuits;
+  const eventNames =
+    context?.events ?? new Map(bundled!.events.map((e) => [e.id, e.name]));
   const ports: JolpicaResourcePorts = Object.freeze({
-    calendar: new JolpicaCalendarPort({ client, logger }),
-    circuits: new JolpicaCircuitsPort({ client, logger }),
-    participants: new JolpicaParticipantsPort({ client, logger }),
-    results: new JolpicaResultsPort({ client, logger }),
-    standings: new JolpicaStandingsPort({ client, logger }),
+    calendar: new JolpicaCalendarPort({
+      registry,
+      eventNames,
+      client,
+      logger,
+      discovery: dependencies.discovery,
+    }),
+    circuits: new JolpicaCircuitsPort({
+      registry,
+      circuits,
+      client,
+      logger,
+      discovery: dependencies.discovery,
+    }),
+    participants: new JolpicaParticipantsPort({
+      registry,
+      participants,
+      client,
+      logger,
+      discovery: dependencies.discovery,
+      inventoryPolicy,
+    }),
+    results: new JolpicaResultsPort({
+      registry,
+      client,
+      logger,
+      discovery: dependencies.discovery,
+    }),
+    standings: new JolpicaStandingsPort({
+      registry,
+      client,
+      logger,
+      discovery: dependencies.discovery,
+    }),
   });
   const port = new JolpicaResourcePort(ports);
   const answers = recordLateAnswers(port);
@@ -215,10 +333,21 @@ export function composeCoordinatedRuntime(
     ports: [answers.port],
     logger,
     maxConcurrentOperations: 1,
+    inventoryPolicy,
   });
   const publication = new CoordinatedSeasonPublication({
     commands: guarded,
     logger,
+    // U10: assembly closes required identities over this run's pinned
+    // profiles under the same policy. Legacy direct composition has none.
+    ...(context
+      ? {
+          identity: Object.freeze({
+            policy: inventoryPolicy,
+            profiles: pinnedDriverProfiles(context),
+          }),
+        }
+      : {}),
   });
 
   return {

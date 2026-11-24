@@ -71,7 +71,8 @@ describe('season-batch generator: a complete capture', () => {
       season: 2026,
       observedAt: OBSERVED_AT,
       version: '20260316120000000-batch',
-      documentCount: 103,
+      // 103 + the driver document for the reviewed rafael-camara (P0).
+      documentCount: 104,
       calendarRounds: 23,
       classifiedRounds: [1, 2, 3],
       participationFacts: 24,

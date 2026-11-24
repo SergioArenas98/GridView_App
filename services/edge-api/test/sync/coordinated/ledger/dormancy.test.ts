@@ -17,9 +17,11 @@ import * as entryPoint from '../../../../src/index';
 import { ReconciliationLedger } from '../../../../src/sync/coordinated/ledger';
 import { resolveReconciliationLedger } from '../../../../src/sync/coordinated/ledger-port';
 import {
+  AUTOMATIC_ENVIRONMENTS,
   demonstrationSection,
   environmentSection,
   withoutAutomatic,
+  withoutEnvironments,
 } from '../../../config/demonstration-environment';
 
 const edgeApiRoot = join(
@@ -49,7 +51,7 @@ function declarations(): string {
     .join('\n');
 }
 
-describe('the reconciliation ledger is exported, resolvable and bound only by the demonstration Worker and staging', () => {
+describe('the reconciliation ledger is exported, resolvable and bound only by the demonstration Worker, staging and production', () => {
   it('is a named export of the Worker entry point', () => {
     expect(entryPoint.ReconciliationLedger).toBe(ReconciliationLedger);
     expect(source('src/index.ts')).toContain(
@@ -57,9 +59,11 @@ describe('the reconciliation ledger is exported, resolvable and bound only by th
     );
   });
 
-  it('is declared by no exports entry, migration or binding outside the demonstration Worker and staging', () => {
+  it('is declared by no exports entry, migration or binding outside the demonstration Worker, staging and production', () => {
     const declared = declarations();
-    const elsewhere = withoutAutomatic(declared);
+    // U11 P4: production binds the ledger for the season lease of its
+    // runtime batch ingest, and for its automatic runs from gate AU-7.
+    const elsewhere = withoutEnvironments(declared, AUTOMATIC_ENVIRONMENTS);
     expect(elsewhere).not.toMatch(/ReconciliationLedger/);
     expect(elsewhere).not.toMatch(/RECONCILIATION/i);
     expect(declared).not.toMatch(/\[\[migrations\]\]/);
@@ -70,7 +74,7 @@ describe('the reconciliation ledger is exported, resolvable and bound only by th
     ]);
     // The demonstration Worker and staging each register the class and bind
     // it once.
-    for (const name of ['e2e', 'staging']) {
+    for (const name of ['e2e', 'staging', 'production']) {
       const section = environmentSection(declared, name);
       expect(section.match(/ReconciliationLedger/g), name).toHaveLength(2);
       expect(section, name).toContain(
@@ -82,15 +86,16 @@ describe('the reconciliation ledger is exported, resolvable and bound only by th
     }
   });
 
-  it('keeps every committed provider mode but the demonstration Worker and staging off the coordinated path, and schedules nothing', () => {
+  it('keeps every committed provider mode but the demonstration Worker, staging and production off the coordinated path, and schedules only staging and production', () => {
     const declared = declarations();
     // Staging: `mock`, then `none` from the season-batch ingest
-    // configuration, then `coordinated` at gate AU-4. Production stays off.
+    // configuration, then `coordinated` at gate AU-4. Production: `none`,
+    // then `coordinated` at gate AU-7.
     expect(declared).toMatch(
       /\[env\.staging\.vars\]\nENVIRONMENT = "staging"\nPROVIDER_MODE = "coordinated"\n/,
     );
     expect(declared).toMatch(
-      /\[env\.production\.vars\][\s\S]*PROVIDER_MODE = "none"/,
+      /\[env\.production\.vars\][\s\S]*PROVIDER_MODE = "coordinated"/,
     );
     expect(withoutAutomatic(declared)).not.toMatch(
       /PROVIDER_MODE = "coordinated"/,
@@ -98,11 +103,14 @@ describe('the reconciliation ledger is exported, resolvable and bound only by th
     expect(demonstrationSection(declared)).toContain(
       'PROVIDER_MODE = "coordinated"',
     );
-    // The staging cron was removed (an explicit empty list) by the same
-    // configuration; no environment schedules a run, the demonstration Worker
-    // included since AU-3 passed.
-    expect(declared).toContain('crons = []');
-    expect(declared).not.toMatch(/crons = \[\s*"/);
+    // Only production (minute 17) schedules the hourly run; staging is
+    // unscheduled since its 2026-11-23 verification, and the demonstration
+    // Worker since AU-3 passed.
+    expect(declared.match(/crons = \[\s*"/g)).toHaveLength(1);
+    expect(environmentSection(declared, 'staging')).toContain('crons = []');
+    expect(environmentSection(declared, 'production')).toContain(
+      'crons = ["17 * * * *"]',
+    );
     expect(demonstrationSection(declared)).toContain('crons = []');
   });
 
@@ -121,6 +129,8 @@ describe('the reconciliation ledger is exported, resolvable and bound only by th
       source('src/index.ts').match(/resolveReconciliationLedger\([^)]*\)/g),
     ).toEqual([
       'resolveReconciliationLedger(env)',
+      'resolveReconciliationLedger(env)',
+      // U7 runtime batch admission requires this same lease, never a second ledger.
       'resolveReconciliationLedger(env)',
     ]);
   });

@@ -46,6 +46,8 @@ export interface GuardedPublicationCommands {
 }
 
 export interface GuardedPublicationOptions {
+  /** Optional private receipt persistence, after prepare and before candidate writes. Failure cancels. */
+  readonly onPrepared?: (candidateVersion: string) => Promise<void>;
   /**
    * The active release the caller reviewed its candidate against. When given,
    * a season whose authoritative active version is any other is refused as

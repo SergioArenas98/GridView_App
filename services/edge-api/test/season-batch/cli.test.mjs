@@ -106,6 +106,35 @@ describe('season-batch CLI: arguments', () => {
   ])('refuses %j', (argv, reason) => {
     expect(parseArguments(argv)).toEqual({ ok: false, reason });
   });
+
+  // U10: the private batch-v2 inventory policy is an explicit flag only.
+  it('parses an explicit --inventory-policy once and never infers it', () => {
+    const base = ['--capture', 'c', '--out', 'o'];
+    expect(
+      parseArguments([
+        ...base,
+        '--inventory-policy',
+        'optional-driver-inventory-v1',
+      ]),
+    ).toMatchObject({
+      ok: true,
+      inventoryPolicy: 'optional-driver-inventory-v1',
+    });
+    expect(
+      parseArguments([
+        ...base,
+        '--inventory-policy',
+        'strict-v1',
+        '--inventory-policy',
+        'strict-v1',
+      ]),
+    ).toEqual({ ok: false, reason: 'repeated-argument' });
+    expect(parseArguments([...base, '--inventory-policy'])).toEqual({
+      ok: false,
+      reason: 'missing-value',
+    });
+    expect(parseArguments(base)).not.toHaveProperty('inventoryPolicy');
+  });
 });
 
 describe('season-batch CLI: paths', () => {
@@ -208,7 +237,8 @@ describe('season-batch CLI: end to end, offline', () => {
     expect(status, JSON.stringify(report)).toBe(0);
     expect(report.summary).toMatchObject({
       season: 2026,
-      documentCount: 103,
+      // 103 + the driver document for the reviewed rafael-camara (P0).
+      documentCount: 104,
       classifiedRounds: [1, 2, 3],
     });
 

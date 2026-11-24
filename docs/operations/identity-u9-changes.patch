@@ -1,0 +1,3104 @@
+# U9-only changes, applicable to the pre-U9 working tree recorded in
+# identity-u9-baseline.json (not to HEAD: earlier units are uncommitted).
+diff --git a/services/edge-api/src/config/environment.ts b/services/edge-api/src/config/environment.ts
+index 54c7921..f3b8191 100644
+--- a/services/edge-api/src/config/environment.ts
++++ b/services/edge-api/src/config/environment.ts
+@@ -35,6 +35,37 @@ export function resolveIdentityCatalogMode(
+   );
+ }
+ 
++/**
++ * U9: the closed inventory-policy vocabulary (design §11.1). Parsed strictly:
++ * absent is `strict`, and anything outside the two values is a configuration
++ * error, never a permissive default.
++ */
++export type IdentityInventoryMode = 'strict' | 'optional-drivers';
++export function resolveIdentityInventoryMode(
++  value?: string,
++): IdentityInventoryMode {
++  if (value === undefined || value === 'strict') return 'strict';
++  if (value === 'optional-drivers') return value;
++  throw new ConfigurationError(
++    'IDENTITY_INVENTORY_MODE must be strict or optional-drivers.',
++  );
++}
++
++/**
++ * The inventory mode an **operational** run may select. Before U10 supplies
++ * required-reference closure and the separately approved phase-3 gate,
++ * `optional-drivers` is recognised vocabulary but unavailable: selecting it is
++ * a bounded configuration refusal, so no deployed configuration can enable a
++ * partial or incomplete season publication. Optional normalization is
++ * exercised only through explicit isolated internal test contexts.
++ */
++export function resolveOperationalInventoryMode(value?: string): 'strict' {
++  if (resolveIdentityInventoryMode(value) === 'strict') return 'strict';
++  throw new ConfigurationError(
++    'IDENTITY_INVENTORY_MODE=optional-drivers is unavailable until required identity closure is approved.',
++  );
++}
++
+ interface TestOnlyBindings {
+   __LOCAL_STORAGE?: import('../storage/types').SnapshotStorage;
+   __PROVIDER_RATE_LIMITER?: import('../providers/http/provider-rate-limiter').ProviderRateLimiterClient;
+@@ -87,6 +118,8 @@ interface TestOnlyBindings {
+ export interface Env extends TestOnlyBindings {
+   /** U6 explicit selection; absence keeps reviewed bundled authority. */
+   IDENTITY_CATALOG_MODE?: string;
++  /** U9 whole-run inventory policy; absence is strict. Optional is refused before U10. */
++  IDENTITY_INVENTORY_MODE?: string;
+   /** U7 local-only opt-in must exactly name this installation; unset in all environments. */
+   IDENTITY_BATCH_V1_COMPATIBILITY_INSTALLATION_ID?: string;
+   /** U2 shadow capture only; absence is off. No catalog authority switch. */
+diff --git a/services/edge-api/src/identity/catalog/run-context.ts b/services/edge-api/src/identity/catalog/run-context.ts
+index 9a848d1..06268d5 100644
+--- a/services/edge-api/src/identity/catalog/run-context.ts
++++ b/services/edge-api/src/identity/catalog/run-context.ts
+@@ -2,6 +2,7 @@ import dataSources from '../../../../../content/attribution/data-sources.json';
+ import type { Env } from '../../config/environment';
+ import {
+   resolveIdentityCatalogMode,
++  resolveOperationalInventoryMode,
+   type IdentityCatalogMode,
+ } from '../../config/environment';
+ export {
+@@ -57,17 +58,27 @@ export interface IdentityContextConfiguration {
+   readonly mode: IdentityCatalogMode;
+   readonly installationId?: string;
+   readonly namespace?: IdentityNamespace;
++  /**
++   * U9: the operational inventory policy. Only `strict` is representable
++   * before U10; `optional-drivers` is refused while parsing configuration.
++   * Absent (direct test wiring) also means strict.
++   */
++  readonly inventoryMode?: 'strict';
+ }
+ export function identityConfiguration(
+   env: Pick<
+     Env,
+-    'IDENTITY_CATALOG_MODE' | 'IDENTITY_INSTALLATION_ID' | 'IDENTITY_CATALOG'
++    | 'IDENTITY_CATALOG_MODE'
++    | 'IDENTITY_INSTALLATION_ID'
++    | 'IDENTITY_CATALOG'
++    | 'IDENTITY_INVENTORY_MODE'
+   >,
+ ): IdentityContextConfiguration {
+   return Object.freeze({
+     mode: resolveIdentityCatalogMode(env.IDENTITY_CATALOG_MODE),
+     installationId: env.IDENTITY_INSTALLATION_ID,
+     namespace: env.IDENTITY_CATALOG,
++    inventoryMode: resolveOperationalInventoryMode(env.IDENTITY_INVENTORY_MODE),
+   });
+ }
+ export interface IdentityRunContext {
+diff --git a/services/edge-api/src/logging/logger.ts b/services/edge-api/src/logging/logger.ts
+index d65fa79..5ae8691 100644
+--- a/services/edge-api/src/logging/logger.ts
++++ b/services/edge-api/src/logging/logger.ts
+@@ -19,6 +19,8 @@ export interface LogEvent {
+   identityPersisted?: number;
+   identityReplayed?: number;
+   identitySkippedCaptures?: number;
++  /** U9: bounded count of accounted unmapped inventory rows; no key or ID. */
++  identityUnresolvedCount?: number;
+   /** Closed U2 diagnostics; no evidence, identity key, name or raw error. */
+   identityDiscoveryReason?:
+     | 'unavailable'
+diff --git a/services/edge-api/src/providers/coordination/coordinator.ts b/services/edge-api/src/providers/coordination/coordinator.ts
+index dbce341..3fbaad2 100644
+--- a/services/edge-api/src/providers/coordination/coordinator.ts
++++ b/services/edge-api/src/providers/coordination/coordinator.ts
+@@ -67,7 +67,16 @@ import {
+   type NormalizedTransportAttempt,
+   type ProviderResourcePort,
+ } from './port';
+-import { validateCoordinatedPayload } from './payload-contract';
++import {
++  validateCoordinatedPayload,
++  validateParticipantsInventory,
++} from './payload-contract';
++import {
++  readDriverInventoryPolicy,
++  recomputeDriverInventoryDigest,
++  type DriverInventoryPolicy,
++} from '../../identity/inventory/model';
++import { ownDataProperty } from '../../runtime/own-property';
+ import {
+   jobCategoryForResource,
+   payloadMatchesResource,
+@@ -121,6 +130,13 @@ export interface MultiSourceCoordinatorOptions {
+    */
+   readonly provisionalSessionEndBound?: unknown;
+   readonly maxConcurrentOperations?: number;
++  /**
++   * U9: the inventory policy of the **whole run**, supplied by the trusted run
++   * context. Omitted means `strict`, the pre-U9 behaviour. A payload's own
++   * policy or catalog claim is never authority; it is compared against this.
++   * A malformed value is a wiring error, never a permissive default.
++   */
++  readonly inventoryPolicy?: unknown;
+ }
+ 
+ export class CoordinatorConfigurationError extends Error {
+@@ -152,7 +168,16 @@ interface Operation {
+  * attempt it appeared to carry, so nothing about it may be counted.
+  */
+ type OperationResult =
+-  | { readonly kind: 'answered'; readonly outcome: NormalizedProviderOutcome }
++  | {
++      readonly kind: 'answered';
++      readonly outcome: NormalizedProviderOutcome;
++      /**
++       * U9: the accounting digest recomputed from the **detached** snapshot on
++       * arrival (hashing is asynchronous; attribution is not). `null` in
++       * strict mode, for non-participants payloads, or when uncomputable.
++       */
++      readonly inventoryDigest: string | null;
++    }
+   | { readonly kind: 'malformed' }
+   | { readonly kind: 'threw' }
+   | { readonly kind: 'not-executed' };
+@@ -172,6 +197,7 @@ export class MultiSourceCoordinator {
+   private readonly logger: Logger;
+   private readonly eligibility: ProvisionalEligibility;
+   private readonly maxConcurrent: number;
++  private readonly inventoryPolicy: DriverInventoryPolicy;
+ 
+   constructor(options: MultiSourceCoordinatorOptions) {
+     const ports = new Map<CoordinatedSourceId, ProviderResourcePort>();
+@@ -203,6 +229,13 @@ export class MultiSourceCoordinator {
+       );
+     }
+     this.maxConcurrent = requested;
++    const inventoryPolicy = readDriverInventoryPolicy(options.inventoryPolicy);
++    if (inventoryPolicy === null) {
++      throw new CoordinatorConfigurationError(
++        'The inventory policy must be a supported closed policy.',
++      );
++    }
++    this.inventoryPolicy = inventoryPolicy;
+   }
+ 
+   async coordinate(request: CoordinationRequest): Promise<CoordinationRun> {
+@@ -368,7 +401,15 @@ export class MultiSourceCoordinator {
+       const outcome = readProviderOutcome(answer);
+       return outcome === null
+         ? { kind: 'malformed' }
+-        : { kind: 'answered', outcome };
++        : {
++            kind: 'answered',
++            outcome,
++            // Strict mode never awaits here, so its scheduling is unchanged.
++            inventoryDigest:
++              this.inventoryPolicy.mode === 'strict'
++                ? null
++                : await this.inventoryDigestOf(outcome),
++          };
+     } catch {
+       // The thrown value is never read, logged or re-raised: it can embed a
+       // URL, a provider body or a stack.
+@@ -376,6 +417,37 @@ export class MultiSourceCoordinator {
+     }
+   }
+ 
++  /**
++   * U9: recomputes the accounting digest of an optional-mode participants
++   * candidate from the coordinator's own detached snapshot. The adapter's
++   * object is unreachable here, so the value digested is the value later
++   * validated, stored and selected. Never throws.
++   */
++  private async inventoryDigestOf(
++    outcome: NormalizedProviderOutcome,
++  ): Promise<string | null> {
++    if (
++      this.inventoryPolicy.mode !== 'optional-drivers' ||
++      outcome.outcome !== 'candidate' ||
++      !outcome.payload.detached
++    )
++      return null;
++    const payload = outcome.payload.payload;
++    try {
++      if (
++        typeof payload !== 'object' ||
++        payload === null ||
++        ownDataProperty(payload, 'kind')?.value !== 'season-participants'
++      )
++        return null;
++      return await recomputeDriverInventoryDigest(
++        ownDataProperty(payload, 'driverInventory')?.value,
++      );
++    } catch {
++      return null;
++    }
++  }
++
+   /**
+    * Converts raw results into contributions and accounting, deterministically.
+    *
+@@ -504,7 +576,19 @@ export class MultiSourceCoordinator {
+     // generation would publish verbatim. The same detached snapshot binding
+     // just accepted is what is validated, and what is stored if it passes, so
+     // nothing between the two is a different value.
+-    if (validateCoordinatedPayload(candidate).length > 0) {
++    if (
++      validateCoordinatedPayload(candidate, 'payload', this.inventoryPolicy)
++        .length > 0 ||
++      // U9: in optional mode the private accounting is checked against the
++      // trusted run policy and the digest recomputed on arrival. Forged,
++      // inconsistent or incomplete accounting is the same bounded
++      // `invalid-payload` as any other contract failure.
++      validateParticipantsInventory(
++        candidate,
++        this.inventoryPolicy,
++        result.inventoryDigest,
++      ).length > 0
++    ) {
+       // The established reason for exactly this case: "the response was read
+       // but did not validate against the contract". The request happened and is
+       // already registered, so the contribution stays attempted and the run's
+@@ -696,6 +780,7 @@ function notAttempted(
+   return {
+     kind: 'answered',
+     outcome: { outcome: 'not-attempted', reason, retryAt: null },
++    inventoryDigest: null,
+   };
+ }
+ 
+diff --git a/services/edge-api/src/providers/coordination/payload-contract.ts b/services/edge-api/src/providers/coordination/payload-contract.ts
+index 68846d2..2dc22fb 100644
+--- a/services/edge-api/src/providers/coordination/payload-contract.ts
++++ b/services/edge-api/src/providers/coordination/payload-contract.ts
+@@ -42,6 +42,14 @@ import {
+   type ContractIssue,
+   type Field,
+ } from '../../contract/normalized';
++import {
++  strictInventoryPolicy,
++  type DriverInventoryPolicy,
++} from '../../identity/inventory/model';
++import {
++  validateDriverInventoryPayload,
++  type DriverInventoryProblem,
++} from '../../identity/inventory/validate';
+ import type { CoordinatedPayload } from './resource';
+ 
+ /**
+@@ -83,14 +91,29 @@ function roundCheck(nullable: boolean): Check {
+  */
+ const standingsRound: Field = { key: 'round', check: roundCheck(true) };
+ 
++const participantsFields: readonly Field[] = [
++  { key: 'drivers', check: arrayOf(driverCheck) },
++  { key: 'constructors', check: arrayOf(constructorCheck) },
++  { key: 'driverEntries', check: arrayOf(driverSeasonEntryCheck) },
++  { key: 'constructorEntries', check: arrayOf(constructorSeasonEntryCheck) },
++];
++
++/**
++ * U9: the explicit optional-driver participants wrapper. A separate closed
++ * shape, not a permissive superset: it *requires* `driverInventory` (an absent
++ * key is `missing`), and the strict wrapper above still refuses it as an
++ * undeclared key. The accounting's own closed rules are checked by
++ * `validateParticipantsInventory`, which needs the trusted run policy and the
++ * coordinator's recomputed digest.
++ */
++const inventoryParticipants = wrapper(...participantsFields, {
++  key: 'driverInventory',
++  check: kindOnly,
++});
++
+ const checks: Record<CoordinatedPayload['kind'], Check> = {
+   'season-calendar': wrapper({ key: 'events', check: arrayOf(grandPrixCheck) }),
+-  'season-participants': wrapper(
+-    { key: 'drivers', check: arrayOf(driverCheck) },
+-    { key: 'constructors', check: arrayOf(constructorCheck) },
+-    { key: 'driverEntries', check: arrayOf(driverSeasonEntryCheck) },
+-    { key: 'constructorEntries', check: arrayOf(constructorSeasonEntryCheck) },
+-  ),
++  'season-participants': wrapper(...participantsFields),
+   'season-circuits': wrapper({ key: 'circuits', check: arrayOf(circuitCheck) }),
+   'driver-standings': wrapper(standingsRound, {
+     key: 'standings',
+@@ -118,7 +141,33 @@ const checks: Record<CoordinatedPayload['kind'], Check> = {
+ export function validateCoordinatedPayload(
+   payload: CoordinatedPayload,
+   path = 'payload',
++  inventoryPolicy: DriverInventoryPolicy = strictInventoryPolicy,
+ ): readonly ContractIssue[] {
+-  const check = checks[payload.kind];
++  const check =
++    payload.kind === 'season-participants' &&
++    inventoryPolicy.mode === 'optional-drivers'
++      ? inventoryParticipants
++      : checks[payload.kind];
+   return collect(path, (collector) => check(payload, path, collector));
+ }
++
++/**
++ * U9: the closed accounting rules of an optional-mode participants payload.
++ *
++ * `inventoryPolicy` comes from the trusted run context, never from the
++ * payload. `recomputedDigest` is computed by the coordinator from the same
++ * detached snapshot. Strict policy, and every other payload kind, answer no
++ * problems here; their closed wrappers above are the whole rule.
++ */
++export function validateParticipantsInventory(
++  payload: CoordinatedPayload,
++  inventoryPolicy: DriverInventoryPolicy,
++  recomputedDigest: string | null,
++): readonly DriverInventoryProblem[] {
++  if (payload.kind !== 'season-participants') return [];
++  return validateDriverInventoryPayload(
++    payload,
++    inventoryPolicy,
++    recomputedDigest,
++  );
++}
+diff --git a/services/edge-api/src/providers/coordination/resource.ts b/services/edge-api/src/providers/coordination/resource.ts
+index c18e8a8..4e7afe0 100644
+--- a/services/edge-api/src/providers/coordination/resource.ts
++++ b/services/edge-api/src/providers/coordination/resource.ts
+@@ -27,6 +27,7 @@ import type {
+   Session,
+ } from '../../contract/types';
+ import type { SyncJobCategory } from '../../storage/types';
++import type { DriverInventory } from '../../identity/inventory/model';
+ 
+ /**
+  * The closed set of logical resources.
+@@ -103,6 +104,29 @@ export type CoordinatedResource =
+  */
+ export type CoordinatedStandingsRound = number | null;
+ 
++/**
++ * The strict (pre-U9, default) participants contribution: a closed wrapper of
++ * exactly these collections. It never carries inventory accounting.
++ */
++export interface SeasonParticipantsPayload {
++  readonly kind: 'season-participants';
++  readonly drivers: readonly Driver[];
++  readonly constructors: readonly Constructor[];
++  readonly driverEntries: readonly DriverSeasonEntry[];
++  readonly constructorEntries: readonly ConstructorSeasonEntry[];
++}
++
++/**
++ * U9: the explicit optional-driver contribution. Valid **only** when the run's
++ * trusted policy is `optional-drivers`; the strict closed wrapper refuses it.
++ * `drivers` holds complete verified profiles only, `driverEntries` stays
++ * empty, and `driverInventory` is private coordination metadata that must be
++ * removed before any public source is constructed (U10 owns that boundary).
++ */
++export interface InventorySeasonParticipantsPayload extends SeasonParticipantsPayload {
++  readonly driverInventory: DriverInventory;
++}
++
+ /**
+  * The normalized payload a source contributes.
+  *
+@@ -112,13 +136,8 @@ export type CoordinatedStandingsRound = number | null;
+  */
+ export type CoordinatedPayload =
+   | { readonly kind: 'season-calendar'; readonly events: readonly GrandPrix[] }
+-  | {
+-      readonly kind: 'season-participants';
+-      readonly drivers: readonly Driver[];
+-      readonly constructors: readonly Constructor[];
+-      readonly driverEntries: readonly DriverSeasonEntry[];
+-      readonly constructorEntries: readonly ConstructorSeasonEntry[];
+-    }
++  | SeasonParticipantsPayload
++  | InventorySeasonParticipantsPayload
+   | { readonly kind: 'season-circuits'; readonly circuits: readonly Circuit[] }
+   | {
+       readonly kind: 'driver-standings';
+diff --git a/services/edge-api/src/providers/coordination/season-assembly.ts b/services/edge-api/src/providers/coordination/season-assembly.ts
+index 827eb25..034fece 100644
+--- a/services/edge-api/src/providers/coordination/season-assembly.ts
++++ b/services/edge-api/src/providers/coordination/season-assembly.ts
+@@ -322,6 +322,21 @@ export function assembleSeasonSource(
+     };
+   }
+ 
++  // U9 boundary: an optional-driver participants payload carries private
++  // inventory accounting and omits unresolved rows from `drivers`. Assembling
++  // it safely needs U10's required-reference closure and the explicit removal
++  // of that accounting before any public source exists. Until then it is
++  // refused here, explicitly, rather than silently published as a season
++  // whose driver set nobody has closed.
++  if (Object.hasOwn(participants, 'driverInventory')) {
++    return {
++      complete: false,
++      gap: 'inconsistent-references',
++      missing: [],
++      relations: [],
++    };
++  }
++
+   const schedules = new Map<number, readonly Session[]>();
+   for (const entry of selectedPayloads(run, 'event-schedule')) {
+     if (entry.payload.kind !== 'event-schedule') continue;
+diff --git a/services/edge-api/src/providers/jolpica/participants-normalizer.ts b/services/edge-api/src/providers/jolpica/participants-normalizer.ts
+index 4b74225..195b6ba 100644
+--- a/services/edge-api/src/providers/jolpica/participants-normalizer.ts
++++ b/services/edge-api/src/providers/jolpica/participants-normalizer.ts
+@@ -34,6 +34,11 @@ import type {
+ } from '../mappings';
+ import { maxReportedMappingFailures } from './calendar-normalizer';
+ import type { CuratedParticipants } from './curated-participants';
++import type { IdentityHash } from '../../identity/discovery/model';
++import {
++  normalizeDriverInventory,
++  type DriverInventoryNormalization,
++} from '../../identity/inventory/normalize';
+ import type { DecodedConstructor, DecodedDriver } from './participants-payload';
+ 
+ /** Why a resolved collection still could not be normalized. Closed, log-safe. */
+@@ -145,6 +150,39 @@ export function normalizeSeasonDrivers(
+   );
+ }
+ 
++/**
++ * U9: the separate optional-driver inventory normalization (design §8.3).
++ *
++ * Used **only** when the run's trusted policy is `optional-drivers`; strict
++ * mode keeps `normalizeSeasonDrivers` above unchanged. The rows are the
++ * complete strictly decoded inventory. Only the registry's exact `unmapped`
++ * answer becomes an accounted unresolved observation; every other mapping,
++ * profile or duplicate problem fails the whole inventory.
++ */
++export function normalizeSeasonDriverInventory(
++  rows: readonly DecodedDriver[],
++  season: number,
++  registry: ProviderMappingRegistry,
++  curated: CuratedParticipants,
++  catalogHash: IdentityHash,
++): Promise<DriverInventoryNormalization<ProviderMappingFailure>> {
++  return normalizeDriverInventory({
++    providerValues: rows.map((row) => row.driverId),
++    season,
++    resolve: (providerValue) =>
++      registry.resolve({
++        season,
++        source: 'jolpica',
++        entity: 'driver',
++        providerField: 'driverId',
++        providerValue,
++      }),
++    driverById: (id) => curated.driverById(id),
++    catalogHash,
++    maxReportedFailures: maxReportedMappingFailures,
++  });
++}
++
+ /** Resolves and normalizes one complete constructor identity list. */
+ export function normalizeSeasonConstructors(
+   rows: readonly DecodedConstructor[],
+diff --git a/services/edge-api/src/providers/jolpica/participants-port.ts b/services/edge-api/src/providers/jolpica/participants-port.ts
+index 8a1baf7..30f5de4 100644
+--- a/services/edge-api/src/providers/jolpica/participants-port.ts
++++ b/services/edge-api/src/providers/jolpica/participants-port.ts
+@@ -32,6 +32,15 @@
+  * requests by cancellation or the limiter is `interrupted`, carrying the
+  * drivers attempt that really happened.
+  *
++ * **U9 optional-driver inventory.** Under an explicit `optional-drivers`
++ * policy - which no operational composition selects before U10 - a strictly
++ * decoded driver page whose only identity problem is one or more exact
++ * `unmapped` keys is accounted privately (`driverInventory`) instead of ending
++ * the resource, so the constructors request **is** made: one more actual
++ * attempt than strict mode's early exit, reported exactly as it happened.
++ * Transport, decoding, pagination, every other mapping/profile/duplicate
++ * problem and every constructor problem still fail the whole resource.
++ *
+  * **What it produces** is the identity inventory plus one
+  * `ConstructorSeasonEntry` per constructor, with `driverEntries` empty (ADR
+  * 0026 D10, D11; see `participants-normalizer.ts`). It makes no race-result
+@@ -60,9 +69,17 @@ import {
+ import {
+   providerMappingFailureEvent,
+   providerMappingRegistry,
++  type ProviderMappingFailure,
+   type ProviderMappingRegistry,
+ } from '../mappings';
+ import type { ProviderAttemptOutcome } from '../provider-metrics';
++import type { Driver } from '../../contract/types';
++import {
++  readDriverInventoryPolicy,
++  type DriverInventory,
++  type DriverInventoryPolicy,
++} from '../../identity/inventory/model';
++import type { DriverInventoryNormalization } from '../../identity/inventory/normalize';
+ import {
+   curatedParticipants,
+   type CuratedParticipants,
+@@ -70,12 +87,14 @@ import {
+ import {
+   constructorSeasonEntries,
+   normalizeSeasonConstructors,
++  normalizeSeasonDriverInventory,
+   normalizeSeasonDrivers,
+   type IdentityNormalization,
+ } from './participants-normalizer';
+ import {
+   decodeSeasonConstructors,
+   decodeSeasonDrivers,
++  type DecodedDriver,
+   type ParticipantsDecodeProblem,
+ } from './participants-payload';
+ 
+@@ -112,6 +131,12 @@ export interface JolpicaParticipantsPortOptions {
+    * logged.
+    */
+   readonly reference?: () => string;
++  /**
++   * U9: the whole-run inventory policy from the trusted run context. Omitted
++   * means `strict`, the unchanged pre-U9 behaviour. A malformed value is a
++   * wiring error, never a permissive default.
++   */
++  readonly inventoryPolicy?: unknown;
+ }
+ 
+ /** One decoded page: its identity rows, or a bounded decode problem. */
+@@ -133,6 +158,7 @@ export class JolpicaParticipantsPort implements ProviderResourcePort {
+   private readonly discovery: DiscoverySink | undefined;
+   private readonly participants: CuratedParticipants;
+   private readonly reference: () => string;
++  private readonly inventoryPolicy: DriverInventoryPolicy;
+   private sequence = 0;
+ 
+   constructor(options: JolpicaParticipantsPortOptions) {
+@@ -143,6 +169,10 @@ export class JolpicaParticipantsPort implements ProviderResourcePort {
+     this.participants = options.participants ?? curatedParticipants();
+     this.reference =
+       options.reference ?? (() => `jolpica-participants-${++this.sequence}`);
++    const policy = readDriverInventoryPolicy(options.inventoryPolicy);
++    if (policy === null)
++      throw new TypeError('The inventory policy must be a supported policy.');
++    this.inventoryPolicy = policy;
+   }
+ 
+   async fetchResource(
+@@ -185,36 +215,47 @@ export class JolpicaParticipantsPort implements ProviderResourcePort {
+     if (!driversResult.ok) return this.transportFailure(driversResult, []);
+     const driversAttempts: ProviderTransportAttempts = [this.successful()];
+ 
+-    const drivers = this.normalize(
+-      'drivers',
+-      season,
+-      driversAttempts,
+-      () => {
+-        const decoded = decodeSeasonDrivers(
+-          driversResult.data,
+-          season,
+-          participantsPageLimit,
+-        );
+-        if (decoded.ok)
+-          captureDiscovery(
+-            this.discovery,
+-            {
+-              endpointKind: 'season-drivers',
+-              season,
+-              requestedLimit: participantsPageLimit,
+-              decoded,
+-            },
+-            driversResult.data,
++    let driverProfiles: readonly Driver[];
++    let driverInventory: DriverInventory | null = null;
++    if (this.inventoryPolicy.mode === 'strict') {
++      const drivers = this.normalize(
++        'drivers',
++        season,
++        driversAttempts,
++        () => this.decodeDrivers(season, driversResult.data),
++        (rows) =>
++          normalizeSeasonDrivers(
++            rows,
++            season,
+             this.registry,
+-          );
+-        return decoded.ok ? { ok: true, rows: decoded.drivers } : decoded;
+-      },
+-      (rows) =>
+-        normalizeSeasonDrivers(rows, season, this.registry, this.participants),
+-    );
+-    // A drivers response that is invalid or unresolved ends the resource
+-    // here: the constructors request is never begun.
+-    if (drivers.done) return drivers.outcome;
++            this.participants,
++          ),
++      );
++      // A drivers response that is invalid or unresolved ends the resource
++      // here: the constructors request is never begun.
++      if (drivers.done) return drivers.outcome;
++      driverProfiles = drivers.value;
++    } else {
++      // U9: only exact `unmapped` keys are optional; anything else ends the
++      // resource here exactly as strict mode does.
++      const catalogHash = this.inventoryPolicy.catalogHash;
++      const inventory = await this.normalizeInventory(
++        season,
++        driversAttempts,
++        () => this.decodeDrivers(season, driversResult.data),
++        (rows) =>
++          normalizeSeasonDriverInventory(
++            rows,
++            season,
++            this.registry,
++            this.participants,
++            catalogHash,
++          ),
++      );
++      if (inventory.done) return inventory.outcome;
++      driverProfiles = inventory.value.drivers;
++      driverInventory = inventory.value.inventory;
++    }
+ 
+     // Cancelled between the two requests. The drivers request happened and is
+     // reported; the constructors request never left and is not an attempt.
+@@ -276,7 +317,7 @@ export class JolpicaParticipantsPort implements ProviderResourcePort {
+       attempts,
+       payload: {
+         kind: 'season-participants',
+-        drivers: drivers.value,
++        drivers: driverProfiles,
+         constructors: constructors.value,
+         // Participation spans are assembly-owned (ADR 0026 D3, D11). Empty is
+         // the accepted state of this contribution, not a placeholder.
+@@ -285,10 +326,105 @@ export class JolpicaParticipantsPort implements ProviderResourcePort {
+           season,
+           constructors.value,
+         ),
++        // Private accounting, present only under the explicit optional
++        // policy. The strict payload keeps its exact closed shape.
++        ...(driverInventory === null ? {} : { driverInventory }),
+       },
+     };
+   }
+ 
++  /** Strictly decodes the drivers page and captures shadow evidence after it. */
++  private decodeDrivers(
++    season: number,
++    data: unknown,
++  ): DecodeStep<readonly DecodedDriver[]> {
++    const decoded = decodeSeasonDrivers(data, season, participantsPageLimit);
++    // U1: evidence is extracted only from a successfully decoded page.
++    if (decoded.ok)
++      captureDiscovery(
++        this.discovery,
++        {
++          endpointKind: 'season-drivers',
++          season,
++          requestedLimit: participantsPageLimit,
++          decoded,
++        },
++        data,
++        this.registry,
++      );
++    return decoded.ok ? { ok: true, rows: decoded.drivers } : decoded;
++  }
++
++  /**
++   * U9: decodes and normalizes the drivers page under the optional policy.
++   * Every exception is contained as the bounded invalid-payload outcome, with
++   * the answered attempt still reported, exactly like `normalize`.
++   */
++  private async normalizeInventory(
++    season: number,
++    attempts: ProviderTransportAttempts,
++    decode: () => DecodeStep<readonly DecodedDriver[]>,
++    normalize: (
++      rows: readonly DecodedDriver[],
++    ) => Promise<DriverInventoryNormalization<ProviderMappingFailure>>,
++  ): Promise<
++    Step<{
++      readonly drivers: readonly Driver[];
++      readonly inventory: DriverInventory;
++    }>
++  > {
++    let decoded: DecodeStep<readonly DecodedDriver[]>;
++    try {
++      decoded = decode();
++    } catch {
++      decoded = { ok: false, problem: 'envelope' };
++    }
++    if (!decoded.ok) {
++      return this.invalidPayload('drivers', season, attempts, decoded.problem);
++    }
++
++    let normalized: DriverInventoryNormalization<ProviderMappingFailure>;
++    try {
++      normalized = await normalize(decoded.rows);
++    } catch {
++      return this.invalidPayload('drivers', season, attempts, 'normalization');
++    }
++
++    if (normalized.ok) {
++      if (normalized.inventory.unresolved.length > 0) {
++        // A bounded count only: no provider value, key or candidate ID.
++        this.logger.info({
++          operation: 'provider.participants.inventory_unresolved',
++          providerSourceId: 'jolpica',
++          providerRequestAttempted: true,
++          season,
++          identityUnresolvedCount: normalized.inventory.unresolved.length,
++        });
++      }
++      return {
++        done: false,
++        value: { drivers: normalized.drivers, inventory: normalized.inventory },
++      };
++    }
++    if (normalized.kind === 'mapping') {
++      for (const failure of normalized.failures) {
++        this.logger.error(providerMappingFailureEvent(failure));
++      }
++      return { done: true, outcome: { outcome: 'mapping-failure', attempts } };
++    }
++    if (normalized.problem === 'curated-driver-missing') {
++      this.logger.error({
++        operation: 'provider.participants.curated_content_missing',
++        providerSourceId: 'jolpica',
++        providerRequestAttempted: true,
++        season,
++        failureCategory: normalized.problem,
++      });
++      return { done: true, outcome: { outcome: 'mapping-failure', attempts } };
++    }
++    return this.invalidPayload('drivers', season, attempts, normalized.problem);
++  }
++
+   /**
+    * Decodes and normalizes one answered response.
+    *
+diff --git a/services/edge-api/src/sync/coordinated/composition.ts b/services/edge-api/src/sync/coordinated/composition.ts
+index 4b6c5f5..1a3bf90 100644
+--- a/services/edge-api/src/sync/coordinated/composition.ts
++++ b/services/edge-api/src/sync/coordinated/composition.ts
+@@ -49,6 +49,10 @@ import {
+   type IdentityContextConfiguration,
+ } from '../../identity/catalog/run-context';
+ import { bundledIdentityContent } from '../../identity/catalog/bundled-context';
++import {
++  inventoryPolicyForContext,
++  strictInventoryPolicy,
++} from '../../identity/inventory/model';
+ import type { Logger } from '../../logging/logger';
+ import type { PublicationAuthority } from '../../publication/authority';
+ import type { GuardedPublicationCommands } from '../../publication/commands';
+@@ -254,6 +258,22 @@ export function composeCoordinatedRuntime(
+     dependencies.identity.mode !== 'bundled'
+   )
+     throw new CatalogAdmissionError('catalog-invalid');
++  // U9: one inventory policy for the whole run, derived from the admitted
++  // context and handed to both the port and the coordinator, so the
++  // coordinator validates against the trusted value rather than a payload's
++  // own claim. Before U10 only strict exists: an operational configuration
++  // other than strict is refused, and so is a context claiming another policy.
++  if (
++    dependencies.identity?.inventoryMode !== undefined &&
++    dependencies.identity.inventoryMode !== 'strict'
++  )
++    throw new CatalogAdmissionError('catalog-invalid');
++  let inventoryPolicy = strictInventoryPolicy;
++  try {
++    if (context) inventoryPolicy = inventoryPolicyForContext(context);
++  } catch {
++    throw new CatalogAdmissionError('catalog-invalid');
++  }
+   const { client, limiter: pacer } = transport.runtime;
+   const { guarded, ledger, logger } = dependencies;
+   if (!guarded || !ledger)
+@@ -287,6 +307,7 @@ export function composeCoordinatedRuntime(
+       client,
+       logger,
+       discovery: dependencies.discovery,
++      inventoryPolicy,
+     }),
+     results: new JolpicaResultsPort({
+       registry,
+@@ -307,6 +328,7 @@ export function composeCoordinatedRuntime(
+     ports: [answers.port],
+     logger,
+     maxConcurrentOperations: 1,
++    inventoryPolicy,
+   });
+   const publication = new CoordinatedSeasonPublication({
+     commands: guarded,
+diff --git a/services/edge-api/test/providers/coordination/candidate-payload-snapshot.test.ts b/services/edge-api/test/providers/coordination/candidate-payload-snapshot.test.ts
+index 10d473c..e20aa9f 100644
+--- a/services/edge-api/test/providers/coordination/candidate-payload-snapshot.test.ts
++++ b/services/edge-api/test/providers/coordination/candidate-payload-snapshot.test.ts
+@@ -33,6 +33,10 @@ import {
+   type ProviderResourceOutcome,
+ } from '../../../src/providers/coordination';
+ import type { ProviderSeasonSource } from '../../../src/providers/formula-one-provider';
++import {
++  driverInventoryProjectionDigest,
++  optionalDriverInventoryPolicy,
++} from '../../../src/identity/inventory/model';
+ import {
+   FIXED_NOW,
+   FakePort,
+@@ -235,6 +239,51 @@ describe('an accepted candidate is detached from the adapter that produced it',
+     expect(selectedPayload(run, PARTICIPANTS)).toEqual(expected);
+   });
+ 
++  it('U9: keeps optional-driver accounting the adapter rewrites after coordination', async () => {
++    const source = await seasonFixture();
++    const participants = fixturePayload(source, PARTICIPANTS) as {
++      drivers: readonly { id: string }[];
++    };
++    const catalogHash = `sha256:${'c'.repeat(64)}` as const;
++    const projection = {
++      policyVersion: 1 as const,
++      catalogHash,
++      providerRowCount: participants.drivers.length,
++      resolved: participants.drivers.map((driver, index) => ({
++        driverId: driver.id,
++        observationKeyHash: `sha256:${index.toString(16).padStart(64, '0')}`,
++      })),
++      unresolved: [],
++    };
++    const payload = deepCopy({
++      ...participants,
++      driverInventory: {
++        ...projection,
++        projectionDigest: await driverInventoryProjectionDigest(
++          projection as never,
++        ),
++      },
++    });
++    const expected = deepCopy(payload);
++
++    const run = await new MultiSourceCoordinator({
++      ports: [payloadPort(payload)],
++      logger: new CapturingLogger(),
++      inventoryPolicy: optionalDriverInventoryPolicy(catalogHash),
++    }).coordinate({ plan: { season: SEASON, resources: [PARTICIPANTS] } });
++    expect(run.resources[0]?.selection.outcome).toBe('selected');
++
++    const inventory = payload.driverInventory as unknown as Record<
++      string,
++      unknown
++    >;
++    inventory.providerRowCount = 0;
++    inventory.catalogHash = `sha256:${'d'.repeat(64)}`;
++    (inventory.resolved as unknown[]).length = 0;
++
++    expect(selectedPayload(run, PARTICIPANTS)).toEqual(expected);
++  });
++
+   it('assembles the season from the validated snapshot, not from mutated adapter data', async () => {
+     const source = await seasonFixture();
+     const run = await coordinate(
+diff --git a/services/edge-api/test/providers/coordination/payload-contract.test.ts b/services/edge-api/test/providers/coordination/payload-contract.test.ts
+index 7e2b19e..f4d0cdc 100644
+--- a/services/edge-api/test/providers/coordination/payload-contract.test.ts
++++ b/services/edge-api/test/providers/coordination/payload-contract.test.ts
+@@ -29,6 +29,7 @@ import {
+   validateGrandPrix,
+   validateRaceResult,
+ } from '../../../src/contract/normalized';
++import { optionalDriverInventoryPolicy } from '../../../src/identity/inventory/model';
+ import {
+   payloadFor,
+   seasonFixture,
+@@ -74,6 +75,48 @@ describe('dispatch is total over the payload vocabulary', () => {
+     ).toEqual(['unknown-property']);
+   });
+ 
++  it('U9: keeps the strict participants wrapper closed to private inventory accounting', async () => {
++    const source = await seasonFixture();
++    const participants = payloadFor(
++      source,
++      seasonResources[1]!,
++    ) as CoordinatedPayload;
++    const withAccounting = {
++      ...participants,
++      driverInventory: {},
++    } as unknown as CoordinatedPayload;
++
++    expect(
++      validateCoordinatedPayload(withAccounting, 'payload').map((i) => i.code),
++    ).toEqual(['unknown-property']);
++    // The explicit optional wrapper is a separate closed shape that requires
++    // the accounting rather than a permissive superset that merely allows it.
++    const optional = optionalDriverInventoryPolicy(`sha256:${'a'.repeat(64)}`);
++    expect(
++      validateCoordinatedPayload(participants, 'payload', optional),
++    ).toEqual([
++      expect.objectContaining({
++        path: 'payload.driverInventory',
++        code: 'missing',
++      }),
++    ]);
++    expect(
++      validateCoordinatedPayload(
++        {
++          ...withAccounting,
++          upstreamCursor: 'x',
++        } as unknown as CoordinatedPayload,
++        'payload',
++        optional,
++      ).map((i) => i.code),
++    ).toEqual(['unknown-property']);
++    // Other payload kinds are unaffected by the participants-only policy.
++    const calendar = payloadFor(source, seasonResources[0]!)!;
++    expect(validateCoordinatedPayload(calendar, 'payload', optional)).toEqual(
++      [],
++    );
++  });
++
+   it('reports a failure inside a collection at its own structural path', async () => {
+     const source = await seasonFixture();
+     const payload = {
+diff --git a/services/edge-api/src/identity/inventory/model.ts b/services/edge-api/src/identity/inventory/model.ts
+new file mode 100644
+index 0000000..f767744
+--- /dev/null
++++ b/services/edge-api/src/identity/inventory/model.ts
+@@ -0,0 +1,248 @@
++/**
++ * U9: the private driver-inventory accounting model and its closed policy
++ * vocabulary (design §8.1-8.3, ADR 0030).
++ *
++ * Six concepts stay separate. A provider-observed inventory row is a private
++ * observation, not an entrant claim. A verified canonical profile comes only
++ * from the pinned catalog. An unresolved inventory-only observation is
++ * counted, never projected: it has no canonical ID, profile, team or span.
++ * Required classification/standings identities and accepted participation are
++ * untouched by this module.
++ *
++ * **Private.** `DriverInventory` is internal coordination metadata. It must
++ * never enter `ProviderSeasonSource`, a generated snapshot, a public schema, a
++ * dataset content hash or a classification revision hash.
++ *
++ * **No operational authority.** This module only describes the policy. U9
++ * never selects `optional-drivers` for an operational run; the composition
++ * derives the policy from the admitted run context through
++ * {@link inventoryPolicyForContext}, which accepts the strict policy only until
++ * U10 supplies required-reference closure and the phase-3 gate is approved.
++ */
++
++import type { IdentityHash, IdentityKeyReference } from '../discovery/model';
++import {
++  canonicalKey,
++  identityHash,
++  hashIdentityProjection,
++} from '../discovery/keys';
++import { ownDataProperty } from '../../runtime/own-property';
++import { isHash } from '../wire-decoders';
++
++/**
++ * The exact typed provider key, reached through the reviewed U1 discovery
++ * types so this module takes no direct dependency on mapping content.
++ */
++export type InventoryKey = IdentityKeyReference['key'];
++
++/** The only supported optional-inventory accounting version. */
++export const driverInventoryPolicyVersion = 1 as const;
++
++/** The only reason an inventory row may be unresolved and still accounted. */
++export const unresolvedInventoryReason = 'unmapped' as const;
++
++/** The closed set of `driverInventory` keys, in declaration order. */
++export const driverInventoryKeys = [
++  'policyVersion',
++  'catalogHash',
++  'providerRowCount',
++  'resolved',
++  'unresolved',
++  'projectionDigest',
++] as const;
++
++/**
++ * The inventory policy selected for one **whole** run.
++ *
++ * `strict` is the pre-U9 behaviour and the default. `optional-drivers` binds
++ * the version and the catalog hash of the trusted run context: a coordinator
++ * compares a payload against these values and never against the payload's own
++ * claim.
++ */
++export type DriverInventoryPolicy =
++  | { readonly mode: 'strict' }
++  | {
++      readonly mode: 'optional-drivers';
++      readonly policyVersion: typeof driverInventoryPolicyVersion;
++      readonly catalogHash: IdentityHash;
++    };
++
++export interface ResolvedInventoryDriver {
++  readonly driverId: string;
++  readonly observationKeyHash: IdentityHash;
++}
++
++export interface UnresolvedInventoryDriver {
++  readonly candidateId: IdentityHash;
++  readonly reason: typeof unresolvedInventoryReason;
++}
++
++/** The private accounting of one complete decoded driver inventory. */
++export interface DriverInventory {
++  readonly policyVersion: typeof driverInventoryPolicyVersion;
++  readonly catalogHash: IdentityHash;
++  readonly providerRowCount: number;
++  /** Provider order; exactly equal to the projected `drivers` IDs. */
++  readonly resolved: readonly ResolvedInventoryDriver[];
++  /** Ascending `candidateId` order, independent of provider row order. */
++  readonly unresolved: readonly UnresolvedInventoryDriver[];
++  readonly projectionDigest: IdentityHash;
++}
++
++export class InventoryPolicyError extends Error {
++  constructor(
++    readonly failure:
++      'inventory-policy-invalid' | 'inventory-policy-unavailable',
++  ) {
++    super(failure);
++    this.name = 'InventoryPolicyError';
++  }
++}
++
++export const strictInventoryPolicy: DriverInventoryPolicy = Object.freeze({
++  mode: 'strict',
++});
++
++/**
++ * Builds the optional policy for an **explicit isolated** context. The caller
++ * supplies the catalog hash of a trusted run context; nothing here reads
++ * configuration, and no operational wiring calls it before U10.
++ */
++export function optionalDriverInventoryPolicy(
++  catalogHash: string,
++): DriverInventoryPolicy {
++  if (!isHash(catalogHash))
++    throw new InventoryPolicyError('inventory-policy-invalid');
++  return Object.freeze({
++    mode: 'optional-drivers',
++    policyVersion: driverInventoryPolicyVersion,
++    catalogHash,
++  });
++}
++
++/**
++ * Reads an injected policy once, as own data properties, into a frozen copy.
++ * `undefined` is the strict default. Anything else malformed is refused, so a
++ * caller can never obtain a permissive policy by passing a near miss.
++ */
++export function readDriverInventoryPolicy(
++  value: unknown,
++): DriverInventoryPolicy | null {
++  if (value === undefined) return strictInventoryPolicy;
++  try {
++    if (typeof value !== 'object' || value === null || Array.isArray(value))
++      return null;
++    const mode = ownDataProperty(value, 'mode');
++    if (mode === null) return null;
++    const keys = Reflect.ownKeys(value);
++    if (mode.value === 'strict')
++      return keys.length === 1 ? strictInventoryPolicy : null;
++    if (mode.value !== 'optional-drivers' || keys.length !== 3) return null;
++    const version = ownDataProperty(value, 'policyVersion');
++    const catalogHash = ownDataProperty(value, 'catalogHash');
++    if (
++      version === null ||
++      catalogHash === null ||
++      version.value !== driverInventoryPolicyVersion ||
++      !isHash(catalogHash.value)
++    )
++      return null;
++    return optionalDriverInventoryPolicy(catalogHash.value);
++  } catch {
++    return null;
++  }
++}
++
++/**
++ * The policy an **operational** run may use, derived from its admitted
++ * context. Before U10 only `strict/1` exists in the run-context model, and any
++ * other value is refused rather than mapped onto a permissive default.
++ */
++export function inventoryPolicyForContext(context: {
++  readonly inventoryPolicyVersion: string;
++}): DriverInventoryPolicy {
++  if (context.inventoryPolicyVersion === 'strict/1')
++    return strictInventoryPolicy;
++  throw new InventoryPolicyError('inventory-policy-unavailable');
++}
++
++/**
++ * A resolved row's private observation hash. Domain-separated from the U1
++ * candidate identity (`gv-identity-candidate/1`) so a resolved and an
++ * unresolved row can never share one value, and computed from the exact
++ * typed key serialization the reviewed catalog uses.
++ */
++export function observationKeyHashFor(
++  key: InventoryKey,
++): Promise<IdentityHash> {
++  return identityHash(
++    'gv-identity-inventory-observation/1' + canonicalKey(key),
++  );
++}
++
++/** The fields the projection digest covers: everything but the digest. */
++export type DriverInventoryProjection = Omit<
++  DriverInventory,
++  'projectionDigest'
++>;
++
++/** Deterministic digest of the complete accounting projection. */
++export function driverInventoryProjectionDigest(
++  projection: DriverInventoryProjection,
++): Promise<IdentityHash> {
++  return hashIdentityProjection({
++    format: 'gridview-driver-inventory/1',
++    policyVersion: projection.policyVersion,
++    catalogHash: projection.catalogHash,
++    providerRowCount: projection.providerRowCount,
++    resolved: projection.resolved.map((r) => ({
++      driverId: r.driverId,
++      observationKeyHash: r.observationKeyHash,
++    })),
++    unresolved: projection.unresolved.map((u) => ({
++      candidateId: u.candidateId,
++      reason: u.reason,
++    })),
++  });
++}
++
++/**
++ * Recomputes the digest of an **untrusted, already detached** accounting
++ * value. Returns `null` when the value is not even shaped enough to digest;
++ * the closed validator then reports the precise problem. Never throws.
++ */
++export async function recomputeDriverInventoryDigest(
++  value: unknown,
++): Promise<IdentityHash | null> {
++  try {
++    if (typeof value !== 'object' || value === null || Array.isArray(value))
++      return null;
++    const read = (name: string): unknown => ownDataProperty(value, name)?.value;
++    const resolved = read('resolved');
++    const unresolved = read('unresolved');
++    if (!Array.isArray(resolved) || !Array.isArray(unresolved)) return null;
++    const field = (row: unknown, name: string): unknown =>
++      typeof row === 'object' && row !== null
++        ? (ownDataProperty(row, name)?.value ?? null)
++        : null;
++    // The same projection `driverInventoryProjectionDigest` hashes. The
++    // canonical serializer rejects non-JSON values, so an exotic member fails
++    // here and is caught below.
++    return await hashIdentityProjection({
++      format: 'gridview-driver-inventory/1',
++      policyVersion: read('policyVersion') ?? null,
++      catalogHash: read('catalogHash') ?? null,
++      providerRowCount: read('providerRowCount') ?? null,
++      resolved: resolved.map((r: unknown) => ({
++        driverId: field(r, 'driverId'),
++        observationKeyHash: field(r, 'observationKeyHash'),
++      })),
++      unresolved: unresolved.map((u: unknown) => ({
++        candidateId: field(u, 'candidateId'),
++        reason: field(u, 'reason'),
++      })),
++    });
++  } catch {
++    return null;
++  }
++}
+diff --git a/services/edge-api/src/identity/inventory/normalize.ts b/services/edge-api/src/identity/inventory/normalize.ts
+new file mode 100644
+index 0000000..710bf17
+--- /dev/null
++++ b/services/edge-api/src/identity/inventory/normalize.ts
+@@ -0,0 +1,211 @@
++/**
++ * U9: optional-driver inventory normalization (design §8.2 steps 1-4).
++ *
++ * Input is the **complete, already strictly decoded** season driver inventory:
++ * envelope, pagination, row shape and duplicate provider identities have been
++ * enforced by `participants-payload.ts`, and nothing here re-decodes or repairs
++ * provider data. Malformed input never reaches this function and is never
++ * converted into an unresolved identity.
++ *
++ * Exactly one case is optional: the registry's own `unmapped` answer for a
++ * structurally valid, exact season/source/typed driver key that can be given
++ * its existing deterministic U1 candidate ID. Every other resolver answer -
++ * `invalid-key`, `registry-invalid`, `ambiguous`, `target-missing` - and every
++ * contradiction - a duplicate canonical driver, a mapped target with no
++ * profile, an invalid profile - fails the whole inventory, exactly as strict
++ * mode does. No fuzzy name, ID coercion or cross-season inheritance exists.
++ *
++ * Unresolved rows are accounted, never projected: no canonical ID, profile,
++ * team assignment or participation span is created for them.
++ */
++
++import { validateDriver } from '../../contract/normalized';
++import type { Driver } from '../../contract/types';
++import type { IdentityHash } from '../discovery/model';
++import { candidateIdFor } from '../discovery/keys';
++import {
++  driverInventoryPolicyVersion,
++  driverInventoryProjectionDigest,
++  observationKeyHashFor,
++  unresolvedInventoryReason,
++  type DriverInventory,
++  type InventoryKey,
++  type ResolvedInventoryDriver,
++  type UnresolvedInventoryDriver,
++} from './model';
++
++/** Why a decoded inventory could not be normalized. Closed, log-safe. */
++export type DriverInventoryContradiction =
++  | 'duplicate-canonical-driver'
++  | 'curated-driver-missing'
++  | 'invalid-driver-profile'
++  | 'duplicate-observation'
++  | 'duplicate-candidate'
++  /**
++   * An `unmapped` key the U1 candidate grammar refuses. Unreachable while the
++   * two key validators agree; kept as a closed, logged contradiction so a
++   * future divergence fails closed with a diagnostic, never optional.
++   */
++  | 'candidate-id-refused';
++
++/**
++ * One exact resolver answer. The caller - the Jolpica adapter, which owns the
++ * mapping registry - supplies it, so this module never reads mapping content.
++ * `F` is the caller's own failure type, returned unchanged for its logging.
++ */
++export type InventoryResolution<F extends { readonly reason: string }> =
++  | { readonly outcome: 'resolved'; readonly gridviewId: string }
++  | { readonly outcome: 'unresolved'; readonly failure: F };
++
++export type DriverInventoryNormalization<
++  F extends { readonly reason: string } = { readonly reason: string },
++> =
++  | {
++      readonly ok: true;
++      /** Complete verified profiles, provider order, `media: null`. */
++      readonly drivers: readonly Driver[];
++      readonly inventory: DriverInventory;
++    }
++  | {
++      readonly ok: false;
++      readonly kind: 'mapping';
++      /** Blocking (non-`unmapped`) failures only, capped by the caller. */
++      readonly failures: readonly F[];
++    }
++  | {
++      readonly ok: false;
++      readonly kind: 'contradiction';
++      readonly problem: DriverInventoryContradiction;
++    };
++
++export interface DriverInventoryInput<F extends { readonly reason: string }> {
++  /** Exact decoded `driverId` values, complete and in provider order. */
++  readonly providerValues: readonly string[];
++  readonly season: number;
++  /** The exact season/source/typed lookup of one `driverId`; no fallback. */
++  readonly resolve: (providerValue: string) => InventoryResolution<F>;
++  /** Pinned-context profile lookup; `null` when the catalog has none. */
++  readonly driverById: (id: string) => Omit<Driver, 'media'> | null;
++  /** From the trusted run context, never from a payload. */
++  readonly catalogHash: IdentityHash;
++  readonly maxReportedFailures: number;
++}
++
++function driverKey(season: number, providerValue: string): InventoryKey {
++  return {
++    season,
++    source: 'jolpica',
++    entity: 'driver',
++    providerField: 'driverId',
++    providerValue,
++  };
++}
++
++/** Partitions, resolves and accounts one complete decoded driver inventory. */
++export async function normalizeDriverInventory<
++  F extends { readonly reason: string },
++>(input: DriverInventoryInput<F>): Promise<DriverInventoryNormalization<F>> {
++  const resolvedRows: { id: string; key: InventoryKey }[] = [];
++  const unmappedKeys: InventoryKey[] = [];
++  const failures: F[] = [];
++  let blocking = false;
++
++  for (const providerValue of input.providerValues) {
++    const key = driverKey(input.season, providerValue);
++    const resolution = input.resolve(providerValue);
++    if (resolution.outcome === 'resolved') {
++      resolvedRows.push({ id: resolution.gridviewId, key });
++      continue;
++    }
++    if (resolution.failure.reason === unresolvedInventoryReason) {
++      unmappedKeys.push(key);
++      continue;
++    }
++    // Every attempt continues so an operator sees the bounded blocking set,
++    // but no partial inventory is ever produced.
++    blocking = true;
++    if (failures.length < input.maxReportedFailures)
++      failures.push(resolution.failure);
++  }
++  if (blocking) return { ok: false, kind: 'mapping', failures };
++
++  const drivers: Driver[] = [];
++  const resolved: ResolvedInventoryDriver[] = [];
++  const seenDrivers = new Set<string>();
++  const seenObservations = new Set<string>();
++  for (const row of resolvedRows) {
++    if (seenDrivers.has(row.id))
++      return {
++        ok: false,
++        kind: 'contradiction',
++        problem: 'duplicate-canonical-driver',
++      };
++    seenDrivers.add(row.id);
++    const profile = input.driverById(row.id);
++    if (profile === null)
++      return {
++        ok: false,
++        kind: 'contradiction',
++        problem: 'curated-driver-missing',
++      };
++    // The same media policy strict normalization applies.
++    const driver: Driver = { ...profile, media: null } as Driver;
++    if (driver.id !== row.id || validateDriver(driver, 'driver').length > 0)
++      return {
++        ok: false,
++        kind: 'contradiction',
++        problem: 'invalid-driver-profile',
++      };
++    const observationKeyHash = await observationKeyHashFor(row.key);
++    if (seenObservations.has(observationKeyHash))
++      return {
++        ok: false,
++        kind: 'contradiction',
++        problem: 'duplicate-observation',
++      };
++    seenObservations.add(observationKeyHash);
++    drivers.push(driver);
++    resolved.push({ driverId: row.id, observationKeyHash });
++  }
++
++  const unresolved: UnresolvedInventoryDriver[] = [];
++  const seenCandidates = new Set<string>();
++  for (const key of unmappedKeys) {
++    let candidateId: IdentityHash;
++    try {
++      // The exact U1 identity. It throws only for a key the U1 decoder
++      // refuses, which can never be an optional observation.
++      candidateId = await candidateIdFor(key);
++    } catch {
++      return {
++        ok: false,
++        kind: 'contradiction',
++        problem: 'candidate-id-refused',
++      };
++    }
++    if (seenCandidates.has(candidateId))
++      return {
++        ok: false,
++        kind: 'contradiction',
++        problem: 'duplicate-candidate',
++      };
++    seenCandidates.add(candidateId);
++    unresolved.push({ candidateId, reason: unresolvedInventoryReason });
++  }
++  unresolved.sort((a, b) =>
++    a.candidateId < b.candidateId ? -1 : a.candidateId > b.candidateId ? 1 : 0,
++  );
++
++  const projection = {
++    policyVersion: driverInventoryPolicyVersion,
++    catalogHash: input.catalogHash,
++    providerRowCount: input.providerValues.length,
++    resolved,
++    unresolved,
++  };
++  const inventory: DriverInventory = {
++    ...projection,
++    projectionDigest: await driverInventoryProjectionDigest(projection),
++  };
++  return { ok: true, drivers, inventory };
++}
+diff --git a/services/edge-api/src/identity/inventory/validate.ts b/services/edge-api/src/identity/inventory/validate.ts
+new file mode 100644
+index 0000000..9aa7826
+--- /dev/null
++++ b/services/edge-api/src/identity/inventory/validate.ts
+@@ -0,0 +1,210 @@
++/**
++ * U9: closed validation of an explicit optional-driver participants payload
++ * (design §8.2, T29).
++ *
++ * The coordinator calls this on its **detached** candidate snapshot, with the
++ * expected policy taken from the trusted run context. Nothing in the payload
++ * is believed about itself: its policy version and catalog hash are compared
++ * against the expectation, its counts and identifiers against each other and
++ * against the projected `drivers`, and its digest against a value the
++ * coordinator recomputed from the same snapshot.
++ *
++ * This is deliberately not a permissive superset of the strict contract. The
++ * strict participants wrapper stays closed and still refuses a
++ * `driverInventory` key; this validator applies only when the run's policy is
++ * `optional-drivers`, and then `driverInventory` is required.
++ *
++ * Problems are closed codes only - never a value, a provider key or a hash.
++ */
++
++import { ownDataProperty } from '../../runtime/own-property';
++import { isHash } from '../wire-decoders';
++import {
++  driverInventoryKeys,
++  driverInventoryPolicyVersion,
++  unresolvedInventoryReason,
++  type DriverInventoryPolicy,
++} from './model';
++
++export const driverInventoryProblems = [
++  /** `driverInventory` absent from an optional-mode payload. */
++  'missing-accounting',
++  /** Not a closed object, or a member is not a closed object. */
++  'shape',
++  'policy-version',
++  'catalog-hash',
++  'row-count',
++  'identifier',
++  'hash',
++  'reason',
++  'duplicate-observation',
++  'duplicate-candidate',
++  'duplicate-driver',
++  'unresolved-order',
++  /** `resolved` IDs and `drivers` IDs differ in membership or order. */
++  'projection-mismatch',
++  /** `driverEntries` must stay empty for participants inventory. */
++  'driver-entries',
++  'projection-digest',
++] as const;
++
++export type DriverInventoryProblem = (typeof driverInventoryProblems)[number];
++
++/** The contract identifier grammar used for canonical `GridViewId`s. */
++const canonicalIdPattern = /^[a-z0-9]+(-[a-z0-9]+)*$/;
++const canonicalIdMaxLength = 96;
++/** Matches the participants page cap; a larger census cannot be complete. */
++const maxInventoryRows = 100;
++
++function closedRecord(
++  value: unknown,
++  keys: readonly string[],
++): Record<string, unknown> | null {
++  if (typeof value !== 'object' || value === null || Array.isArray(value))
++    return null;
++  const own = Reflect.ownKeys(value);
++  if (
++    own.length !== keys.length ||
++    own.some((k) => typeof k !== 'string' || !keys.includes(k))
++  )
++    return null;
++  const result: Record<string, unknown> = {};
++  for (const key of keys) {
++    const property = ownDataProperty(value, key);
++    if (property === null) return null;
++    result[key] = property.value;
++  }
++  return result;
++}
++
++const isCanonicalId = (v: unknown): v is string =>
++  typeof v === 'string' &&
++  v.length <= canonicalIdMaxLength &&
++  canonicalIdPattern.test(v);
++
++/**
++ * Every problem with one optional-mode participants payload.
++ *
++ * `payload` is the detached participants wrapper. `recomputedDigest` is the
++ * digest the coordinator computed from the same snapshot (`null` when it
++ * could not be computed). A strict policy has no inventory to validate and
++ * answers no problems: the strict closed wrapper is enforced separately.
++ */
++export function validateDriverInventoryPayload(
++  payload: unknown,
++  policy: DriverInventoryPolicy,
++  recomputedDigest: string | null,
++): readonly DriverInventoryProblem[] {
++  if (policy.mode === 'strict') return [];
++  const problems = new Set<DriverInventoryProblem>();
++  try {
++    if (typeof payload !== 'object' || payload === null) return ['shape'];
++    const accounting = ownDataProperty(payload, 'driverInventory');
++    if (accounting === null) return ['missing-accounting'];
++    const inventory = closedRecord(accounting.value, driverInventoryKeys);
++    if (inventory === null) return ['shape'];
++
++    if (
++      inventory.policyVersion !== driverInventoryPolicyVersion ||
++      policy.policyVersion !== driverInventoryPolicyVersion
++    )
++      problems.add('policy-version');
++    if (
++      !isHash(inventory.catalogHash) ||
++      inventory.catalogHash !== policy.catalogHash
++    )
++      problems.add('catalog-hash');
++    if (!isHash(inventory.projectionDigest)) problems.add('hash');
++
++    const resolved = inventory.resolved;
++    const unresolved = inventory.unresolved;
++    if (
++      !Array.isArray(resolved) ||
++      !Array.isArray(unresolved) ||
++      resolved.length > maxInventoryRows ||
++      unresolved.length > maxInventoryRows
++    )
++      return [...problems, 'shape'];
++
++    const resolvedIds: string[] = [];
++    const observations = new Set<string>();
++    for (const member of resolved) {
++      const row = closedRecord(member, ['driverId', 'observationKeyHash']);
++      if (row === null) {
++        problems.add('shape');
++        continue;
++      }
++      if (!isCanonicalId(row.driverId)) problems.add('identifier');
++      else resolvedIds.push(row.driverId);
++      if (!isHash(row.observationKeyHash)) problems.add('hash');
++      else if (observations.has(row.observationKeyHash))
++        problems.add('duplicate-observation');
++      else observations.add(row.observationKeyHash);
++    }
++    if (new Set(resolvedIds).size !== resolvedIds.length)
++      problems.add('duplicate-driver');
++
++    const candidates: string[] = [];
++    for (const member of unresolved) {
++      const row = closedRecord(member, ['candidateId', 'reason']);
++      if (row === null) {
++        problems.add('shape');
++        continue;
++      }
++      if (row.reason !== unresolvedInventoryReason) problems.add('reason');
++      if (!isHash(row.candidateId)) {
++        problems.add('hash');
++        continue;
++      }
++      if (candidates.includes(row.candidateId))
++        problems.add('duplicate-candidate');
++      candidates.push(row.candidateId);
++    }
++    // Equal neighbours are already reported as duplicates above.
++    for (let i = 1; i < candidates.length; i++) {
++      if (candidates[i - 1]! > candidates[i]!) problems.add('unresolved-order');
++    }
++    for (const candidate of candidates) {
++      if (observations.has(candidate)) problems.add('duplicate-observation');
++    }
++
++    const count = inventory.providerRowCount;
++    if (
++      typeof count !== 'number' ||
++      !Number.isSafeInteger(count) ||
++      count < 0 ||
++      count > maxInventoryRows ||
++      count !== resolved.length + unresolved.length
++    )
++      problems.add('row-count');
++
++    const drivers = ownDataProperty(payload, 'drivers')?.value;
++    if (!Array.isArray(drivers)) problems.add('projection-mismatch');
++    else {
++      const driverIds = drivers.map((d: unknown) =>
++        typeof d === 'object' && d !== null
++          ? ownDataProperty(d, 'id')?.value
++          : undefined,
++      );
++      if (
++        driverIds.length !== resolved.length ||
++        driverIds.some((id, i) => id !== resolvedIds[i]) ||
++        resolvedIds.length !== resolved.length
++      )
++        problems.add('projection-mismatch');
++    }
++
++    const entries = ownDataProperty(payload, 'driverEntries')?.value;
++    if (!Array.isArray(entries) || entries.length !== 0)
++      problems.add('driver-entries');
++
++    if (
++      recomputedDigest === null ||
++      inventory.projectionDigest !== recomputedDigest
++    )
++      problems.add('projection-digest');
++  } catch {
++    return ['shape'];
++  }
++  return driverInventoryProblems.filter((p) => problems.has(p));
++}
+diff --git a/services/edge-api/test/providers/jolpica/driver-inventory.test.ts b/services/edge-api/test/providers/jolpica/driver-inventory.test.ts
+new file mode 100644
+index 0000000..9f61b2c
+--- /dev/null
++++ b/services/edge-api/test/providers/jolpica/driver-inventory.test.ts
+@@ -0,0 +1,1364 @@
++/**
++ * U9: explicit optional-driver inventory and strict internal accounting
++ * (design §8.1-8.4; T23, T24, T26, T28, T29, T34).
++ *
++ * Synthetic data only. Every transport is a scripted in-memory double, and the
++ * global `fetch` throws, so nothing here can reach Jolpica, OpenF1 or a proxy.
++ * The positive whole-season publication demonstration is U10's; here an
++ * inventory-bearing payload is proven to be *refused* by assembly.
++ */
++
++import { readFileSync, readdirSync } from 'node:fs';
++import { join } from 'node:path';
++
++import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
++
++import {
++  ConfigurationError,
++  resolveIdentityInventoryMode,
++  resolveOperationalInventoryMode,
++} from '../../../src/config/environment';
++import {
++  bundledRunContext,
++  identityConfiguration,
++  type IdentityRunContext,
++} from '../../../src/identity/catalog/run-context';
++import { createIdentityObservationCollector } from '../../../src/identity/discovery/collector';
++import { extractJolpicaObservations } from '../../../src/identity/discovery/extract-jolpica';
++import { candidateIdFor } from '../../../src/identity/discovery/keys';
++import {
++  captureDiscovery,
++  createShadowDiscovery,
++  type DiscoverySink,
++} from '../../../src/identity/discovery/persist';
++import {
++  driverInventoryProjectionDigest,
++  inventoryPolicyForContext,
++  InventoryPolicyError,
++  optionalDriverInventoryPolicy,
++  readDriverInventoryPolicy,
++  strictInventoryPolicy,
++  type DriverInventory,
++  type DriverInventoryPolicy,
++} from '../../../src/identity/inventory/model';
++import { normalizeDriverInventory } from '../../../src/identity/inventory/normalize';
++import { validateDriverInventoryPayload } from '../../../src/identity/inventory/validate';
++import type { IdentityPort } from '../../../src/identity/port';
++import { CapturingLogger } from '../../../src/logging/logger';
++import {
++  CoordinatorConfigurationError,
++  MultiSourceCoordinator,
++  assembleSeasonSource,
++  type CoordinatedResource,
++  type CoordinationRun,
++  type ProviderResourceOutcome,
++} from '../../../src/providers/coordination';
++import { ProviderHttpClient } from '../../../src/providers/http/provider-http-client';
++import {
++  JolpicaCalendarPort,
++  JolpicaCircuitsPort,
++  JolpicaParticipantsPort,
++  JolpicaResourcePort,
++  JolpicaResultsPort,
++  JolpicaStandingsPort,
++  curatedParticipantsFrom,
++  type CuratedParticipants,
++} from '../../../src/providers/jolpica';
++import type { ProviderMappingRegistry } from '../../../src/providers/mappings';
++import { context as observationContext } from '../../identity/discovery/support';
++import {
++  FakePort,
++  attempt,
++  completePort,
++  fullPlan,
++  metadataFor,
++  seasonFixture,
++} from '../coordination/support';
++import {
++  CONSTRUCTORS_URL,
++  DRIVERS_URL,
++  SeamedClient,
++  constructorRow,
++  constructorsEnvelope,
++  driverRow,
++  driversEnvelope,
++  editedRegistry,
++  fullSeasonConstructorRows,
++  fullSeasonDriverRows,
++  registryRows,
++  scriptedLimiter,
++  scriptedTransport,
++  type ReservationStep,
++  type TransportStep,
++} from './participants-support';
++import { baseRows, resultsEnvelope, resultsUrl } from './results-support';
++import {
++  baseDriverRows,
++  driverStandingsEnvelope,
++  driverStandingsUrl,
++} from './standings-support';
++import { SEASON } from './support';
++
++const UNKNOWN_A = 'synthetic_inventory_unknown_a';
++const UNKNOWN_B = 'synthetic_inventory_unknown_b';
++const UNKNOWN_C = 'synthetic_inventory_unknown_c';
++const PARTICIPANTS: CoordinatedResource = {
++  kind: 'season-participants',
++  season: SEASON,
++};
++
++let runContext: IdentityRunContext;
++let policy: DriverInventoryPolicy;
++
++beforeEach(async () => {
++  vi.stubGlobal(
++    'fetch',
++    vi.fn(() => {
++      throw new Error('U9 network forbidden');
++    }),
++  );
++  runContext = await bundledRunContext({
++    runId: '00000000-0000-4000-8000-000000000009',
++    season: SEASON,
++  });
++  policy = optionalDriverInventoryPolicy(runContext.catalogHash);
++});
++afterEach(() => {
++  vi.unstubAllGlobals();
++});
++
++interface Harness {
++  readonly port: JolpicaParticipantsPort;
++  readonly logger: CapturingLogger;
++  readonly calls: readonly { readonly url: string }[];
++  readonly reservations: readonly string[];
++}
++
++function harness(
++  options: {
++    readonly steps?: readonly TransportStep[];
++    readonly limiter?: readonly ReservationStep[];
++    readonly inventoryPolicy?: unknown;
++    readonly registry?: ProviderMappingRegistry;
++    readonly participants?: CuratedParticipants;
++    readonly discovery?: DiscoverySink;
++    readonly afterResponse?: (index: number) => void;
++  } = {},
++): Harness {
++  const scripted = scriptedTransport(options.steps ?? []);
++  const limiter = scriptedLimiter(options.limiter ?? []);
++  const logger = new CapturingLogger();
++  const client = new SeamedClient(
++    { transport: scripted.transport, limiter: limiter.limiter, logger },
++    undefined,
++    options.afterResponse,
++  );
++  const port = new JolpicaParticipantsPort({
++    client,
++    logger,
++    registry: options.registry ?? runContext.registry,
++    participants: options.participants ?? runContext.participants,
++    ...('inventoryPolicy' in options
++      ? { inventoryPolicy: options.inventoryPolicy }
++      : {}),
++    ...(options.discovery ? { discovery: options.discovery } : {}),
++  });
++  return {
++    port,
++    logger,
++    calls: scripted.calls,
++    reservations: limiter.reservations,
++  };
++}
++
++const driversStep = (rows: unknown, options = {}): TransportStep => ({
++  kind: 'json',
++  body: driversEnvelope(rows, options),
++});
++const constructorsStep = (
++  rows: unknown = fullSeasonConstructorRows(),
++): TransportStep => ({ kind: 'json', body: constructorsEnvelope(rows) });
++
++const fetchParticipants = (h: Harness, signal?: AbortSignal) =>
++  h.port.fetchResource({
++    source: 'jolpica',
++    resource: PARTICIPANTS,
++    ...(signal ? { signal } : {}),
++  });
++
++type Candidate = Extract<ProviderResourceOutcome, { outcome: 'candidate' }>;
++type ParticipantsPayloadView = {
++  readonly kind: 'season-participants';
++  readonly drivers: readonly { readonly id: string }[];
++  readonly constructors: readonly { readonly id: string }[];
++  readonly driverEntries: readonly unknown[];
++  readonly constructorEntries: readonly { driverLineup: unknown }[];
++  readonly driverInventory?: DriverInventory;
++};
++
++function payloadOf(outcome: ProviderResourceOutcome): ParticipantsPayloadView {
++  expect(outcome.outcome).toBe('candidate');
++  return (outcome as Candidate).payload as unknown as ParticipantsPayloadView;
++}
++
++function inventoryOf(outcome: ProviderResourceOutcome): DriverInventory {
++  const inventory = payloadOf(outcome).driverInventory;
++  expect(inventory).toBeDefined();
++  return inventory!;
++}
++
++const unknownKey = (providerValue: string) => ({
++  season: SEASON,
++  source: 'jolpica' as const,
++  entity: 'driver' as const,
++  providerField: 'driverId' as const,
++  providerValue,
++});
++
++const knownIds = () => runContext.participants;
++
++describe('U9 inventory policy vocabulary', () => {
++  it('defaults to strict and reads only exact closed policies', () => {
++    expect(readDriverInventoryPolicy(undefined)).toBe(strictInventoryPolicy);
++    expect(readDriverInventoryPolicy({ mode: 'strict' })).toEqual({
++      mode: 'strict',
++    });
++    expect(readDriverInventoryPolicy(policy)).toEqual(policy);
++    for (const bad of [
++      null,
++      [],
++      'optional-drivers',
++      { mode: 'strict', extra: true },
++      { mode: 'optional-drivers', policyVersion: 1 },
++      { mode: 'optional-drivers', policyVersion: 2, catalogHash: policy.mode },
++      {
++        mode: 'optional-drivers',
++        policyVersion: 1,
++        catalogHash: 'sha256:bad',
++      },
++      { mode: 'permissive' },
++    ]) {
++      expect(readDriverInventoryPolicy(bad)).toBeNull();
++    }
++  });
++
++  it('never invokes an accessor-backed policy field', () => {
++    const getter = vi.fn(() => 'optional-drivers');
++    const hostile = Object.defineProperty({}, 'mode', {
++      get: getter,
++      enumerable: true,
++    });
++    expect(readDriverInventoryPolicy(hostile)).toBeNull();
++    expect(getter).not.toHaveBeenCalled();
++  });
++
++  it('derives only strict from an operational run context before U10', () => {
++    expect(inventoryPolicyForContext(runContext)).toBe(strictInventoryPolicy);
++    expect(() =>
++      inventoryPolicyForContext({ inventoryPolicyVersion: 'optional/1' }),
++    ).toThrow(InventoryPolicyError);
++    expect(() => optionalDriverInventoryPolicy('not-a-hash')).toThrow(
++      InventoryPolicyError,
++    );
++  });
++
++  it('refuses malformed policies at wiring time in both the port and the coordinator', () => {
++    expect(() => harness({ inventoryPolicy: { mode: 'optional' } })).toThrow(
++      TypeError,
++    );
++    expect(
++      () =>
++        new MultiSourceCoordinator({
++          ports: [],
++          logger: new CapturingLogger(),
++          inventoryPolicy: { mode: 'optional-drivers', policyVersion: 2 },
++        }),
++    ).toThrow(CoordinatorConfigurationError);
++  });
++});
++
++describe('U9 operational gate (T35, acceptance 36-37)', () => {
++  it('parses the closed vocabulary strictly with strict as default', () => {
++    expect(resolveIdentityInventoryMode()).toBe('strict');
++    expect(resolveIdentityInventoryMode('strict')).toBe('strict');
++    expect(resolveIdentityInventoryMode('optional-drivers')).toBe(
++      'optional-drivers',
++    );
++    for (const bad of ['', 'Strict', 'optional', 'optional-drivers ', 'on'])
++      expect(() => resolveIdentityInventoryMode(bad)).toThrow(
++        ConfigurationError,
++      );
++  });
++
++  it('keeps optional-drivers unavailable to every operational configuration before U10', () => {
++    expect(resolveOperationalInventoryMode()).toBe('strict');
++    expect(() => resolveOperationalInventoryMode('optional-drivers')).toThrow(
++      ConfigurationError,
++    );
++    expect(identityConfiguration({}).inventoryMode).toBe('strict');
++    for (const mode of ['bundled', 'compare', 'runtime'])
++      expect(() =>
++        identityConfiguration({
++          IDENTITY_CATALOG_MODE: mode,
++          IDENTITY_INVENTORY_MODE: 'optional-drivers',
++        }),
++      ).toThrow(ConfigurationError);
++  });
++});
++
++describe('U9 containment of the optional policy and its normalizer', () => {
++  it('constructs the optional policy nowhere in production source', () => {
++    const root = join(__dirname, '..', '..', '..', 'src');
++    const offenders = (readdirSync(root, { recursive: true }) as string[])
++      .map((entry) => entry.toString().split('\\').join('/'))
++      .filter((entry) => entry.endsWith('.ts'))
++      .filter((entry) => entry !== 'identity/inventory/model.ts')
++      .filter((entry) =>
++        /optionalDriverInventoryPolicy|'optional-drivers'\s*,\s*policyVersion/.test(
++          readFileSync(join(root, entry), 'utf8'),
++        ),
++      );
++    expect(offenders).toEqual([]);
++  });
++
++  it('fails closed with a closed diagnostic when an unmapped key has no U1 candidate identity', async () => {
++    const result = await normalizeDriverInventory({
++      providerValues: [' refused '],
++      season: SEASON,
++      resolve: () => ({
++        outcome: 'unresolved',
++        failure: { reason: 'unmapped' },
++      }),
++      driverById: () => null,
++      catalogHash: runContext.catalogHash as `sha256:${string}`,
++      maxReportedFailures: 5,
++    });
++    expect(result).toEqual({
++      ok: false,
++      kind: 'contradiction',
++      problem: 'candidate-id-refused',
++    });
++  });
++});
++
++describe('U9 strict-mode parity (acceptance 1, 38)', () => {
++  it('keeps the strict early exit: an unknown driver ends the resource before constructors', async () => {
++    for (const inventoryPolicy of [undefined, { mode: 'strict' }]) {
++      const h = harness({
++        inventoryPolicy,
++        steps: [driversStep([...fullSeasonDriverRows(), driverRow(UNKNOWN_A)])],
++      });
++      const outcome = await fetchParticipants(h);
++      expect(outcome).toEqual({
++        outcome: 'mapping-failure',
++        attempts: [
++          { reference: 'jolpica-participants-1', outcome: 'successful' },
++        ],
++      });
++      expect(h.calls.map((c) => c.url)).toEqual([DRIVERS_URL]);
++      expect(h.reservations).toHaveLength(1);
++    }
++  });
++
++  it('emits the identical closed strict payload with no accounting', async () => {
++    const steps = [driversStep(fullSeasonDriverRows()), constructorsStep()];
++    const implicit = await fetchParticipants(harness({ steps }));
++    const explicit = await fetchParticipants(
++      harness({ steps, inventoryPolicy: { mode: 'strict' } }),
++    );
++    expect(explicit).toEqual(implicit);
++    expect(Object.keys(payloadOf(implicit)).sort()).toEqual([
++      'constructorEntries',
++      'constructors',
++      'driverEntries',
++      'drivers',
++      'kind',
++    ]);
++  });
++});
++
++describe('U9 optional normalization accounts every decoded driver row (T23, T26)', () => {
++  it('accounts an all-known inventory with the strict profile projection', async () => {
++    const steps = [driversStep(fullSeasonDriverRows()), constructorsStep()];
++    const strict = payloadOf(await fetchParticipants(harness({ steps })));
++    const outcome = await fetchParticipants(
++      harness({ steps, inventoryPolicy: policy }),
++    );
++    const payload = payloadOf(outcome);
++    const inventory = inventoryOf(outcome);
++    expect(payload.drivers).toEqual(strict.drivers);
++    expect(payload.constructors).toEqual(strict.constructors);
++    expect(payload.constructorEntries).toEqual(strict.constructorEntries);
++    expect(inventory.providerRowCount).toBe(fullSeasonDriverRows().length);
++    expect(inventory.unresolved).toEqual([]);
++    expect(inventory.resolved.map((r) => r.driverId)).toEqual(
++      payload.drivers.map((d) => d.id),
++    );
++    expect(inventory.catalogHash).toBe(runContext.catalogHash);
++    expect(inventory.policyVersion).toBe(1);
++    const { projectionDigest, ...projection } = inventory;
++    expect(projectionDigest).toBe(
++      await driverInventoryProjectionDigest(projection),
++    );
++  });
++
++  it('accounts one valid unknown, keeps verified profiles and still makes the constructors request', async () => {
++    const known = fullSeasonDriverRows();
++    const h = harness({
++      inventoryPolicy: policy,
++      steps: [
++        driversStep([...known, driverRow(UNKNOWN_A)]),
++        constructorsStep(),
++      ],
++    });
++    const outcome = await fetchParticipants(h);
++    const payload = payloadOf(outcome);
++    const inventory = inventoryOf(outcome);
++    expect(h.calls.map((c) => c.url)).toEqual([DRIVERS_URL, CONSTRUCTORS_URL]);
++    expect((outcome as Candidate).attempts).toEqual([
++      { reference: 'jolpica-participants-1', outcome: 'successful' },
++      { reference: 'jolpica-participants-2', outcome: 'successful' },
++    ]);
++    expect(h.reservations).toEqual(['jolpica', 'jolpica']);
++    expect(payload.drivers).toHaveLength(known.length);
++    expect(inventory.providerRowCount).toBe(known.length + 1);
++    expect(inventory.unresolved).toEqual([
++      {
++        candidateId: await candidateIdFor(unknownKey(UNKNOWN_A)),
++        reason: 'unmapped',
++      },
++    ]);
++    // No invented identity, profile, span or team assignment (T23, T26).
++    expect(payload.driverEntries).toEqual([]);
++    expect(
++      payload.constructorEntries.every((e) => e.driverLineup === null),
++    ).toBe(true);
++    expect(JSON.stringify(payload.drivers)).not.toContain(UNKNOWN_A);
++    expect(JSON.stringify(h.logger.events)).not.toContain(UNKNOWN_A);
++    expect(h.logger.events).toContainEqual(
++      expect.objectContaining({
++        operation: 'provider.participants.inventory_unresolved',
++        identityUnresolvedCount: 1,
++      }),
++    );
++  });
++
++  it('accounts multiple and interleaved unknowns in provider order for resolved and candidate order for unresolved', async () => {
++    const known = fullSeasonDriverRows();
++    const rows = [
++      driverRow(UNKNOWN_C),
++      ...known.slice(0, 3),
++      driverRow(UNKNOWN_A),
++      ...known.slice(3),
++      driverRow(UNKNOWN_B),
++    ];
++    const outcome = await fetchParticipants(
++      harness({
++        inventoryPolicy: policy,
++        steps: [driversStep(rows), constructorsStep()],
++      }),
++    );
++    const payload = payloadOf(outcome);
++    const inventory = inventoryOf(outcome);
++    expect(inventory.providerRowCount).toBe(rows.length);
++    expect(inventory.resolved.length + inventory.unresolved.length).toBe(
++      rows.length,
++    );
++    const expectedCandidates = (
++      await Promise.all(
++        [UNKNOWN_A, UNKNOWN_B, UNKNOWN_C].map((v) =>
++          candidateIdFor(unknownKey(v)),
++        ),
++      )
++    ).sort();
++    expect(inventory.unresolved.map((u) => u.candidateId)).toEqual(
++      expectedCandidates,
++    );
++    expect(payload.drivers.map((d) => d.id)).toEqual(
++      inventory.resolved.map((r) => r.driverId),
++    );
++    const strict = payloadOf(
++      await fetchParticipants(
++        harness({ steps: [driversStep(known), constructorsStep()] }),
++      ),
++    );
++    expect(payload.drivers).toEqual(strict.drivers);
++    expect(
++      new Set(inventory.resolved.map((r) => r.observationKeyHash)).size,
++    ).toBe(inventory.resolved.length);
++  });
++
++  it('is deterministic: unresolved accounting is independent of unknown row order', async () => {
++    const known = fullSeasonDriverRows();
++    const run = async (unknowns: string[]) =>
++      inventoryOf(
++        await fetchParticipants(
++          harness({
++            inventoryPolicy: policy,
++            steps: [
++              driversStep([...known, ...unknowns.map((u) => driverRow(u))]),
++              constructorsStep(),
++            ],
++          }),
++        ),
++      );
++    const first = await run([UNKNOWN_A, UNKNOWN_B]);
++    const again = await run([UNKNOWN_A, UNKNOWN_B]);
++    const swapped = await run([UNKNOWN_B, UNKNOWN_A]);
++    expect(again).toEqual(first);
++    expect(swapped).toEqual(first);
++  });
++});
++
++describe('U9 only an exact valid unmapped driver key is optional', () => {
++  it('fails a duplicate unknown provider row in the decoder; no constructors request', async () => {
++    const h = harness({
++      inventoryPolicy: policy,
++      steps: [
++        driversStep([
++          ...fullSeasonDriverRows(),
++          driverRow(UNKNOWN_A),
++          driverRow(UNKNOWN_A),
++        ]),
++      ],
++    });
++    expect(await fetchParticipants(h)).toMatchObject({
++      outcome: 'failed',
++      reason: 'invalid-payload',
++      attempts: [{ outcome: 'successful' }],
++    });
++    expect(h.calls.map((c) => c.url)).toEqual([DRIVERS_URL]);
++  });
++
++  it('fails two provider aliases of one canonical driver as a contradiction, never merged', async () => {
++    const [first] = runContext.verifiedBindings.filter(
++      (b) => b.key.entity === 'driver' && b.key.season === SEASON,
++    );
++    const registry = editedRegistry((document) => {
++      document.mappings.push({
++        source: 'jolpica',
++        entity: 'driver',
++        providerField: 'driverId',
++        providerValue: 'synthetic_alias_of_first',
++        gridviewId: first!.targetId,
++      });
++    });
++    expect(registry.isValid).toBe(true);
++    const h = harness({
++      inventoryPolicy: policy,
++      registry,
++      steps: [
++        driversStep([
++          ...fullSeasonDriverRows(),
++          driverRow('synthetic_alias_of_first'),
++        ]),
++      ],
++    });
++    expect(await fetchParticipants(h)).toMatchObject({
++      outcome: 'failed',
++      reason: 'invalid-payload',
++    });
++    expect(h.calls.map((c) => c.url)).toEqual([DRIVERS_URL]);
++    expect(h.logger.events).toContainEqual(
++      expect.objectContaining({
++        failureCategory: 'drivers-duplicate-canonical-driver',
++      }),
++    );
++  });
++
++  it('treats a contradictory registry as blocking, not as an unmapped observation', async () => {
++    const [first, second] = runContext.verifiedBindings.filter(
++      (b) => b.key.entity === 'driver' && b.key.season === SEASON,
++    );
++    const registry = editedRegistry((document) => {
++      document.mappings.push({
++        source: 'jolpica',
++        entity: 'driver',
++        providerField: 'driverId',
++        providerValue: first!.key.providerValue,
++        gridviewId: second!.targetId,
++      });
++    });
++    expect(registry.isValid).toBe(false);
++    const h = harness({
++      inventoryPolicy: policy,
++      registry,
++      steps: [driversStep(fullSeasonDriverRows())],
++    });
++    expect(await fetchParticipants(h)).toMatchObject({
++      outcome: 'mapping-failure',
++    });
++    expect(h.calls.map((c) => c.url)).toEqual([DRIVERS_URL]);
++  });
++
++  it('never converts a malformed provider key into an unresolved identity', async () => {
++    // Outside the established key grammar: empty, padded, control
++    // characters, over-long, wrong type. (`Red Bull`-style spaces and
++    // capitals are valid keys, so they are correctly unmapped, not malformed.)
++    for (const malformed of [
++      '',
++      ' padded ',
++      'a' + String.fromCharCode(10) + 'b',
++      'x'.repeat(65),
++      7,
++      null,
++    ]) {
++      const h = harness({
++        inventoryPolicy: policy,
++        steps: [driversStep([...fullSeasonDriverRows(), driverRow(malformed)])],
++      });
++      const outcome = await fetchParticipants(h);
++      expect(outcome.outcome).not.toBe('candidate');
++      expect(h.calls.map((c) => c.url)).toEqual([DRIVERS_URL]);
++    }
++    // Even past the decoder, the resolver's invalid-key answer is blocking.
++    const direct = await normalizeDriverInventory({
++      providerValues: [' padded '],
++      season: SEASON,
++      resolve: (providerValue) =>
++        runContext.registry.resolve({
++          season: SEASON,
++          source: 'jolpica',
++          entity: 'driver',
++          providerField: 'driverId',
++          providerValue,
++        }),
++      driverById: (id) => knownIds().driverById(id),
++      catalogHash: runContext.catalogHash as `sha256:${string}`,
++      maxReportedFailures: 5,
++    });
++    expect(direct).toMatchObject({ ok: false, kind: 'mapping' });
++  });
++
++  it('fails a mapped target with no canonical profile as a mapping failure, not optional', async () => {
++    const drivers = registryRows('drivers');
++    const [first] = runContext.verifiedBindings.filter(
++      (b) => b.key.entity === 'driver' && b.key.season === SEASON,
++    );
++    const participants = curatedParticipantsFrom(
++      runContext.canonicalProfiles.drivers.filter(
++        (d) => d.id !== first!.targetId,
++      ),
++      runContext.canonicalProfiles.constructors,
++    );
++    expect(drivers.length).toBeGreaterThan(0);
++    const h = harness({
++      inventoryPolicy: policy,
++      participants,
++      steps: [driversStep(fullSeasonDriverRows())],
++    });
++    expect(await fetchParticipants(h)).toMatchObject({
++      outcome: 'mapping-failure',
++    });
++    expect(h.calls.map((c) => c.url)).toEqual([DRIVERS_URL]);
++  });
++
++  it('fails an invalid canonical profile as invalid payload', async () => {
++    const [first] = runContext.verifiedBindings.filter(
++      (b) => b.key.entity === 'driver' && b.key.season === SEASON,
++    );
++    const participants: CuratedParticipants = {
++      driverById: (id) => {
++        const profile = runContext.participants.driverById(id);
++        return profile && id === first!.targetId
++          ? { ...profile, countryCode: 'not-a-country-code' }
++          : profile;
++      },
++      constructorById: (id) => runContext.participants.constructorById(id),
++    } as CuratedParticipants;
++    const h = harness({
++      inventoryPolicy: policy,
++      participants,
++      steps: [driversStep(fullSeasonDriverRows())],
++    });
++    expect(await fetchParticipants(h)).toMatchObject({
++      outcome: 'failed',
++      reason: 'invalid-payload',
++    });
++    expect(h.calls.map((c) => c.url)).toEqual([DRIVERS_URL]);
++    expect(h.logger.events).toContainEqual(
++      expect.objectContaining({
++        failureCategory: 'drivers-invalid-driver-profile',
++      }),
++    );
++  });
++
++  it('fails structural driver problems before any constructors request (incomplete page, envelope)', async () => {
++    for (const step of [
++      driversStep([...fullSeasonDriverRows(), driverRow(UNKNOWN_A)], {
++        total: '500',
++      }),
++      driversStep([driverRow(UNKNOWN_A)], { season: '2025' }),
++      { kind: 'json', body: { MRData: null } } as TransportStep,
++      driversStep('not-a-collection'),
++    ]) {
++      const h = harness({ inventoryPolicy: policy, steps: [step] });
++      expect(await fetchParticipants(h)).toMatchObject({
++        outcome: 'failed',
++        reason: 'invalid-payload',
++        attempts: [{ outcome: 'successful' }],
++      });
++      expect(h.calls.map((c) => c.url)).toEqual([DRIVERS_URL]);
++    }
++  });
++});
++
++describe('U9 constructor inventory remains fully strict (T28)', () => {
++  it('fails an unknown constructor after an optional unknown driver, with both real attempts', async () => {
++    const h = harness({
++      inventoryPolicy: policy,
++      steps: [
++        driversStep([...fullSeasonDriverRows(), driverRow(UNKNOWN_A)]),
++        constructorsStep([
++          ...fullSeasonConstructorRows(),
++          constructorRow('synthetic_unknown_constructor'),
++        ]),
++      ],
++    });
++    expect(await fetchParticipants(h)).toEqual({
++      outcome: 'mapping-failure',
++      attempts: [
++        { reference: 'jolpica-participants-1', outcome: 'successful' },
++        { reference: 'jolpica-participants-2', outcome: 'successful' },
++      ],
++    });
++    expect(h.calls.map((c) => c.url)).toEqual([DRIVERS_URL, CONSTRUCTORS_URL]);
++  });
++
++  it('fails a constructor with no canonical profile; known drivers cannot conceal it', async () => {
++    const [constructorBinding] = runContext.verifiedBindings.filter(
++      (b) => b.key.entity === 'constructor' && b.key.season === SEASON,
++    );
++    const participants = curatedParticipantsFrom(
++      runContext.canonicalProfiles.drivers,
++      runContext.canonicalProfiles.constructors.filter(
++        (c) => c.id !== constructorBinding!.targetId,
++      ),
++    );
++    const h = harness({
++      inventoryPolicy: policy,
++      participants,
++      steps: [driversStep(fullSeasonDriverRows()), constructorsStep()],
++    });
++    expect(await fetchParticipants(h)).toMatchObject({
++      outcome: 'mapping-failure',
++      attempts: [{ outcome: 'successful' }, { outcome: 'successful' }],
++    });
++  });
++
++  it('reports a failed constructors transport with both attempts and no partial payload', async () => {
++    const h = harness({
++      inventoryPolicy: policy,
++      steps: [
++        driversStep([...fullSeasonDriverRows(), driverRow(UNKNOWN_A)]),
++        { kind: 'status', status: 503 },
++      ],
++    });
++    const outcome = await fetchParticipants(h);
++    expect(outcome).toMatchObject({
++      outcome: 'failed',
++      reason: 'provider-unavailable',
++      attempts: [{ outcome: 'successful' }, { outcome: 'failed' }],
++    });
++    expect('payload' in outcome).toBe(false);
++  });
++
++  it('reports cancellation between the two requests as interrupted with only the real attempt', async () => {
++    const controller = new AbortController();
++    const h = harness({
++      inventoryPolicy: policy,
++      steps: [driversStep([...fullSeasonDriverRows(), driverRow(UNKNOWN_A)])],
++      afterResponse: (index) => {
++        if (index === 0) controller.abort();
++      },
++    });
++    expect(await fetchParticipants(h, controller.signal)).toEqual({
++      outcome: 'interrupted',
++      attempts: [
++        { reference: 'jolpica-participants-1', outcome: 'successful' },
++      ],
++      reason: 'cancelled',
++    });
++    expect(h.calls.map((c) => c.url)).toEqual([DRIVERS_URL]);
++  });
++
++  it('reports a limiter deferral before constructors as interrupted, never a fabricated attempt', async () => {
++    const h = harness({
++      inventoryPolicy: policy,
++      limiter: ['allowed', 'deferred'],
++      steps: [driversStep([...fullSeasonDriverRows(), driverRow(UNKNOWN_A)])],
++    });
++    expect(await fetchParticipants(h)).toMatchObject({
++      outcome: 'interrupted',
++      reason: 'rate-limit-deferred',
++      attempts: [{ outcome: 'successful' }],
++    });
++    expect(h.calls.map((c) => c.url)).toEqual([DRIVERS_URL]);
++    expect(h.reservations).toEqual(['jolpica', 'jolpica']);
++  });
++});
++
++/** A valid optional payload produced by the real port, for coordinator tests. */
++async function realOptionalPayload(): Promise<ParticipantsPayloadView> {
++  return payloadOf(
++    await fetchParticipants(
++      harness({
++        inventoryPolicy: policy,
++        steps: [
++          driversStep([
++            ...fullSeasonDriverRows(),
++            driverRow(UNKNOWN_A),
++            driverRow(UNKNOWN_B),
++          ]),
++          constructorsStep(),
++        ],
++      }),
++    ),
++  );
++}
++
++function coordinateWith(
++  payload: unknown,
++  inventoryPolicy: unknown = policy,
++): Promise<CoordinationRun> {
++  const port = new FakePort(
++    'jolpica',
++    () =>
++      ({
++        outcome: 'candidate',
++        attempts: [attempt('j-1'), attempt('j-2')],
++        payload,
++      }) as ProviderResourceOutcome,
++  );
++  return new MultiSourceCoordinator({
++    ports: [port],
++    logger: new CapturingLogger(),
++    inventoryPolicy,
++  }).coordinate({ plan: { season: SEASON, resources: [PARTICIPANTS] } });
++}
++
++function participantsContribution(run: CoordinationRun) {
++  return run.resources[0]!.contributions.find((c) => c.source === 'jolpica')!;
++}
++
++/** Rebuilds the digest after a tamper, so only the targeted rule can fail. */
++async function resealed(
++  payload: ParticipantsPayloadView,
++  edit: (inventory: Record<string, unknown>) => void,
++): Promise<ParticipantsPayloadView> {
++  const copy = structuredClone(payload) as unknown as Record<string, unknown>;
++  const inventory = copy.driverInventory as Record<string, unknown>;
++  edit(inventory);
++  // The digest covers only the named projection fields, never itself.
++  inventory.projectionDigest = await driverInventoryProjectionDigest(
++    inventory as unknown as DriverInventory,
++  );
++  return copy as unknown as ParticipantsPayloadView;
++}
++
++describe('U9 coordinator deep validation of private accounting (T29)', () => {
++  it('admits a genuine optional payload against the trusted run policy', async () => {
++    const run = await coordinateWith(await realOptionalPayload());
++    expect(run.resources[0]!.selection.outcome).toBe('selected');
++  });
++
++  it('refuses accounting in strict mode and its absence in optional mode', async () => {
++    const payload = await realOptionalPayload();
++    const strictRun = await coordinateWith(payload, { mode: 'strict' });
++    expect(participantsContribution(strictRun)).toMatchObject({
++      status: 'failed',
++      reason: 'invalid-payload',
++    });
++    const bare = Object.fromEntries(
++      Object.entries(payload).filter(([key]) => key !== 'driverInventory'),
++    );
++    const missing = await coordinateWith(bare);
++    expect(participantsContribution(missing)).toMatchObject({
++      status: 'failed',
++      reason: 'invalid-payload',
++    });
++  });
++
++  it.each([
++    [
++      'forged catalog hash',
++      (i: Record<string, unknown>) => {
++        i.catalogHash = `sha256:${'f'.repeat(64)}`;
++      },
++    ],
++    [
++      'unsupported policy version',
++      (i: Record<string, unknown>) => {
++        i.policyVersion = 2;
++      },
++    ],
++    [
++      'row-count mismatch',
++      (i: Record<string, unknown>) => {
++        i.providerRowCount = (i.providerRowCount as number) - 1;
++      },
++    ],
++    [
++      'duplicate unresolved candidate',
++      (i: Record<string, unknown>) => {
++        const u = i.unresolved as unknown[];
++        u[1] = structuredClone(u[0]);
++      },
++    ],
++    [
++      'duplicate resolved observation',
++      (i: Record<string, unknown>) => {
++        const r = i.resolved as { observationKeyHash: string }[];
++        r[1]!.observationKeyHash = r[0]!.observationKeyHash;
++      },
++    ],
++    [
++      'resolved reference missing from drivers',
++      (i: Record<string, unknown>) => {
++        const r = i.resolved as { driverId: string }[];
++        r[0]!.driverId = 'synthetic-unverified-driver';
++      },
++    ],
++    [
++      'resolved order differing from drivers',
++      (i: Record<string, unknown>) => {
++        const r = i.resolved as unknown[];
++        [r[0], r[1]] = [r[1], r[0]];
++      },
++    ],
++    [
++      'unsorted unresolved accounting',
++      (i: Record<string, unknown>) => {
++        (i.unresolved as unknown[]).reverse();
++      },
++    ],
++    [
++      'unrecognised unresolved reason',
++      (i: Record<string, unknown>) => {
++        (i.unresolved as Record<string, unknown>[])[0]!.reason = 'ambiguous';
++      },
++    ],
++    [
++      'unknown accounting field',
++      (i: Record<string, unknown>) => {
++        i.providerKeys = ['leak'];
++      },
++    ],
++    [
++      'unknown unresolved member field',
++      (i: Record<string, unknown>) => {
++        (i.unresolved as Record<string, unknown>[])[0]!.providerValue = 'leak';
++      },
++    ],
++    [
++      'malformed candidate hash',
++      (i: Record<string, unknown>) => {
++        (i.unresolved as Record<string, unknown>[])[0]!.candidateId = 'x';
++      },
++    ],
++  ])('rejects %s at the deep boundary', async (_name, edit) => {
++    const run = await coordinateWith(
++      await resealed(await realOptionalPayload(), edit),
++    );
++    expect(participantsContribution(run)).toMatchObject({
++      status: 'failed',
++      reason: 'invalid-payload',
++    });
++    expect(run.resources[0]!.selection.outcome).toBe('unavailable');
++  });
++
++  it('rejects an incorrect projection digest without resealing', async () => {
++    const payload = structuredClone(await realOptionalPayload());
++    (payload.driverInventory as { projectionDigest: string }).projectionDigest =
++      `sha256:${'0'.repeat(64)}`;
++    expect(
++      participantsContribution(await coordinateWith(payload)),
++    ).toMatchObject({ status: 'failed', reason: 'invalid-payload' });
++  });
++
++  it('rejects a profile tamper that the accounting no longer matches', async () => {
++    const payload = structuredClone(await realOptionalPayload()) as unknown as {
++      drivers: unknown[];
++    };
++    payload.drivers.pop();
++    expect(
++      participantsContribution(await coordinateWith(payload)),
++    ).toMatchObject({ status: 'failed', reason: 'invalid-payload' });
++  });
++
++  it('rejects a payload whose driverEntries are not empty', async () => {
++    const payload = structuredClone(await realOptionalPayload()) as unknown as {
++      driverEntries: unknown[];
++    };
++    payload.driverEntries.push({ season: SEASON });
++    const contribution = participantsContribution(
++      await coordinateWith(payload),
++    );
++    expect(contribution.status).toBe('failed');
++    // The inventory rule itself, isolated from the public entry contract.
++    const genuine = await realOptionalPayload();
++    const digest = genuine.driverInventory!.projectionDigest;
++    expect(validateDriverInventoryPayload(genuine, policy, digest)).toEqual([]);
++    expect(
++      validateDriverInventoryPayload(
++        { ...genuine, driverEntries: [{}] },
++        policy,
++        digest,
++      ),
++    ).toEqual(['driver-entries']);
++    expect(
++      validateDriverInventoryPayload(genuine, strictInventoryPolicy, null),
++    ).toEqual([]);
++  });
++
++  it('trusts the run context, not the payload: a self-consistent payload for another catalog fails', async () => {
++    const payload = await realOptionalPayload();
++    const otherPolicy = optionalDriverInventoryPolicy(
++      `sha256:${'e'.repeat(64)}`,
++    );
++    const run = await coordinateWith(payload, otherPolicy);
++    expect(participantsContribution(run)).toMatchObject({
++      status: 'failed',
++      reason: 'invalid-payload',
++    });
++  });
++
++  it('keeps its detached candidate when the adapter mutates accounting after submission', async () => {
++    const payload = structuredClone(await realOptionalPayload());
++    const expected = JSON.parse(JSON.stringify(payload)) as unknown;
++    const run = await coordinateWith(payload);
++    expect(run.resources[0]!.selection.outcome).toBe('selected');
++    const inventory = payload.driverInventory as unknown as {
++      unresolved: unknown[];
++      providerRowCount: number;
++      catalogHash: string;
++    };
++    inventory.unresolved.length = 0;
++    inventory.providerRowCount = 0;
++    inventory.catalogHash = 'tampered';
++    (payload.drivers as unknown[]).length = 0;
++    const selection = run.resources[0]!.selection;
++    expect(selection.outcome === 'selected' && selection.payload).toEqual(
++      expected,
++    );
++  });
++});
++
++describe('U9 discovery integration is best effort and bounded', () => {
++  it('derives the same candidate IDs as U1 discovery extraction', async () => {
++    const rows = [
++      ...fullSeasonDriverRows(),
++      driverRow(UNKNOWN_A),
++      driverRow(UNKNOWN_B),
++    ];
++    const captured: string[] = [];
++    const tasks: Promise<void>[] = [];
++    const sink: DiscoverySink = {
++      capture(input, body, registry) {
++        tasks.push(
++          extractJolpicaObservations(
++            input,
++            body,
++            observationContext,
++            registry,
++          ).then((result) => {
++            if (result.status === 'skipped') return;
++            for (const o of result.observations) captured.push(o.candidateId);
++          }),
++        );
++      },
++    };
++    const outcome = await fetchParticipants(
++      harness({
++        inventoryPolicy: policy,
++        discovery: sink,
++        steps: [driversStep(rows), constructorsStep()],
++      }),
++    );
++    await Promise.all(tasks);
++    const inventory = inventoryOf(outcome);
++    expect([...new Set(captured)].sort()).toEqual(
++      inventory.unresolved.map((u) => u.candidateId),
++    );
++  });
++
++  it('keeps explicit, valid accounting when the discovery store fails', async () => {
++    const write = vi.fn(async () => {
++      throw new Error('private storage outage');
++    });
++    const logger = new CapturingLogger();
++    const session = createShadowDiscovery({
++      client: { observe: write } as unknown as IdentityPort,
++      context: observationContext,
++      clock: () => Date.parse(observationContext.observedAt),
++      logger,
++    });
++    const outcome = await fetchParticipants(
++      harness({
++        inventoryPolicy: policy,
++        discovery: session,
++        steps: [
++          driversStep([...fullSeasonDriverRows(), driverRow(UNKNOWN_A)]),
++          constructorsStep(),
++        ],
++      }),
++    );
++    await session.drain();
++    expect(write).toHaveBeenCalled();
++    const inventory = inventoryOf(outcome);
++    expect(inventory.unresolved).toHaveLength(1);
++    expect(
++      participantsContribution(await coordinateWith(payloadOf(outcome))),
++    ).toMatchObject({ status: 'candidate' });
++    expect(JSON.stringify(logger.events)).not.toContain(
++      'private storage outage',
++    );
++  });
++
++  it('contains a throwing sink without changing the outcome', async () => {
++    const steps = [
++      driversStep([...fullSeasonDriverRows(), driverRow(UNKNOWN_A)]),
++      constructorsStep(),
++    ];
++    const throwing: DiscoverySink = {
++      capture() {
++        throw new Error('sink failure');
++      },
++    };
++    const plain = await fetchParticipants(
++      harness({ inventoryPolicy: policy, steps }),
++    );
++    const contained = await fetchParticipants(
++      harness({ inventoryPolicy: policy, steps, discovery: throwing }),
++    );
++    expect(contained).toEqual(plain);
++  });
++
++  it('deduplicates repeated observations and bounds collector overflow without affecting normalization', async () => {
++    const body = driversEnvelope([
++      ...fullSeasonDriverRows(),
++      driverRow(UNKNOWN_A),
++      driverRow(UNKNOWN_B),
++    ]);
++    const collector = createIdentityObservationCollector({
++      maxObservations: 1,
++    });
++    const outcomes: string[] = [];
++    const tasks: Promise<void>[] = [];
++    const sink: DiscoverySink = {
++      capture(input, captured, registry) {
++        tasks.push(
++          extractJolpicaObservations(
++            input,
++            captured,
++            observationContext,
++            registry,
++          ).then((result) => {
++            if (result.status === 'skipped') return;
++            for (const o of result.observations)
++              outcomes.push(collector.collect(o));
++          }),
++        );
++      },
++    };
++    const steps = [{ kind: 'json', body } as TransportStep, constructorsStep()];
++    const first = await fetchParticipants(
++      harness({ inventoryPolicy: policy, discovery: sink, steps }),
++    );
++    await Promise.all(tasks);
++    // Two unknowns, capacity one: one collected, one bounded overflow.
++    expect(outcomes.filter((o) => o === 'collected')).toHaveLength(1);
++    expect(outcomes).toContain('capacity');
++    captureDiscovery(
++      sink,
++      {
++        endpointKind: 'season-drivers',
++        season: SEASON,
++        requestedLimit: 100,
++        decoded: {
++          ok: true,
++          drivers: [{ driverId: UNKNOWN_A }],
++        },
++      },
++      driversEnvelope([driverRow(UNKNOWN_A)]),
++      runContext.registry,
++    );
++    await Promise.all(tasks);
++    expect(collector.stats().dropped).toBeGreaterThan(0);
++    // Overflow and duplicates never change the accounting.
++    expect(inventoryOf(first).unresolved).toHaveLength(2);
++    expect(inventoryOf(first).providerRowCount).toBe(
++      fullSeasonDriverRows().length + 2,
++    );
++  });
++});
++
++/** Routes a request by URL so one coordinator run can use real ports. */
++function routedClient(routes: ReadonlyMap<string, unknown>) {
++  const calls: string[] = [];
++  const logger = new CapturingLogger();
++  const limiter = scriptedLimiter([]);
++  const client = new ProviderHttpClient({
++    limiter: limiter.limiter,
++    logger,
++    transport: async (request) => {
++      calls.push(request.url);
++      const body = routes.get(request.url);
++      if (body === undefined) throw new Error(`unrouted ${request.url}`);
++      return new Response(JSON.stringify(body), {
++        status: 200,
++        headers: { 'Content-Type': 'application/json' },
++      });
++    },
++  });
++  return { client, calls, logger };
++}
++
++const withUnknownDrivers = (rows: Record<string, unknown>[]) =>
++  rows.map((row, index) =>
++    index < 2
++      ? { ...row, Driver: { driverId: [UNKNOWN_A, UNKNOWN_B][index] } }
++      : row,
++  );
++
++async function phase3Run(inventoryPolicy: unknown) {
++  const routes = new Map<string, unknown>([
++    [
++      DRIVERS_URL,
++      driversEnvelope([
++        ...fullSeasonDriverRows(),
++        driverRow(UNKNOWN_A),
++        driverRow(UNKNOWN_B),
++      ]),
++    ],
++    [CONSTRUCTORS_URL, constructorsEnvelope(fullSeasonConstructorRows())],
++    [resultsUrl(1), resultsEnvelope(withUnknownDrivers(baseRows()))],
++    [
++      driverStandingsUrl(),
++      driverStandingsEnvelope(withUnknownDrivers(baseDriverRows())),
++    ],
++  ]);
++  const { client, calls, logger } = routedClient(routes);
++  const registry = runContext.registry;
++  const ports = {
++    calendar: new JolpicaCalendarPort({
++      client,
++      logger,
++      registry,
++      eventNames: runContext.events,
++    }),
++    circuits: new JolpicaCircuitsPort({
++      client,
++      logger,
++      registry,
++      circuits: runContext.circuits,
++    }),
++    participants: new JolpicaParticipantsPort({
++      client,
++      logger,
++      registry,
++      participants: runContext.participants,
++      inventoryPolicy,
++    }),
++    results: new JolpicaResultsPort({ client, logger, registry }),
++    standings: new JolpicaStandingsPort({ client, logger, registry }),
++  };
++  const run = await new MultiSourceCoordinator({
++    ports: [new JolpicaResourcePort(ports)],
++    logger,
++    inventoryPolicy,
++  }).coordinate({
++    plan: {
++      season: SEASON,
++      resources: [
++        PARTICIPANTS,
++        {
++          kind: 'session-classification',
++          season: SEASON,
++          round: 1,
++          sessionType: 'race',
++        },
++        { kind: 'driver-standings', season: SEASON },
++      ],
++    },
++  });
++  return { run, calls };
++}
++
++describe('U9 synthetic phase-3 counterpart of the November regression (T24, T34)', () => {
++  it('strict: unknown inventory drivers end participants early; required rows block', async () => {
++    const { run, calls } = await phase3Run({ mode: 'strict' });
++    expect(calls).toEqual([DRIVERS_URL, resultsUrl(1), driverStandingsUrl()]);
++    expect(run.resources.map((r) => r.selection.outcome)).toEqual([
++      'unavailable',
++      'unavailable',
++      'unavailable',
++    ]);
++  });
++
++  it('optional: one additional constructors request, participants selected, unknown result and standings rows still block', async () => {
++    const { run, calls } = await phase3Run(policy);
++    expect(calls).toEqual([
++      DRIVERS_URL,
++      CONSTRUCTORS_URL,
++      resultsUrl(1),
++      driverStandingsUrl(),
++    ]);
++    const [participants, classification, standings] = run.resources;
++    expect(participants!.selection.outcome).toBe('selected');
++    for (const required of [classification!, standings!]) {
++      expect(required.selection.outcome).toBe('unavailable');
++      expect(required.contributions[0]).toMatchObject({
++        status: 'failed',
++        reason: 'mapping-unresolved',
++      });
++    }
++    expect(run.accounting).toBeDefined();
++  });
++});
++
++describe('U9 no public leakage and no pre-U10 publication (acceptance 35-36)', () => {
++  it('refuses to assemble an inventory-bearing participants payload before U10 closure', async () => {
++    const source = await seasonFixture();
++    const complete = await new MultiSourceCoordinator({
++      ports: [completePort('jolpica', source)],
++      logger: new CapturingLogger(),
++    }).coordinate({ plan: fullPlan(source) });
++    const metadata = metadataFor(source);
++    expect(assembleSeasonSource(complete, metadata).complete).toBe(true);
++    const inventory = (await realOptionalPayload()).driverInventory;
++    const withInventory = {
++      ...complete,
++      resources: complete.resources.map((resource) =>
++        resource.resource.kind === 'season-participants' &&
++        resource.selection.outcome === 'selected'
++          ? {
++              ...resource,
++              selection: {
++                ...resource.selection,
++                payload: {
++                  ...resource.selection.payload,
++                  driverInventory: inventory,
++                },
++              },
++            }
++          : resource,
++      ),
++    } as CoordinationRun;
++    expect(assembleSeasonSource(withInventory, metadata)).toEqual({
++      complete: false,
++      gap: 'inconsistent-references',
++      missing: [],
++      relations: [],
++    });
++  });
++
++  it('never places accounting, candidate IDs or unknown keys in an assembled public source', async () => {
++    const source = await seasonFixture();
++    const serialized = JSON.stringify(source);
++    expect(serialized).not.toContain('driverInventory');
++    expect(serialized).not.toContain('candidateId');
++    expect(serialized).not.toContain('observationKeyHash');
++    expect(serialized).not.toContain(UNKNOWN_A);
++  });
++});
+diff --git a/services/edge-api/test/sync/coordinated/entry-points/inventory-mode.test.ts b/services/edge-api/test/sync/coordinated/entry-points/inventory-mode.test.ts
+new file mode 100644
+index 0000000..16bd1f3
+--- /dev/null
++++ b/services/edge-api/test/sync/coordinated/entry-points/inventory-mode.test.ts
+@@ -0,0 +1,85 @@
++/**
++ * U9 operational gate: `IDENTITY_INVENTORY_MODE=optional-drivers` is closed
++ * vocabulary but unavailable before U10. A Worker configured with it refuses
++ * the coordinated run as a bounded configuration failure, before any lease,
++ * provider request, preparation or storage write. Strict, explicit or absent,
++ * keeps the existing behaviour.
++ */
++
++import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
++
++import type { ReconciliationLedgerPort } from '../../../../src/sync/coordinated/ledger-port';
++import { PRE_SEASON } from '../observation/support';
++import { EntryPointHarness, type LedgerBinding } from './support';
++
++const injected = vi.hoisted(() => ({ ledger: null as LedgerBinding }));
++vi.mock(
++  '../../../../src/sync/coordinated/ledger-port',
++  async (importOriginal) => {
++    const actual =
++      await importOriginal<
++        typeof import('../../../../src/sync/coordinated/ledger-port')
++      >();
++    return {
++      ...actual,
++      resolveReconciliationLedger: (): ReconciliationLedgerPort | null =>
++        injected.ledger?.() ?? null,
++    };
++  },
++);
++const bind = (binding: LedgerBinding) => {
++  injected.ledger = binding;
++};
++
++beforeEach(() => {
++  injected.ledger = null;
++  vi.stubGlobal(
++    'fetch',
++    vi.fn(() => {
++      throw new Error('U9 network forbidden');
++    }),
++  );
++});
++afterEach(() => {
++  vi.unstubAllGlobals();
++});
++
++describe('U9 inventory mode cannot be enabled operationally before U10', () => {
++  it('refuses optional-drivers before any provider request or publication', async () => {
++    const harness = await EntryPointHarness.create('local', bind, {
++      env: { IDENTITY_INVENTORY_MODE: 'optional-drivers' },
++    });
++    const answer = await harness.manual(PRE_SEASON);
++    expect(answer.status).toBe(500);
++    expect(answer.requests).toEqual([]);
++    expect(answer.reservations).toBe(0);
++    expect([answer.prepares, answer.finalizes, answer.storageWrites]).toEqual([
++      0, 0, 0,
++    ]);
++    expect(answer.logs).toContainEqual(
++      expect.objectContaining({ failureCategory: 'configuration' }),
++    );
++    expect(JSON.stringify(answer.logs)).not.toContain('optional-drivers');
++  });
++
++  it('refuses an unknown inventory value the same way', async () => {
++    const harness = await EntryPointHarness.create('local', bind, {
++      env: { IDENTITY_INVENTORY_MODE: 'permissive' },
++    });
++    const answer = await harness.manual(PRE_SEASON);
++    expect(answer.status).toBe(500);
++    expect(answer.requests).toEqual([]);
++  });
++
++  it('keeps explicit strict identical to the default', async () => {
++    const strict = await EntryPointHarness.create('local', bind, {
++      env: { IDENTITY_INVENTORY_MODE: 'strict' },
++    });
++    const unset = await EntryPointHarness.create('local', bind);
++    const explicit = await strict.manual(PRE_SEASON);
++    const absent = await unset.manual(PRE_SEASON);
++    expect(explicit.status).toBe(absent.status);
++    expect(explicit.requests).toEqual(absent.requests);
++    expect(explicit.body.data).toEqual(absent.body.data);
++  });
++});

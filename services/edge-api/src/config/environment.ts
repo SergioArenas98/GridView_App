@@ -23,6 +23,55 @@ const validProviderModes = ['mock', 'none', 'coordinated'] as const;
 export type EnvironmentName = (typeof validEnvironments)[number];
 export type ProviderMode = (typeof validProviderModes)[number];
 export type PublicationAuthorityMode = 'legacy' | 'sequencer';
+export type IdentityCatalogMode = 'bundled' | 'compare' | 'runtime';
+export function resolveIdentityCatalogMode(
+  value?: string,
+): IdentityCatalogMode {
+  if (value === undefined) return 'bundled';
+  if (value === 'bundled' || value === 'compare' || value === 'runtime')
+    return value;
+  throw new ConfigurationError(
+    'IDENTITY_CATALOG_MODE must be bundled, compare or runtime.',
+  );
+}
+
+/**
+ * U9: the closed inventory-policy vocabulary (design §11.1). Parsed strictly:
+ * absent is `strict`, and anything outside the two values is a configuration
+ * error, never a permissive default.
+ */
+export type IdentityInventoryMode = 'strict' | 'optional-drivers';
+export function resolveIdentityInventoryMode(
+  value?: string,
+): IdentityInventoryMode {
+  if (value === undefined || value === 'strict') return 'strict';
+  if (value === 'optional-drivers') return value;
+  throw new ConfigurationError(
+    'IDENTITY_INVENTORY_MODE must be strict or optional-drivers.',
+  );
+}
+
+/**
+ * The inventory mode an **operational** run may select (U10, design §11.1).
+ *
+ * `strict` is the default under every catalog mode. `optional-drivers` is
+ * accepted only together with `IDENTITY_CATALOG_MODE=runtime`: bundled and
+ * compare authority cannot enable it, and nothing falls back to strict when it
+ * is refused - the configuration is simply invalid. Runtime binding and
+ * installation checks follow in `identityConfiguration`. Selecting it is an
+ * explicit, owner-approved configuration change; no committed environment
+ * selects it.
+ */
+export function resolveOperationalInventoryMode(
+  value: string | undefined,
+  catalogMode: IdentityCatalogMode,
+): IdentityInventoryMode {
+  const mode = resolveIdentityInventoryMode(value);
+  if (mode === 'strict' || catalogMode === 'runtime') return mode;
+  throw new ConfigurationError(
+    'IDENTITY_INVENTORY_MODE=optional-drivers requires IDENTITY_CATALOG_MODE=runtime.',
+  );
+}
 
 interface TestOnlyBindings {
   __LOCAL_STORAGE?: import('../storage/types').SnapshotStorage;
@@ -74,8 +123,27 @@ interface TestOnlyBindings {
 
 /** Bindings and variables available to the Worker. */
 export interface Env extends TestOnlyBindings {
+  /** U6 explicit selection; absence keeps reviewed bundled authority. */
+  IDENTITY_CATALOG_MODE?: string;
+  /** U9 whole-run inventory policy; absence is strict. Optional is refused before U10. */
+  IDENTITY_INVENTORY_MODE?: string;
+  /** U7 local-only opt-in must exactly name this installation; unset in all environments. */
+  IDENTITY_BATCH_V1_COMPATIBILITY_INSTALLATION_ID?: string;
+  /** U2 shadow capture only; absence is off. No catalog authority switch. */
+  IDENTITY_DISCOVERY_MODE?: string;
+  IDENTITY_ADMIN_MODE?: string;
+  /** Individually issued identity-only credentials. Secret binding, never a var. */
+  IDENTITY_REVIEWER_CREDENTIALS?: string;
+  IDENTITY_INSTALLATION_ID?: string;
+  IDENTITY_CATALOG?: import('../identity/client').IdentityNamespace;
   ENVIRONMENT?: string;
   PROVIDER_MODE?: string;
+  /** Optional egress only; unset selects the original direct transport. */
+  JOLPICA_TRANSPORT?: string;
+  /** HTTPS origin of the temporary proxy, without a path or query. */
+  JOLPICA_PROXY_ORIGIN?: string;
+  /** Proxy-only bearer credential. Supply as a Worker secret, never a var. */
+  JOLPICA_PROXY_TOKEN?: string;
   /**
    * Selects the season publication authority (ADR 0025). Only the exact string
    * `sequencer` selects the two-phase protocol; anything else - including an
@@ -113,6 +181,12 @@ export interface Env extends TestOnlyBindings {
   SEASON_PUBLICATION_SEQUENCER?: DurableObjectNamespace;
   PUBLIC_BASE_URL?: string;
   ADMIN_TOKEN?: string;
+  /**
+   * U11 G5 recovery: "enabled" lets the operator recovery route schedule a
+   * point-in-time restore and restart an object. Absent everywhere committed;
+   * reading a bookmark never needs it.
+   */
+  RECOVERY_RESTORE?: string;
   /**
    * The one season the guarded staging ingest of a reviewed season batch
    * accepts (`POST /internal/admin/season/ingest`). Unset, the route is
@@ -202,6 +276,57 @@ export class ConfigurationError extends Error {
   }
 }
 
+export type JolpicaTransportConfig =
+  | { readonly mode: 'direct' }
+  | { readonly mode: 'proxy'; readonly origin: string; readonly token: string };
+
+/**
+ * Resolve only at the provider transport seam, never into logged runtime
+ * configuration. Direct mode ignores leftover proxy settings for reversibility.
+ * Errors deliberately contain no supplied values (including URLs or secrets).
+ */
+export function resolveJolpicaTransport(env: Env): JolpicaTransportConfig {
+  const mode = env.JOLPICA_TRANSPORT;
+  if (mode === undefined || mode === 'direct') return { mode: 'direct' };
+  if (mode !== 'proxy') {
+    throw new ConfigurationError('JOLPICA_TRANSPORT must be direct or proxy.');
+  }
+  if (env.CONTROLLED_PROVIDER_SOURCE === 'kv') {
+    throw new ConfigurationError(
+      'Proxy transport cannot be combined with the controlled provider source.',
+    );
+  }
+  let origin: URL;
+  try {
+    origin = new URL(env.JOLPICA_PROXY_ORIGIN ?? '');
+  } catch {
+    throw new ConfigurationError(
+      'JOLPICA_PROXY_ORIGIN must be an HTTPS origin.',
+    );
+  }
+  // Require a canonical origin spelling (optionally one trailing slash).
+  // This also rejects credentials, paths, queries, fragments, backslashes,
+  // whitespace and URL parser normalization tricks, including empty ? or #.
+  if (
+    origin.protocol !== 'https:' ||
+    origin.port !== '' ||
+    ![origin.origin, `${origin.origin}/`].includes(
+      env.JOLPICA_PROXY_ORIGIN ?? '',
+    ) ||
+    /(^|\.)jolpi\.ca\.?$/.test(origin.hostname)
+  ) {
+    throw new ConfigurationError(
+      'JOLPICA_PROXY_ORIGIN must be a separate canonical HTTPS origin on port 443.',
+    );
+  }
+  const token = env.JOLPICA_PROXY_TOKEN;
+  // RFC 6750 bearer syntax; reject whitespace/header injection and bound size.
+  if (!token || token.length > 4096 || !/^[A-Za-z0-9._~+/-]+=*$/.test(token)) {
+    throw new ConfigurationError('JOLPICA_PROXY_TOKEN must be a bearer token.');
+  }
+  return { mode: 'proxy', origin: origin.origin, token };
+}
+
 /**
  * Resolves `PROVIDER_MODE` (runtime activation decision O-1).
  *
@@ -245,6 +370,16 @@ export function resolveProviderMode(
     );
   }
   return mode as ProviderMode;
+}
+
+export function resolveIdentityDiscoveryMode(
+  value: string | undefined,
+): 'off' | 'shadow' {
+  if (value === undefined || value === 'off') return 'off';
+  if (value === 'shadow') return 'shadow';
+  throw new ConfigurationError(
+    'IDENTITY_DISCOVERY_MODE must be off or shadow.',
+  );
 }
 
 /**

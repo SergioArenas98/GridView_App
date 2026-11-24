@@ -178,11 +178,11 @@ describe('a complete season-participants resource', () => {
     expect(validateCoordinatedPayload(payload)).toEqual([]);
   });
 
-  it('normalizes all 32 drivers and 11 constructors to curated identities, in provider order', async () => {
+  it('normalizes all 33 drivers (32 plus the P0 rafael-camara) and 11 constructors to curated identities, in provider order', async () => {
     const { outcome } = await fetchParticipants();
     const payload = payloadOf(outcome);
 
-    expect(payload.drivers).toHaveLength(32);
+    expect(payload.drivers).toHaveLength(33);
     expect(payload.constructors).toHaveLength(11);
     expect(payload.drivers.map((driver) => driver.id)).toEqual(
       curatedDriverMappings().map((mapping) => mapping.gridviewId),
@@ -252,7 +252,8 @@ describe('a complete season-participants resource', () => {
       identityOnly.has(driver.id),
     );
 
-    expect(emitted).toHaveLength(25);
+    // 25, plus the identity-only P0 rafael-camara.
+    expect(emitted).toHaveLength(26);
     for (const driver of emitted) {
       for (const key of DRIVER_OPTIONAL_KEYS) {
         expect(Object.hasOwn(driver, key), `${driver.id}.${key}`).toBe(true);

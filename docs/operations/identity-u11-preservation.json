@@ -1,0 +1,1627 @@
+{
+  "unit": "U11",
+  "recordedAt": "2026-11-17T20:43:08.364773+00:00",
+  "branch": "feat/jolpica-egress-proxy",
+  "reviewedR0Base": "027da5da59bf6b8c75a3fc432ef4fdc691772528",
+  "releaseCandidate": {
+    "commit": "6a609543fd762b028e0e3b4101d2f0ce9e851ce0",
+    "deployableSource": true,
+    "stagingDryRunIndexJsSha256": "fb60cc641359c34026de6b32b5a3e0701c55dbf8c94c276059f174e34485e3d8",
+    "buildProcedure": "git worktree add --detach <dir> 6a609543fd762b028e0e3b4101d2f0ce9e851ce0; cd services/edge-api; npm ci; npx wrangler deploy --dry-run --env staging --outdir <out>",
+    "laterCommitsDocumentationOnly": true
+  },
+  "localCommits": [
+    "433c35c60d45319bcc1eeef67b2bbe85e9bfd5dd docs(identity): add U11 Addendum A (release preparation, NO-GO)",
+    "6a609543fd762b028e0e3b4101d2f0ce9e851ce0 fix(identity): anchor R0 corpus checks to the reviewed base commit",
+    "d364bb4590357abf9b4294f57893d5e9d7152d48 chore(config): propose inert staging identity catalog (U11)",
+    "e6c77e9c0ecd57b84edc4ee0c05c31d01d7e80c8 feat(edge-api): add identity catalog U1-U10 (inert by default)",
+    "ecab7418ba2e7e49d303940988a66dfb472bf494 docs: add identity catalog U2-U11 reports, runbook and R0 evidence",
+    "6c46b250a0c7f12f05e4d19fd39c3ffdd70f1778 docs: add identity management design and ADRs 0029-0031"
+  ],
+  "pushed": false,
+  "fullSuiteRuns": [
+    {
+      "tree": "d364bb4590357abf9b4294f57893d5e9d7152d48",
+      "outcome": "failed",
+      "tests": {
+        "passed": 6145,
+        "failed": 10,
+        "skipped": 237
+      },
+      "testFiles": {
+        "failed": 24,
+        "passed": 291,
+        "skipped": 3
+      },
+      "exitCode": 1,
+      "cause": "corpus.mjs compared R0 sources with a floating HEAD; fixed in 6a60954",
+      "logSha256": "ec5e2125be4abef28a6cb5bd50fb75a94fd72f2866dbfc6845b0cc0e37def7b0"
+    },
+    {
+      "tree": "6a609543fd762b028e0e3b4101d2f0ce9e851ce0",
+      "outcome": "interrupted",
+      "cause": "stopped by Claude Code: system critically low on memory; no result printed",
+      "logSha256": "4bd9e86b2bfc7510a550bded508a6e0d4eb1a894e07672496f683dd3011acee6"
+    },
+    {
+      "tree": "6a609543fd762b028e0e3b4101d2f0ce9e851ce0",
+      "outcome": "passed",
+      "command": "npm test -- --maxWorkers=1 --testTimeout=30000",
+      "start": "2026-11-17T20:30:05Z",
+      "end": "2026-11-17T20:40:41Z",
+      "vitestDurationSeconds": 634.96,
+      "tests": {
+        "passed": 6386,
+        "failed": 0,
+        "skipped": 6,
+        "total": 6392
+      },
+      "testFiles": {
+        "passed": 315,
+        "failed": 0,
+        "skipped": 3,
+        "total": 318
+      },
+      "exitCode": 0,
+      "conditions": "clean checkout; machine kept awake (SetThreadExecutionState); 17.7 GB free at start, 17.9 GB at end; timeouts, deadlines and assertions unchanged",
+      "logSha256": "4ab3fd4ae039fda63c3a1bd3767eae8d3101273d6be7ad75a7aa6a28a3cea876"
+    }
+  ],
+  "testCountReconciliation": "U10 6,381 executed + 5 new tests in test/config/staging-identity-catalog.test.ts = 6,386; 317 + 1 files = 318",
+  "u10AcceptanceRetained": {
+    "log": "services/edge-api/.wrangler/identity-u10-full-acceptance.log",
+    "logSha256": "be94fa9efc1bb2b8b775c19bebd62c47acc8eb6ddf0abb0ea9826aa7468ef326",
+    "tests": {
+      "passed": 6381,
+      "failed": 0,
+      "skipped": 6
+    }
+  },
+  "r0ProvenanceChecks": [
+    {
+      "case": "authentic-regeneration",
+      "exit": 0,
+      "byteIdentical": true
+    },
+    {
+      "case": "driver-profile-changed",
+      "expectedRefusal": "Unreviewed source change",
+      "exit": 1,
+      "refused": true,
+      "reason": "throw Error('Unreviewed source change: ' + path);"
+    },
+    {
+      "case": "mapping-retargeted",
+      "expectedRefusal": "Unreviewed source change",
+      "exit": 1,
+      "refused": true,
+      "reason": "throw Error('Unreviewed source change: ' + path);"
+    },
+    {
+      "case": "historical-evidence-altered",
+      "expectedRefusal": "Historical evidence changed without review",
+      "exit": 1,
+      "refused": true,
+      "reason": "throw Error("
+    },
+    {
+      "case": "contradictory-extra-acknowledgement",
+      "expectedRefusal": "Historical evidence changed without review",
+      "exit": 1,
+      "refused": true,
+      "reason": "throw Error("
+    },
+    {
+      "case": "pending-evidence-incomplete",
+      "expectedRefusal": "Incomplete pending November evidence",
+      "exit": 1,
+      "refused": true,
+      "reason": "throw Error('Incomplete pending November evidence');"
+    },
+    {
+      "case": "head-not-descending-from-027da5d",
+      "exit": 1,
+      "refused": true,
+      "reason": "const err = new Error(message);"
+    },
+    {
+      "case": "throwaway-restored",
+      "clean": true,
+      "head": "6a609543fd762b028e0e3b4101d2f0ce9e851ce0"
+    }
+  ],
+  "excludedFromCommits": [
+    {
+      "path": "docs/operations/identity-u8-evidence.json",
+      "sha256": "28fac9e53d394f5ca5ced9577520da45bc3d917248dc76dabd0de582fbe9bc39",
+      "reason": "contains absolute local paths; public repository"
+    },
+    {
+      "path": "docs/operations/identity-u8-evidence-final.json",
+      "sha256": "6d207ed8f43d3af51b873329bb6d17610ae4c17b93445f5d6e33cae63ccb03e7",
+      "reason": "contains absolute local paths; public repository"
+    }
+  ],
+  "filesChangedBaseToRc": [
+    {
+      "path": ".gitattributes",
+      "blobBytes": 919,
+      "blobSha256": "76432bb74c749dff05123475bc61b3f0f033966fd396f9801b662cce551b5633"
+    },
+    {
+      "path": "content/seasons/2026/provider-evidence.development.json",
+      "blobBytes": 47719,
+      "blobSha256": "9ab5c486201beff9fcd81ce4696a4b4d2a513149eef2c4ec85fabcd69c1c479d"
+    },
+    {
+      "path": "docs/adr/0009-protected-staging-administration-token.md",
+      "blobBytes": 1564,
+      "blobSha256": "741b54dea415d140c61f619611f8645c870e16a4c99d9e2aea4fc5aac172aad8"
+    },
+    {
+      "path": "docs/adr/0020-provider-source-observation-and-reconciliation.md",
+      "blobBytes": 165739,
+      "blobSha256": "fcd45890a5847b446053d791c1f10c61b6b2c3577d42ee9003ca201e4897547c"
+    },
+    {
+      "path": "docs/adr/0022-curated-provider-identifier-mappings.md",
+      "blobBytes": 68266,
+      "blobSha256": "b0dd6816df60ac41e4fdd709ee0fcc6ab263c93c89347f9e9f05f88aa2d8fa87"
+    },
+    {
+      "path": "docs/adr/0023-multi-source-provider-coordination.md",
+      "blobBytes": 139784,
+      "blobSha256": "43d0813f6702a302cd1c33c711b2ed0e3ee957ffd0dc164d4a4a8c92fa80dde2"
+    },
+    {
+      "path": "docs/adr/0024-deep-normalized-contract-validation.md",
+      "blobBytes": 14302,
+      "blobSha256": "9f13dccb66fd034977600c92728afac0529898baad3b82253a08cb192e64a3dc"
+    },
+    {
+      "path": "docs/adr/0025-season-publication-authority-and-rollback-republication.md",
+      "blobBytes": 353282,
+      "blobSha256": "b4e3b56668b61ea5c3f1a9faee919258cacf2a2f17fe3982ff861346f0a21003"
+    },
+    {
+      "path": "docs/adr/0026-season-participation-semantics-and-derivation.md",
+      "blobBytes": 69170,
+      "blobSha256": "afb6d2b3dce2ef7836fc74a3258e382a78d869dc8688d3912f99a63f7e09cf37"
+    },
+    {
+      "path": "docs/adr/0028-automatic-end-to-end-season-updates.md",
+      "blobBytes": 29050,
+      "blobSha256": "29643b51af3602b9426b6421ba1ab4cfd8e3f073677458677cd034dd42e90460"
+    },
+    {
+      "path": "docs/adr/0029-persistent-identity-discovery-and-reviewed-runtime-catalog.md",
+      "blobBytes": 14712,
+      "blobSha256": "654fb84fa759cea511376fb4d85e80c10dc966bf0639f3f2f78ad4534dade9c9"
+    },
+    {
+      "path": "docs/adr/0030-provider-driver-inventory-and-required-identity-closure.md",
+      "blobBytes": 6662,
+      "blobSha256": "ed056465d509cf83020ffd1aa681bd07da4834a6cbfcf7442f57d87fc375e5b1"
+    },
+    {
+      "path": "docs/adr/0031-identity-review-authority-and-catalog-cutover.md",
+      "blobBytes": 14426,
+      "blobSha256": "173bde1737bb07840be40f90dc68afd310ee19373d19ec2aa53858178e8f6a29"
+    },
+    {
+      "path": "docs/adr/README.md",
+      "blobBytes": 5143,
+      "blobSha256": "18fc94b0b40ee6cacb96ee105dd4d8c4f8a57975d17beef96a5057dd755aedac"
+    },
+    {
+      "path": "docs/operations/2026-11-12-jolpica-mapping-investigation.md",
+      "blobBytes": 14510,
+      "blobSha256": "9e785461766bad5be039a8638ac7253b42e74b4978feb033ca3413ab3e7c676b"
+    },
+    {
+      "path": "docs/operations/GridView_Identity_Admin_U5_Guide.md",
+      "blobBytes": 15504,
+      "blobSha256": "055281462411f038721cb83a8943c1f933016e9a0192ce04da3a1e9e23d07d06"
+    },
+    {
+      "path": "docs/operations/GridView_Identity_Catalog_Runbook.md",
+      "blobBytes": 21691,
+      "blobSha256": "9f997687c29b821ba2aabb7d58c19edf2fcc4552046309fa924f6f2d9c59a4cb"
+    },
+    {
+      "path": "docs/operations/GridView_Identity_Catalog_Staging_Proposal.diff",
+      "blobBytes": 2272,
+      "blobSha256": "46a9ef56428a1c143f80428dd900c1bb7766f56c760b4636ba012232f25fc14c"
+    },
+    {
+      "path": "docs/operations/GridView_Identity_Catalog_U10.md",
+      "blobBytes": 35987,
+      "blobSha256": "b1b018085d8508711c9387023a312ac7f3e618de8f7cf5a3272b10b77976600e"
+    },
+    {
+      "path": "docs/operations/GridView_Identity_Catalog_U11.md",
+      "blobBytes": 33164,
+      "blobSha256": "d88012be21d9a0bff23d12f1e1cb6f7404c015a1137ef7db5ad5acf1b5645e06"
+    },
+    {
+      "path": "docs/operations/GridView_Identity_Catalog_U3.md",
+      "blobBytes": 19073,
+      "blobSha256": "86997097dee9c9cf665259fbef2e31e01e7440c88a6ce7749f0f5b9d5cbd3de1"
+    },
+    {
+      "path": "docs/operations/GridView_Identity_Catalog_U4.md",
+      "blobBytes": 24334,
+      "blobSha256": "bf6c1c6e3feb17a74d74212946127127bf7708e464282d8731f0bf4993c4d902"
+    },
+    {
+      "path": "docs/operations/GridView_Identity_Catalog_U4_Preflight.md",
+      "blobBytes": 25615,
+      "blobSha256": "b63f9ef7babd530ed3e4c01dbf06e9a93af7be2bd9e104a4d2ac786acc217a17"
+    },
+    {
+      "path": "docs/operations/GridView_Identity_Catalog_U5.md",
+      "blobBytes": 52571,
+      "blobSha256": "d71197380f60ca8869ae4cdd5e8cfb339e96e8222cbffbd50a1b7101e195ba89"
+    },
+    {
+      "path": "docs/operations/GridView_Identity_Catalog_U6.md",
+      "blobBytes": 39363,
+      "blobSha256": "453a7e3bcdd304b1ffb28932d72ae0ba89eb9d763eb71c95437796bd213343ef"
+    },
+    {
+      "path": "docs/operations/GridView_Identity_Catalog_U7.md",
+      "blobBytes": 36778,
+      "blobSha256": "a040ab9e473ec6aeed460c06aa5acaca118375ec8da098869c5e155c99042b88"
+    },
+    {
+      "path": "docs/operations/GridView_Identity_Catalog_U8.md",
+      "blobBytes": 31660,
+      "blobSha256": "90bbd0b831bbe09f8689bc133d8d8e388661953d09eda6d25c644ed259e53e2a"
+    },
+    {
+      "path": "docs/operations/GridView_Identity_Catalog_U9.md",
+      "blobBytes": 24266,
+      "blobSha256": "0a265f31cbe2a908f8b5ba8f924b93f8714a5f047c5c5fa9f6a267620e31c182"
+    },
+    {
+      "path": "docs/operations/GridView_Identity_Discovery_U2.md",
+      "blobBytes": 14269,
+      "blobSha256": "baf3c186397e177690786409a269535897863135c115e171fa6a1790298ca2b7"
+    },
+    {
+      "path": "docs/operations/GridView_Provider_Mapping_Guide.md",
+      "blobBytes": 31824,
+      "blobSha256": "471f204e2416915785a9bf6196ba2ddde58830a7c74b6fcd1ddd0f3b44ae423b"
+    },
+    {
+      "path": "docs/operations/identity-seed-r0/manifest.json",
+      "blobBytes": 4975,
+      "blobSha256": "bdbaeb3792056c9d7a4e4e81633b2ce66dc7f458f55642994999de9e3bcd1fe1"
+    },
+    {
+      "path": "docs/operations/identity-seed-r0/parity.json",
+      "blobBytes": 33442,
+      "blobSha256": "372b67eaa9ca1b8043ee1604e80961beb66274b9c95e70a40b165ec63b6d6f46"
+    },
+    {
+      "path": "docs/operations/identity-seed-r0/seed.json",
+      "blobBytes": 555679,
+      "blobSha256": "6abc3830314c2c08fad2c3577141ca548b0b7e3a2109d7acf66e3c85448edab7"
+    },
+    {
+      "path": "docs/operations/identity-u10-baseline.json",
+      "blobBytes": 302798,
+      "blobSha256": "4a618dfca1ae605d118c730316bdedb79c6cdb25e4566de57e12dcd92b85436c"
+    },
+    {
+      "path": "docs/operations/identity-u10-changes.patch",
+      "blobBytes": 150484,
+      "blobSha256": "fe0f2702fe080abfcbff08c2e68bc1a2cf4b4e322d51cde8953ebc3ccbbbefa8"
+    },
+    {
+      "path": "docs/operations/identity-u10-preservation.json",
+      "blobBytes": 335432,
+      "blobSha256": "5e03e4fbefb4cc81325e67f70e8ae08707ce9e1b123f78bf0ec735ff9628f278"
+    },
+    {
+      "path": "docs/operations/identity-u3-correction-baseline.json",
+      "blobBytes": 238330,
+      "blobSha256": "368acebc23134eb9a19481195732ef0dd056441111b4369dbc47d854d0f6bb76"
+    },
+    {
+      "path": "docs/operations/identity-u4-baseline.json",
+      "blobBytes": 237888,
+      "blobSha256": "fce6cf7d94ee25a273603fed63d99584bcd9f0be7fe1bcff9c2e9384240323ad"
+    },
+    {
+      "path": "docs/operations/identity-u4-preservation.json",
+      "blobBytes": 6581,
+      "blobSha256": "c9100d93009f806cd439095e226e4458d85c89efc7f3333b935364ec37f82b7b"
+    },
+    {
+      "path": "docs/operations/identity-u4-resume-baseline.json",
+      "blobBytes": 239081,
+      "blobSha256": "92a15fee33a1a60cfc2b91b299fe3e0411b5d9ddb57919cc859f0fcff85f318a"
+    },
+    {
+      "path": "docs/operations/identity-u5-baseline.json",
+      "blobBytes": 308562,
+      "blobSha256": "d056f70734814228df2997764edd1f1ad72878b9dff5641165622ed2c9231631"
+    },
+    {
+      "path": "docs/operations/identity-u5-correction-baseline.json",
+      "blobBytes": 442192,
+      "blobSha256": "e7872d6d21fd6e1f4dc72315215847fd7d0ca1a06cd93b8ba6a66ada10237fa9"
+    },
+    {
+      "path": "docs/operations/identity-u5-correction-preservation.json",
+      "blobBytes": 436402,
+      "blobSha256": "1680409320026c9d181777a4bc080040dc9f8a8c7a2455b09845b47517fe8108"
+    },
+    {
+      "path": "docs/operations/identity-u5-examples/README.md",
+      "blobBytes": 1967,
+      "blobSha256": "c32c3010c43730cd947ae655067cc8803bfff07c05e30f3a3c1073c649afcfae"
+    },
+    {
+      "path": "docs/operations/identity-u5-examples/abandon.json",
+      "blobBytes": 454,
+      "blobSha256": "23f45f7cbe6fd091d3b306d6be4e78d7b922a281feac404196d41ff7277b962e"
+    },
+    {
+      "path": "docs/operations/identity-u5-examples/acknowledge.json",
+      "blobBytes": 393,
+      "blobSha256": "c31bab5cedd3e37c365dd8d8da3042f0e3f9b93f5c2f8b94f9ea17ff7b53f0a9"
+    },
+    {
+      "path": "docs/operations/identity-u5-examples/activation.json",
+      "blobBytes": 557,
+      "blobSha256": "44ea41bfdb33f60c64e13e6b44f159cb786d20fa0ff1ae9fa9c621a6b0a1557f"
+    },
+    {
+      "path": "docs/operations/identity-u5-examples/approve-existing.json",
+      "blobBytes": 995,
+      "blobSha256": "d5b1576e90dc40eddd890b1de648319adc93fe3c736793df69b773ad50363cef"
+    },
+    {
+      "path": "docs/operations/identity-u5-examples/approve-new.json",
+      "blobBytes": 1717,
+      "blobSha256": "4d34e0850c9153f6208c297453d7ac5de433e02411f838852ec2991e1b0fd1ed"
+    },
+    {
+      "path": "docs/operations/identity-u5-examples/approve-profile.json",
+      "blobBytes": 1100,
+      "blobSha256": "c49c80a1b2e9d61b07916d544df52c9bd060c63fab46bd402423394510ec2de1"
+    },
+    {
+      "path": "docs/operations/identity-u5-examples/correction.json",
+      "blobBytes": 987,
+      "blobSha256": "6dc8dce5e271000a6bf02ea5182b15f7df8ae42cdb69a44104e53e02d3c74411"
+    },
+    {
+      "path": "docs/operations/identity-u5-examples/evidence-existing.json",
+      "blobBytes": 1416,
+      "blobSha256": "35633a887e23b42bc645ed3db999412b7159012dd3c8b31b2fe42b503a576a45"
+    },
+    {
+      "path": "docs/operations/identity-u5-examples/evidence-new.json",
+      "blobBytes": 1410,
+      "blobSha256": "31564d694ddeae4d6e92e0fa723a6df736c1988bb234511ee2865abf7e50addf"
+    },
+    {
+      "path": "docs/operations/identity-u5-examples/pause-admission.json",
+      "blobBytes": 421,
+      "blobSha256": "16203e1edaaad27dfbf4a7a1c8da1b8f5d1a61ab8df7d95d05c6ed5785e43851"
+    },
+    {
+      "path": "docs/operations/identity-u5-examples/quarantine.json",
+      "blobBytes": 587,
+      "blobSha256": "6fa23a7f17ca7c752e440e69fb311efc293274a986e5b5c4fecb86598482e27a"
+    },
+    {
+      "path": "docs/operations/identity-u5-examples/reject.json",
+      "blobBytes": 590,
+      "blobSha256": "20c14cc8666c14d164e35abd4ab160240d71c3148c14eab609631fc1a1562f19"
+    },
+    {
+      "path": "docs/operations/identity-u5-examples/reopen.json",
+      "blobBytes": 579,
+      "blobSha256": "b574db1710479c83035269eac372b859c0ca66becd36071976a049b4451fff54"
+    },
+    {
+      "path": "docs/operations/identity-u5-examples/validation.json",
+      "blobBytes": 522,
+      "blobSha256": "1e8ca1f19b40faab57766e3c0570de2904d6a35aed8fe90453e38042e5f18e20"
+    },
+    {
+      "path": "docs/operations/identity-u5-preservation.json",
+      "blobBytes": 22444,
+      "blobSha256": "2faaa34d14ff7da9b6fc6659261af2a0b7cb2a9a5315fa7947eb7204fdac7a02"
+    },
+    {
+      "path": "docs/operations/identity-u6-baseline.json",
+      "blobBytes": 287034,
+      "blobSha256": "4fa8e45b51bd71da6a740b96c1fcf8cba20ad62f9f53fae13abf1c3e737d8955"
+    },
+    {
+      "path": "docs/operations/identity-u6-preservation.json",
+      "blobBytes": 294935,
+      "blobSha256": "91a24966fbab52fed4ac799e11dd483078a0db6cd4f724f32326de130103687f"
+    },
+    {
+      "path": "docs/operations/identity-u7-baseline.json",
+      "blobBytes": 420008,
+      "blobSha256": "5dd6e45f372b2996ca7b4649bba013cf6c9d03ce48ccc39372a49a7db4d56c27"
+    },
+    {
+      "path": "docs/operations/identity-u7-canonical-correction-baseline.json",
+      "blobBytes": 426129,
+      "blobSha256": "b0ac2c66f98bccc778f0d0086a79485bdfafbc80aa9d319136d8ad4ce1188b4a"
+    },
+    {
+      "path": "docs/operations/identity-u7-canonical-correction-preservation.json",
+      "blobBytes": 445585,
+      "blobSha256": "72714fd64f5ce08cf8b74baa37d10599a4deff31f79bfa4baaaccc30ea67c688"
+    },
+    {
+      "path": "docs/operations/identity-u7-preservation.json",
+      "blobBytes": 449830,
+      "blobSha256": "ee775caba8dbb52ab08b0d1d4df9c0bded1fae7db48686a5904583ea38188d3f"
+    },
+    {
+      "path": "docs/operations/identity-u8-baseline.json",
+      "blobBytes": 591872,
+      "blobSha256": "91fbf2e33498675529a2d669bb7be69454d6552de2742859721361a6dd47b30a"
+    },
+    {
+      "path": "docs/operations/identity-u8-preservation-final.json",
+      "blobBytes": 483958,
+      "blobSha256": "97f6f0cc8ceb0861968e474af31025c57e5ff2d0927be1cf69aef388a4685079"
+    },
+    {
+      "path": "docs/operations/identity-u8-preservation.json",
+      "blobBytes": 483356,
+      "blobSha256": "7ddc9a407d7df34ab1c45654b39ae719bfd8f93eb183013065d0985d0ac7bb03"
+    },
+    {
+      "path": "docs/operations/identity-u8-session-baseline.json",
+      "blobBytes": 441890,
+      "blobSha256": "31a330e57f8d6dfd72d3a2a9f8ad22e5e9eeca17935bad5f72b1b1b2836ea51a"
+    },
+    {
+      "path": "docs/operations/identity-u9-baseline.json",
+      "blobBytes": 307875,
+      "blobSha256": "ee29fafc910ce4df814b63e2f0da1197a58aa165d00ecc0be4b35b0e9177eebe"
+    },
+    {
+      "path": "docs/operations/identity-u9-changes.patch",
+      "blobBytes": 115474,
+      "blobSha256": "cc68fd70a2a1c6d8d5663a084336f7248e2a80194d14d01f1892e899422b549b"
+    },
+    {
+      "path": "docs/operations/identity-u9-preservation.json",
+      "blobBytes": 330843,
+      "blobSha256": "805929f5ed327de9b659226f827c60c4876e33f100044e32b6251b2746af8187"
+    },
+    {
+      "path": "docs/technical/GridView_Backend_Scheme.md",
+      "blobBytes": 94224,
+      "blobSha256": "77c5a856a58c3de3f024ff13b101982ec0f46c73f0e40c79dd6f478b274bc482"
+    },
+    {
+      "path": "docs/technical/GridView_Environments.md",
+      "blobBytes": 57479,
+      "blobSha256": "4cfe0ccbafe8480d772947b1ad684da5bf3bc210363e72d729bd6ea3ab035579"
+    },
+    {
+      "path": "docs/technical/GridView_Identity_Management_Design.md",
+      "blobBytes": 180673,
+      "blobSha256": "81741e3af77d91b6f77ba5a819b0f635f0181d23ebea713e5757871511c67071"
+    },
+    {
+      "path": "docs/technical/GridView_Implementation_Plan.md",
+      "blobBytes": 555340,
+      "blobSha256": "5c766e5c1845e09b983d1ae07606d833b7f2956f634c21766a855f38f55df654"
+    },
+    {
+      "path": "services/edge-api/.prettierignore",
+      "blobBytes": 419,
+      "blobSha256": "ca7af2308e051307e5dffd01ae42dda5cd163a41ae77ab21db19450b73f14af5"
+    },
+    {
+      "path": "services/edge-api/package-lock.json",
+      "blobBytes": 135889,
+      "blobSha256": "c9a97f4265bd140d6ca94625f0ca0a1550f1e611945c33fdcef0dca7f6b4b3b7"
+    },
+    {
+      "path": "services/edge-api/package.json",
+      "blobBytes": 2255,
+      "blobSha256": "df55fb10b89be8760714ed0a00da74738986ae315b29617f9471ae5efe0786c0"
+    },
+    {
+      "path": "services/edge-api/scripts/identity/artifacts.ts",
+      "blobBytes": 3281,
+      "blobSha256": "c71e1636cc14ae9e29d52efb7d28df3241737b477eb45e6d66ba011c61547ffe"
+    },
+    {
+      "path": "services/edge-api/scripts/identity/catalog-file.ts",
+      "blobBytes": 4701,
+      "blobSha256": "c99d5ec3ab14b1f9c4a60b0f6a576d3340d76239d93a3df1818467c90d889350"
+    },
+    {
+      "path": "services/edge-api/scripts/identity/cli.mjs",
+      "blobBytes": 18748,
+      "blobSha256": "b8ca4b8527635bac49e0f5da9b14e2fdb59f39154ca850b2c36a9023e0b261ad"
+    },
+    {
+      "path": "services/edge-api/scripts/identity/client.mjs",
+      "blobBytes": 6484,
+      "blobSha256": "4719b0ac61fb5dc9932e89ccf3c2d25fe21102daf3be549aa415f1e6d7f3feca"
+    },
+    {
+      "path": "services/edge-api/scripts/identity/compile-schemas.mjs",
+      "blobBytes": 1357,
+      "blobSha256": "a0a848db527c24c75a0d3f64c49ff2c1cddde73cdc2c798e61e7f1d6a9072d7d"
+    },
+    {
+      "path": "services/edge-api/scripts/identity/corpus.d.mts",
+      "blobBytes": 146,
+      "blobSha256": "2149fd5c90c1d4cf6fd48dcdcb0345758cea49e0280b71f26159fb1cf3631db4"
+    },
+    {
+      "path": "services/edge-api/scripts/identity/corpus.mjs",
+      "blobBytes": 3390,
+      "blobSha256": "22260ef9f816978f88daf28ee4651e9a761948dfb9bdd6feecaa5bd01061bcf3"
+    },
+    {
+      "path": "services/edge-api/scripts/identity/seed.mjs",
+      "blobBytes": 1925,
+      "blobSha256": "2169579edf8d7fe54d794a17403f64124e608361c654d2403284c740f51c53bc"
+    },
+    {
+      "path": "services/edge-api/scripts/identity/validation.ts",
+      "blobBytes": 1655,
+      "blobSha256": "557b3cb72fd65d372c65388fb2951f6cfa8024e48db5862307bea1e1594ea11d"
+    },
+    {
+      "path": "services/edge-api/scripts/identity/validator.mjs",
+      "blobBytes": 1347,
+      "blobSha256": "d92148edb773741fdbf77e2813b973f3ccd2073c5e16024a071e5787de3f2626"
+    },
+    {
+      "path": "services/edge-api/scripts/lib/driver-entry-rules.d.mts",
+      "blobBytes": 73,
+      "blobSha256": "8423a25a412d00bc5bfae0b215139fe3e96ddf5ce062b3a41fc36971c938f954"
+    },
+    {
+      "path": "services/edge-api/scripts/lib/driver-entry-rules.mjs",
+      "blobBytes": 148,
+      "blobSha256": "4849429f02fe505584efe10b8c230b0de5bc788374682895917ea30579c09443"
+    },
+    {
+      "path": "services/edge-api/scripts/lib/provider-mapping-rules.d.mts",
+      "blobBytes": 77,
+      "blobSha256": "f85655f9df1863e3c48f2c5c1450b3b73203eca25d6450b522ce27e065e5a3b6"
+    },
+    {
+      "path": "services/edge-api/scripts/lib/provider-mapping-rules.mjs",
+      "blobBytes": 152,
+      "blobSha256": "b6ef0a89622d7f93201ac58196ebd139f4f3d925820d69be6de6a83e91e3005c"
+    },
+    {
+      "path": "services/edge-api/scripts/season-batch/README.md",
+      "blobBytes": 13989,
+      "blobSha256": "3f52936ba3ba3d19a697ea5347f8917a18b9df2b38a8af3137df524882df211c"
+    },
+    {
+      "path": "services/edge-api/scripts/season-batch/cli-guards.mjs",
+      "blobBytes": 4945,
+      "blobSha256": "4a33a603cd98c7fb45941f4114bf1332cd6cff94958ae225da0aa86409429b49"
+    },
+    {
+      "path": "services/edge-api/scripts/season-batch/cli.mjs",
+      "blobBytes": 7975,
+      "blobSha256": "33dcf5ec4f20f11ef4ca4777bd81696e9f396de4a1337233fa5cccaddc11ca4f"
+    },
+    {
+      "path": "services/edge-api/scripts/season-batch/fixtures-cli.mjs",
+      "blobBytes": 6627,
+      "blobSha256": "cbd1fbca938ca3c9c15158592d4507e41060622b28f423838c38e30f50f49b35"
+    },
+    {
+      "path": "services/edge-api/scripts/season-batch/fixtures-guards.mjs",
+      "blobBytes": 14146,
+      "blobSha256": "fd5519d43138aca8b1264cee52f7fba5d016a1580a3e259acb05ffef9df0a138"
+    },
+    {
+      "path": "services/edge-api/scripts/season-batch/fixtures.ts",
+      "blobBytes": 27322,
+      "blobSha256": "e23efc8b975567e3f7534b587b10af02bb0aa8562eb9d3a10ab5318a96f7bcd1"
+    },
+    {
+      "path": "services/edge-api/scripts/season-batch/frozen-apk.mjs",
+      "blobBytes": 10644,
+      "blobSha256": "0bd339e685542ddc0dfa0f4e0e78c9ee1c34fc2f0f75e1107d22421500a68843"
+    },
+    {
+      "path": "services/edge-api/scripts/season-batch/generate.ts",
+      "blobBytes": 22224,
+      "blobSha256": "99697c0c92b4e3e48d37712291a7f04b9b33eef86fb0aa6224e975c90d2e8c7e"
+    },
+    {
+      "path": "services/edge-api/scripts/season-batch/submission-cli.mjs",
+      "blobBytes": 5116,
+      "blobSha256": "2012747257fd0c9d6b875368a953bc72d506233332ac9c8a5795b438e5b88793"
+    },
+    {
+      "path": "services/edge-api/scripts/season-batch/submission-guards.mjs",
+      "blobBytes": 3662,
+      "blobSha256": "5ed849374cfa01b210ff76862bc63d4ade7f57fe010af3be91cd33ace33cda12"
+    },
+    {
+      "path": "services/edge-api/scripts/season-batch/submission.ts",
+      "blobBytes": 7393,
+      "blobSha256": "8a7b309584fe067010e8e6992c769b1fd0eed1c1f673ca9a58fbd192d3cd34c1"
+    },
+    {
+      "path": "services/edge-api/src/admin/identity-routes.ts",
+      "blobBytes": 3474,
+      "blobSha256": "b9f95bc2384048e0d933132df7f99cee598b78e94ae35758d3e1327e50166054"
+    },
+    {
+      "path": "services/edge-api/src/admin/identity/auth.ts",
+      "blobBytes": 4295,
+      "blobSha256": "7dbc3c09af101ff81de7d4a3fa707efd98f7adb24de6c2e5dadb60f457880e4a"
+    },
+    {
+      "path": "services/edge-api/src/admin/identity/guards.d.mts",
+      "blobBytes": 953,
+      "blobSha256": "5aa6981c00ca2eb31285099d33f86946d7dd679b7b525993b2285622e469b051"
+    },
+    {
+      "path": "services/edge-api/src/admin/identity/guards.mjs",
+      "blobBytes": 11895,
+      "blobSha256": "df242c1ca1dab685b578c76afd268f3b75471c4e19350ba32398ff53ec60907c"
+    },
+    {
+      "path": "services/edge-api/src/admin/identity/mutations.ts",
+      "blobBytes": 12158,
+      "blobSha256": "5680020e97e51cfb954c6a0d48cff3374adb4630fb7fb6ffd4966f8dad2c7d62"
+    },
+    {
+      "path": "services/edge-api/src/admin/identity/reads.ts",
+      "blobBytes": 11764,
+      "blobSha256": "6cdb9158509ef66567041099882391b95ac8afb53c29142d7f116f96db07f435"
+    },
+    {
+      "path": "services/edge-api/src/admin/identity/requests.ts",
+      "blobBytes": 6067,
+      "blobSha256": "1f4b2ab0e7031f6977a393036283f3f0d9bed4188945ba7a8b3f8410bf1f6cd1"
+    },
+    {
+      "path": "services/edge-api/src/admin/identity/responses.ts",
+      "blobBytes": 4698,
+      "blobSha256": "4b3884fb5562df17f19b4fe06652b75cf665d6b47d72bed253876d0ad98c8aad"
+    },
+    {
+      "path": "services/edge-api/src/admin/identity/routes.ts",
+      "blobBytes": 3666,
+      "blobSha256": "91ababf6c75ce45264889f1d22cea59c524c08be08dccdb424bf3fc5ca6922e0"
+    },
+    {
+      "path": "services/edge-api/src/admin/identity/service.ts",
+      "blobBytes": 6923,
+      "blobSha256": "7a58c92220d8793bab7a0f74ef749a3b9bde096fdd358fc64f7bdb28135e2f3b"
+    },
+    {
+      "path": "services/edge-api/src/admin/router.ts",
+      "blobBytes": 13333,
+      "blobSha256": "648aff599f9d528183fa6d4bd298341c1657367aa7990c6d9857e02266b68a38"
+    },
+    {
+      "path": "services/edge-api/src/config/environment.ts",
+      "blobBytes": 19401,
+      "blobSha256": "39bbd4a3cfdb1fe422fb39d71d364dcf779c2b47a3d9ff3f7d6c241e587fe892"
+    },
+    {
+      "path": "services/edge-api/src/identity/catalog/activation.ts",
+      "blobBytes": 1086,
+      "blobSha256": "032bdefda220135b9d2d20c7cd77b4c1f3cf32fe643544188dcc013c56f31731"
+    },
+    {
+      "path": "services/edge-api/src/identity/catalog/admin-export.ts",
+      "blobBytes": 921,
+      "blobSha256": "e4f06134c2e29e355cf51a2a92307ff5936c965a173aa347148d5ee275f21052"
+    },
+    {
+      "path": "services/edge-api/src/identity/catalog/admin-workflow.ts",
+      "blobBytes": 26701,
+      "blobSha256": "2ba37708c17761f8a0ea142c5a49e1bafd9a2a74492560408dc6d6461cb5a9ee"
+    },
+    {
+      "path": "services/edge-api/src/identity/catalog/base-import.ts",
+      "blobBytes": 5049,
+      "blobSha256": "a1c4fd0f9fca29df59aedb14c9514fa1186e365eaeff002adf29fb74a4948f23"
+    },
+    {
+      "path": "services/edge-api/src/identity/catalog/batch-admission.ts",
+      "blobBytes": 10017,
+      "blobSha256": "afa8dc0501d1700cfe2f9f4caa332ac40792e5e4629d96ad6f95dd364c011e6a"
+    },
+    {
+      "path": "services/edge-api/src/identity/catalog/bundled-context.ts",
+      "blobBytes": 2965,
+      "blobSha256": "1192598c8212bb3a927903f5f536ea4d74a71d4b358588be3a05826a66e9c3ae"
+    },
+    {
+      "path": "services/edge-api/src/identity/catalog/closure-profiles.ts",
+      "blobBytes": 1517,
+      "blobSha256": "6018f09db220f6853febe763f50cdcf47572acfc9b2ec0bb6cd8646510acdfea"
+    },
+    {
+      "path": "services/edge-api/src/identity/catalog/content-schemas.cjs",
+      "blobBytes": 265192,
+      "blobSha256": "f26489742e38d416943d65a7d984bd22e4e60c777b5e9aafd6ee88d6a6b9f923"
+    },
+    {
+      "path": "services/edge-api/src/identity/catalog/content-schemas.d.cts",
+      "blobBytes": 92,
+      "blobSha256": "03652908fca4fe7c62db4987c370ad3d56b2eb8391e644c3859aa9c2dd1083d9"
+    },
+    {
+      "path": "services/edge-api/src/identity/catalog/correction-store.ts",
+      "blobBytes": 5647,
+      "blobSha256": "7b50257e1951ac98b708d7549c3cee1dd16ed481ae885f0c12f97ce0c81f5f26"
+    },
+    {
+      "path": "services/edge-api/src/identity/catalog/correction.ts",
+      "blobBytes": 2373,
+      "blobSha256": "91efd5f335897b7c8114dce3f3f5032cd80f4453581cca0ef181d79d23e85de4"
+    },
+    {
+      "path": "services/edge-api/src/identity/catalog/dataset-version.ts",
+      "blobBytes": 2341,
+      "blobSha256": "bec4bd9e31c83135f9acb2d677333935526571519e85e06ba3908c7327a4d988"
+    },
+    {
+      "path": "services/edge-api/src/identity/catalog/evidence-store.ts",
+      "blobBytes": 7294,
+      "blobSha256": "8ddcb8213d0ed6eec20b6f8768146155b176564035c2ef4807cf9a944854498e"
+    },
+    {
+      "path": "services/edge-api/src/identity/catalog/export.ts",
+      "blobBytes": 546,
+      "blobSha256": "3269d9fc154056508e864e6c1bdc77e5b56af6dc2478e12f4f1656960577488a"
+    },
+    {
+      "path": "services/edge-api/src/identity/catalog/indexes.ts",
+      "blobBytes": 2168,
+      "blobSha256": "bbb66c8c57a7ac000f7824059f5d0282df73a28af670656af1b9d747958061bc"
+    },
+    {
+      "path": "services/edge-api/src/identity/catalog/model.ts",
+      "blobBytes": 3842,
+      "blobSha256": "0a49ac5f8817bed3af5ece22d1735fbc51718b072ba1b1052d303babdbc35584"
+    },
+    {
+      "path": "services/edge-api/src/identity/catalog/origin-proof.ts",
+      "blobBytes": 831,
+      "blobSha256": "6feb7c6a457590f1f87f84e71588da652c236f7bb0991a7b750184ca404809f0"
+    },
+    {
+      "path": "services/edge-api/src/identity/catalog/pin-contract.ts",
+      "blobBytes": 3849,
+      "blobSha256": "48149cb0e6a11a1a0dbc4751688958d9cbfd8eca0d497216950db4691d787ba1"
+    },
+    {
+      "path": "services/edge-api/src/identity/catalog/pin.ts",
+      "blobBytes": 6158,
+      "blobSha256": "342c57ae81cca0d43e903fa4eb5a48712715261349140e412780f70bd430b3fe"
+    },
+    {
+      "path": "services/edge-api/src/identity/catalog/port.ts",
+      "blobBytes": 2492,
+      "blobSha256": "18fcf1ed0dd59fd8a48318f7c502939d99181b38dfa9733a558e2dcbcd3906f3"
+    },
+    {
+      "path": "services/edge-api/src/identity/catalog/projection.ts",
+      "blobBytes": 3900,
+      "blobSha256": "1697a1b67af7d4c41c7ab9d7af0527996c2c58f5a9aae01a71580ff595b7ce59"
+    },
+    {
+      "path": "services/edge-api/src/identity/catalog/repository.ts",
+      "blobBytes": 15500,
+      "blobSha256": "19add12225e9961ee4e7450a36d0ed74b4d89d0f7bf8f5424dc578e1b58343f9"
+    },
+    {
+      "path": "services/edge-api/src/identity/catalog/review.ts",
+      "blobBytes": 13058,
+      "blobSha256": "9efae43b8c94073a781bcc3094573be31d2d2860b777d7523f8ae7dc5217f814"
+    },
+    {
+      "path": "services/edge-api/src/identity/catalog/revision-export.ts",
+      "blobBytes": 7277,
+      "blobSha256": "04c4051af3869f8e56c463bdbe0d32444474a0e731dbcdeabba395980788c3e0"
+    },
+    {
+      "path": "services/edge-api/src/identity/catalog/revision-store.ts",
+      "blobBytes": 12791,
+      "blobSha256": "0559df0d8373bbfe130fdd1c1da158e265a10e685111bbdd0a904557cfa8ffd5"
+    },
+    {
+      "path": "services/edge-api/src/identity/catalog/revision.ts",
+      "blobBytes": 8756,
+      "blobSha256": "79e9404c9bdcb517e4f09efb827fd69eb48207b827aeea20b2a6e231dccfa0dc"
+    },
+    {
+      "path": "services/edge-api/src/identity/catalog/rules/driver-entry-rules.d.mts",
+      "blobBytes": 75,
+      "blobSha256": "5a09cdfc94996b46e480f4d05e8c76a2525aedbbe598e39a83cf59757eb83b53"
+    },
+    {
+      "path": "services/edge-api/src/identity/catalog/rules/driver-entry-rules.mjs",
+      "blobBytes": 2937,
+      "blobSha256": "4997f9d27ec4414aeb9b1b25fbf87e661d46d9171f14b015a7a5658f1566b86d"
+    },
+    {
+      "path": "services/edge-api/src/identity/catalog/rules/provider-mapping-rules.d.mts",
+      "blobBytes": 571,
+      "blobSha256": "f80a8d5317888752fbebf32325fa9c08fae924077676540333661471c2de4f7d"
+    },
+    {
+      "path": "services/edge-api/src/identity/catalog/rules/provider-mapping-rules.mjs",
+      "blobBytes": 21175,
+      "blobSha256": "ffb8f45b22da0e80b3d1a78cd915ec4b246789f6560fc8cd7cde680e539ab06e"
+    },
+    {
+      "path": "services/edge-api/src/identity/catalog/run-context.ts",
+      "blobBytes": 19681,
+      "blobSha256": "44c6f1d0e950f7f4300bbf10be7de486dd76d9b1b317e63b2b67aa34b111dbe3"
+    },
+    {
+      "path": "services/edge-api/src/identity/catalog/schema.ts",
+      "blobBytes": 4291,
+      "blobSha256": "2938ead43ec58eeb7bafa3efeb990b03593ff2d928f943529054975aff0c959e"
+    },
+    {
+      "path": "services/edge-api/src/identity/catalog/seed.ts",
+      "blobBytes": 1394,
+      "blobSha256": "114781c414ae4bd3e5a858597664e598acacc617fa693210f36e65e876ab010f"
+    },
+    {
+      "path": "services/edge-api/src/identity/catalog/snapshot.ts",
+      "blobBytes": 8716,
+      "blobSha256": "ec6b365ca1bd19dc843c9308957211b58cf0418346dacce91de25c7c6c6caa2d"
+    },
+    {
+      "path": "services/edge-api/src/identity/catalog/source-spec.json",
+      "blobBytes": 727,
+      "blobSha256": "7a9108c68550269f92c48891492939a931c0c5d165f0cdec559430759211c865"
+    },
+    {
+      "path": "services/edge-api/src/identity/catalog/sources.ts",
+      "blobBytes": 7629,
+      "blobSha256": "8fad7f6f3730a076628aee3f007ca81c5e8e44657e8654f967bd12a2899df3f9"
+    },
+    {
+      "path": "services/edge-api/src/identity/catalog/storage.ts",
+      "blobBytes": 3665,
+      "blobSha256": "3fadab069f9e25188f5178c51514ec8cc2c94292fe1662d455432a5ad8e0bb04"
+    },
+    {
+      "path": "services/edge-api/src/identity/catalog/validate.ts",
+      "blobBytes": 1622,
+      "blobSha256": "a287961a4c3dc524d110139d0cf3ac38f10b1de7246c2ef9092d9b84cebaa4fe"
+    },
+    {
+      "path": "services/edge-api/src/identity/catalog/workflow.ts",
+      "blobBytes": 21160,
+      "blobSha256": "6bb75881554d198f011e5ee84cb12dcddc132aed2ea199b9fabbc21f5ff46f18"
+    },
+    {
+      "path": "services/edge-api/src/identity/client.ts",
+      "blobBytes": 2852,
+      "blobSha256": "4b1630f918a5a2a55e1022a292f47a21c5072bf99cea8a8bd6f8ed8e0f0e8196"
+    },
+    {
+      "path": "services/edge-api/src/identity/discovery/boundary.ts",
+      "blobBytes": 7086,
+      "blobSha256": "71bf7ef92aacd925f6ecb4e9005a468a35957880f843f7b04314081b451c380f"
+    },
+    {
+      "path": "services/edge-api/src/identity/discovery/collector.ts",
+      "blobBytes": 3071,
+      "blobSha256": "9f2ac38e5ccabaef9ffbed0657ca0e1783629c45fc9ffbc98667a5e321333345"
+    },
+    {
+      "path": "services/edge-api/src/identity/discovery/extract-jolpica.ts",
+      "blobBytes": 10240,
+      "blobSha256": "44a7bbc3f11578a75d8ced7551105d6ac498827eb2726f98ec1d0a236df5b5e8"
+    },
+    {
+      "path": "services/edge-api/src/identity/discovery/keys.ts",
+      "blobBytes": 6590,
+      "blobSha256": "9f782dad4759fa01931fefde5ee03c4a608bd2fdb3e16b02e339f492643bc0b2"
+    },
+    {
+      "path": "services/edge-api/src/identity/discovery/model.ts",
+      "blobBytes": 6557,
+      "blobSha256": "521b9259cc0d8c514f955cc3efec1d1c19eb607bcce58a0b2d5a021314e75329"
+    },
+    {
+      "path": "services/edge-api/src/identity/discovery/persist.ts",
+      "blobBytes": 7034,
+      "blobSha256": "b56a44fc45bec97dfa9e1b8d1437088b39a15a95cead34e6cd60a3330b7a16b2"
+    },
+    {
+      "path": "services/edge-api/src/identity/durable-object.ts",
+      "blobBytes": 6576,
+      "blobSha256": "34754c6c9e24d932574717b5e4eb427688e560ad0752df398a13330965a8c00f"
+    },
+    {
+      "path": "services/edge-api/src/identity/factory.ts",
+      "blobBytes": 3223,
+      "blobSha256": "7a39ff7dc81b416d674351a66eb34d7b781e199ec76495359c9ff1e4443367a9"
+    },
+    {
+      "path": "services/edge-api/src/identity/inventory/model.ts",
+      "blobBytes": 10890,
+      "blobSha256": "c9dc844de562569dfb89adbe949ae31fa47a90815f771555447afdcd02ff040d"
+    },
+    {
+      "path": "services/edge-api/src/identity/inventory/normalize.ts",
+      "blobBytes": 7718,
+      "blobSha256": "5e3ca5a9d5214cb65baaaf4bd33be933cbd9271ca5aae0ce9eb605cdfbcdf61d"
+    },
+    {
+      "path": "services/edge-api/src/identity/inventory/validate.ts",
+      "blobBytes": 7334,
+      "blobSha256": "d6ac12498fc0bdeb76c909992bcb69341107995face5aec774b983e7afd35d8d"
+    },
+    {
+      "path": "services/edge-api/src/identity/local.ts",
+      "blobBytes": 623,
+      "blobSha256": "f5fe359985dcc84f4997b2ccf9dd85a3b4480d7f83ab5a793dbb19a41e23deca"
+    },
+    {
+      "path": "services/edge-api/src/identity/port.ts",
+      "blobBytes": 4599,
+      "blobSha256": "1561328e67a2cd3f3aed33bca10c06bed38f4a804c5f0108079b3f503e0e04d0"
+    },
+    {
+      "path": "services/edge-api/src/identity/response-decoders.ts",
+      "blobBytes": 8894,
+      "blobSha256": "75767e519b676ae7c797f07949de9522e231875bab8312c8e0093d768e427944"
+    },
+    {
+      "path": "services/edge-api/src/identity/schema.ts",
+      "blobBytes": 3002,
+      "blobSha256": "1d1770f9e6ae51d6582f7dcf43e7994ac6cea3e6f8295daadb2fdd648ccfb1af"
+    },
+    {
+      "path": "services/edge-api/src/identity/storage-accounting.ts",
+      "blobBytes": 2548,
+      "blobSha256": "f89198343d47afa4880b08e8f034d2a8cca83c326809bc17b02f7c108fdc9a15"
+    },
+    {
+      "path": "services/edge-api/src/identity/store.ts",
+      "blobBytes": 22874,
+      "blobSha256": "235ed2573537f1ca18600089114d2d89dd9cf7d8187b91bcf766604483264524"
+    },
+    {
+      "path": "services/edge-api/src/identity/wire-decoders.ts",
+      "blobBytes": 10670,
+      "blobSha256": "e1e47c5b3f9ef1e6b3c6245958385182e4d4b510c1d261af570f6306c0a750de"
+    },
+    {
+      "path": "services/edge-api/src/index.ts",
+      "blobBytes": 26380,
+      "blobSha256": "4c001cc2f9da7e56796004dff42319f18fa605fb8efe85186d9a8d75f026ab1e"
+    },
+    {
+      "path": "services/edge-api/src/ingest/batch-verification.ts",
+      "blobBytes": 24224,
+      "blobSha256": "8495ad134f2860376e8ddccbe5adf3ec64f78e3d46cb895b097c73c6f656e26c"
+    },
+    {
+      "path": "services/edge-api/src/ingest/catalog-admission.ts",
+      "blobBytes": 3189,
+      "blobSha256": "f2cfce4081c902dc1a8454062640be74e7f402f2812f6ccfcf934ea8838f266c"
+    },
+    {
+      "path": "services/edge-api/src/ingest/catalog-reference.ts",
+      "blobBytes": 6105,
+      "blobSha256": "a245c9d5a58abe99e60139658a36d94c676cda7a312af06c5d5e6bf39aa16fce"
+    },
+    {
+      "path": "services/edge-api/src/ingest/service.ts",
+      "blobBytes": 23224,
+      "blobSha256": "3b7b4a2b48d197ecb6ef9aff2b875a177aee381f0ffa2bb52141d499c8893bb1"
+    },
+    {
+      "path": "services/edge-api/src/ingest/submission.ts",
+      "blobBytes": 5662,
+      "blobSha256": "d770fa8f3a83baa67820a1f2abe69c1f7a7ff22745d077b9f0720e88f49432e2"
+    },
+    {
+      "path": "services/edge-api/src/logging/logger.ts",
+      "blobBytes": 11743,
+      "blobSha256": "dd7027aeb9eb0c7423aeb0bd7b61f9148d208301a1938bf1446d00da4dfd7429"
+    },
+    {
+      "path": "services/edge-api/src/logging/request-log.ts",
+      "blobBytes": 3397,
+      "blobSha256": "748d72fb3c8a0fd6fe94b3f84b64c7f3b8d123d9f5828fef6d9173385aa41e34"
+    },
+    {
+      "path": "services/edge-api/src/providers/coordination/coordinated-publication.ts",
+      "blobBytes": 10716,
+      "blobSha256": "982de9bfaea75f14a30db78b61f497dd117c13a85dee6ead6007f2ee21a5e438"
+    },
+    {
+      "path": "services/edge-api/src/providers/coordination/coordinator.ts",
+      "blobBytes": 35390,
+      "blobSha256": "da6f6a9adb02a417dc5f4904974345ed0b0bfb9c244b8a05231f2610e3e2919e"
+    },
+    {
+      "path": "services/edge-api/src/providers/coordination/payload-contract.ts",
+      "blobBytes": 6440,
+      "blobSha256": "b746590d9e71fe7f18039564231141059f16c7c8d33622476febb9c07c1b8da6"
+    },
+    {
+      "path": "services/edge-api/src/providers/coordination/resource.ts",
+      "blobBytes": 20412,
+      "blobSha256": "f90b6a07422370408db36ce5d9879c071d32c03802279a634796423c3ea6da2a"
+    },
+    {
+      "path": "services/edge-api/src/providers/coordination/season-assembly.ts",
+      "blobBytes": 24104,
+      "blobSha256": "458cb7fe3c9d3b64a998d0c1c8fdb5cc903cc7d0bb1fc9d2f47a525286aad8f2"
+    },
+    {
+      "path": "services/edge-api/src/providers/coordination/season-identity-closure.ts",
+      "blobBytes": 8460,
+      "blobSha256": "631c9ca6adca99666c76bbd1d805e64997a81e61d58bd75d3c4d3e4ac1966252"
+    },
+    {
+      "path": "services/edge-api/src/providers/coordination/season-integrity.ts",
+      "blobBytes": 29505,
+      "blobSha256": "09ed1bef5c9a5cc83b059febc60c2ab20958c5f5e96808c4f84e09c8f11d3687"
+    },
+    {
+      "path": "services/edge-api/src/providers/factory.ts",
+      "blobBytes": 1252,
+      "blobSha256": "3334b51b17648b6eb1832f15cefccfd3073c128c143302cceccbfc20531c8cef"
+    },
+    {
+      "path": "services/edge-api/src/providers/jolpica/calendar-port.ts",
+      "blobBytes": 11525,
+      "blobSha256": "78e2ffda469e2ce7e289c0362456d00ec8d1d63081e6440787cd34661546f113"
+    },
+    {
+      "path": "services/edge-api/src/providers/jolpica/circuits-port.ts",
+      "blobBytes": 11047,
+      "blobSha256": "073d7514b1edcbb0c8a46bc94a9e6c7835ed837e1e41fd7514228cd8129d751d"
+    },
+    {
+      "path": "services/edge-api/src/providers/jolpica/participants-normalizer.ts",
+      "blobBytes": 8702,
+      "blobSha256": "91dce0090f7d96d2165bf85ea5653e678ee40401b945ad8d7921c36e13e6500c"
+    },
+    {
+      "path": "services/edge-api/src/providers/jolpica/participants-port.ts",
+      "blobBytes": 23865,
+      "blobSha256": "5b6c1203e0f851f58cca3912ec5acce6eddb19a86fe20221b8d50db27e7f8e82"
+    },
+    {
+      "path": "services/edge-api/src/providers/jolpica/results-port.ts",
+      "blobBytes": 10924,
+      "blobSha256": "8f391b12119d4ede94e5da65f5e87e489d661442e73be4709dca92f16e5f840a"
+    },
+    {
+      "path": "services/edge-api/src/providers/jolpica/standings-port.ts",
+      "blobBytes": 13823,
+      "blobSha256": "49bfcada037162f6429e6a33e8f446400061ef1a95df46552f161ee44911cc16"
+    },
+    {
+      "path": "services/edge-api/src/publication/commands.ts",
+      "blobBytes": 4779,
+      "blobSha256": "a411d770ab4e490d4bea7fda2efc8643d72f327dabdaf20551d6757942419312"
+    },
+    {
+      "path": "services/edge-api/src/publication/sequenced/service.ts",
+      "blobBytes": 55008,
+      "blobSha256": "399e66e352f260edd808ba7f6589bb90f21525ed20a542843d7e3e6e4c4438a3"
+    },
+    {
+      "path": "services/edge-api/src/sync/coordinated/calendar-single-get.ts",
+      "blobBytes": 5809,
+      "blobSha256": "a2c057daacd99ff565a9d766cdef7bf20b47040c32ef6ad2ec2054ed4a60c4b8"
+    },
+    {
+      "path": "services/edge-api/src/sync/coordinated/composition.ts",
+      "blobBytes": 18706,
+      "blobSha256": "cb630b98326d31cc3762193bf18f7bb5db20774f0cbe3b3f4468d1daa28b49ca"
+    },
+    {
+      "path": "services/edge-api/src/sync/coordinated/egress-identity.ts",
+      "blobBytes": 10501,
+      "blobSha256": "b55c5752a3ec66534b790be235d25238a6f0e31dc6ecf591210d0c76e6b504df"
+    },
+    {
+      "path": "services/edge-api/src/sync/coordinated/observation/observe.ts",
+      "blobBytes": 30613,
+      "blobSha256": "b969d56882816b1dcee76e48028b4f06f75f3fe159b1dd356f596ac5a7661043"
+    },
+    {
+      "path": "services/edge-api/src/sync/coordinated/operator/verification.ts",
+      "blobBytes": 19385,
+      "blobSha256": "ffe9fa725064a37d3bd402312129f362541f382de58358fdd8d783687ba0347e"
+    },
+    {
+      "path": "services/edge-api/src/sync/coordinated/run.ts",
+      "blobBytes": 7978,
+      "blobSha256": "2d39a11c01798c99e828d752b26940d0fe48accd5a5cd946eef081790971f515"
+    },
+    {
+      "path": "services/edge-api/test/admin/identity/api.test.ts",
+      "blobBytes": 42761,
+      "blobSha256": "73f677d4329d9821688ccc8f859ba4441f0389d3ed357b71d0d2e5df20bbd796"
+    },
+    {
+      "path": "services/edge-api/test/admin/identity/auth.test.ts",
+      "blobBytes": 3798,
+      "blobSha256": "ccd1ad408b7df3587146a68815a4f1d3a75fadf6f34800016309ed3ce147668b"
+    },
+    {
+      "path": "services/edge-api/test/admin/identity/boundaries.test.ts",
+      "blobBytes": 1813,
+      "blobSha256": "f45555320f7b5096662213ad2a2e07107f4a26e005504b18f815c83e3640a52f"
+    },
+    {
+      "path": "services/edge-api/test/admin/identity/cli.test.mjs",
+      "blobBytes": 11316,
+      "blobSha256": "e0dd00b93b0a3a4002764145da25f44931ab054e1aa6cd4e6836bb7d97d4d793"
+    },
+    {
+      "path": "services/edge-api/test/admin/identity/local-worker.ts",
+      "blobBytes": 1536,
+      "blobSha256": "703b4fba78b42099e9be730dea7f36801576cbe41099e729d55eec301b5a258c"
+    },
+    {
+      "path": "services/edge-api/test/admin/identity/local.test.mjs",
+      "blobBytes": 9259,
+      "blobSha256": "0256b947e71eeb3723a4f8aef6e1050d9f07f09e02e7e1690eb959fefcaeab16"
+    },
+    {
+      "path": "services/edge-api/test/admin/identity/recovery.test.ts",
+      "blobBytes": 9807,
+      "blobSha256": "5b59adf8b253a5474775768e103f880192ffc64aedc08230b7f9a8eed2f3e335"
+    },
+    {
+      "path": "services/edge-api/test/admin/identity/support.ts",
+      "blobBytes": 6310,
+      "blobSha256": "42d139d01f1173f76cbe0ca2805169679f6bda71c329a918599189eaf6944a66"
+    },
+    {
+      "path": "services/edge-api/test/config/ledger-binding.test.ts",
+      "blobBytes": 13776,
+      "blobSha256": "c35f9cfdb8dff9b3cefdcf5051793e277a018537da81be3c88a48844b016e265"
+    },
+    {
+      "path": "services/edge-api/test/config/production-worker-config.test.ts",
+      "blobBytes": 18781,
+      "blobSha256": "302bfa17deeb52fbb8075907f337a321ab5fd7dc9d5c582f0348c283a7715c48"
+    },
+    {
+      "path": "services/edge-api/test/config/staging-identity-catalog.test.ts",
+      "blobBytes": 4288,
+      "blobSha256": "a02ecd449f4494699f01e559321f2e7588c55d6a0f08f64da33063b888bc2c29"
+    },
+    {
+      "path": "services/edge-api/test/config/staging-season-batch-ingest.test.ts",
+      "blobBytes": 26195,
+      "blobSha256": "7cf4f67a114195b3043f65e38a46aeb7f372a7f6d234cb1e73a08636bd46dc36"
+    },
+    {
+      "path": "services/edge-api/test/config/wrangler-config.test.ts",
+      "blobBytes": 17263,
+      "blobSha256": "4d87b283c77b21de08406d2f100870e84f84aedbac75b55f33948b8b0ab72a51"
+    },
+    {
+      "path": "services/edge-api/test/e2e/automatic-updates/stage.ts",
+      "blobBytes": 17596,
+      "blobSha256": "9837e67c9879dafdd0774c060d7e80c6f5b745de23bab32fab8207bd49ba655f"
+    },
+    {
+      "path": "services/edge-api/test/identity/catalog/admin.test.ts",
+      "blobBytes": 5125,
+      "blobSha256": "ce3d90fa655960caaadedb2f7028dc8f4ee0f11967c03ece1369cf69cb8e04c4"
+    },
+    {
+      "path": "services/edge-api/test/identity/catalog/batch-boundary.test.ts",
+      "blobBytes": 2217,
+      "blobSha256": "bdee3c5b29359b6a0dfcf824584e238922c176fe84ba3ec60cdce2b4c0917c34"
+    },
+    {
+      "path": "services/edge-api/test/identity/catalog/batch-local.test.mjs",
+      "blobBytes": 7182,
+      "blobSha256": "19e4fae439ae0fa480b0da51221303a0492441ab699cf91129c65210fb0193b3"
+    },
+    {
+      "path": "services/edge-api/test/identity/catalog/boundaries.test.ts",
+      "blobBytes": 9126,
+      "blobSha256": "6bbb7615f7f74ea7fc2d0d5fdb7bdd4f666fb1b1629d6e31715fb417ab1d7fdd"
+    },
+    {
+      "path": "services/edge-api/test/identity/catalog/inventory-policy.test.ts",
+      "blobBytes": 9304,
+      "blobSha256": "7fc56c0049ac2e7e953d2cd045efc56a45cb6365c717dda2167ccc108468d316"
+    },
+    {
+      "path": "services/edge-api/test/identity/catalog/local-persistence.test.mjs",
+      "blobBytes": 5643,
+      "blobSha256": "4c28481a8f7146ef2e6fe3ca6599653a6255f37e5fa3e1f6166067790ccd9602"
+    },
+    {
+      "path": "services/edge-api/test/identity/catalog/local-worker.ts",
+      "blobBytes": 1433,
+      "blobSha256": "52586e630329f449380221584ea29ddf556a7f5aa64775ddf805635096a7852b"
+    },
+    {
+      "path": "services/edge-api/test/identity/catalog/parity.test.ts",
+      "blobBytes": 9633,
+      "blobSha256": "56648faa5bf0f73bc4d250f4760d90538dd6e6ef7edcdb2b75473356af276f9e"
+    },
+    {
+      "path": "services/edge-api/test/identity/catalog/pin-local.test.mjs",
+      "blobBytes": 6673,
+      "blobSha256": "8cac9d1d8f790a4e9ef8d491805f315b5a6b0c8e035cad6a555ec70ec57716fa"
+    },
+    {
+      "path": "services/edge-api/test/identity/catalog/projection.test.ts",
+      "blobBytes": 13391,
+      "blobSha256": "75b2c79a6fc38c2d5378aedda21e33b8e85bd034917fc4e8e44c5cb215503d13"
+    },
+    {
+      "path": "services/edge-api/test/identity/catalog/retention.test.ts",
+      "blobBytes": 8998,
+      "blobSha256": "38a5c6da6f1c704fed6c26bd449dbcb178076fe7db452f9c8688d7cf064e2a07"
+    },
+    {
+      "path": "services/edge-api/test/identity/catalog/run-context.test.ts",
+      "blobBytes": 13934,
+      "blobSha256": "f2684602e32d12b8ef8f82852e922370375a1b25053fece74e0655ae33c8360b"
+    },
+    {
+      "path": "services/edge-api/test/identity/catalog/seed-local-worker.ts",
+      "blobBytes": 1835,
+      "blobSha256": "6f2e888a82fc11b9cc31fab48ccb3cd98e2d441c7c2d7139a55ec494d31ce09f"
+    },
+    {
+      "path": "services/edge-api/test/identity/catalog/seed-local.test.mjs",
+      "blobBytes": 4437,
+      "blobSha256": "4b489384c6b52ffe40c018bd4a09e1d9bd63f20e913d425cee4840f151b006d3"
+    },
+    {
+      "path": "services/edge-api/test/identity/catalog/seed-storage.test.ts",
+      "blobBytes": 2068,
+      "blobSha256": "4e370d00580d78f46db43ddd4681eaa43eb6e22ef274295ccd9e0a016e72072a"
+    },
+    {
+      "path": "services/edge-api/test/identity/catalog/seed.test.ts",
+      "blobBytes": 1878,
+      "blobSha256": "06fa9d074dcbee60bddfe5221e8482db839deaf3d8983cb834f99186388c29af"
+    },
+    {
+      "path": "services/edge-api/test/identity/catalog/sqlite-support.ts",
+      "blobBytes": 932,
+      "blobSha256": "c6d074f00cf8e50c73a1fe77fe39c0fc7df2422b11f5190bf53f7ed69a115a71"
+    },
+    {
+      "path": "services/edge-api/test/identity/catalog/store.test.ts",
+      "blobBytes": 2950,
+      "blobSha256": "41a51e374380ed19940f0cb7f8a86ca1ef0fa3d5b54766e9dac488193f11c142"
+    },
+    {
+      "path": "services/edge-api/test/identity/catalog/u4-authority.ts",
+      "blobBytes": 932,
+      "blobSha256": "0a5f0af6cab8d0caea25b8566ed475996e9773d1a9c7b464601224a219cd3c86"
+    },
+    {
+      "path": "services/edge-api/test/identity/catalog/u4-concurrency.test.ts",
+      "blobBytes": 7491,
+      "blobSha256": "9ca3d249d6ee1dfe8ca402429f354b1973c065adfaaf605535b72709ffff902a"
+    },
+    {
+      "path": "services/edge-api/test/identity/catalog/u4-dataset.test.ts",
+      "blobBytes": 4389,
+      "blobSha256": "08411e97c4cc7ab38ab3d2f740448dad9faaf81df685bdf281b1e26feb2f9b69"
+    },
+    {
+      "path": "services/edge-api/test/identity/catalog/u4-export.test.ts",
+      "blobBytes": 2073,
+      "blobSha256": "270c3b81e8733ca69b2193ca91d15441c708a592770bd250c933ddcdb7a64f94"
+    },
+    {
+      "path": "services/edge-api/test/identity/catalog/u4-lifecycle.test.ts",
+      "blobBytes": 16728,
+      "blobSha256": "a0ca4f397b1ea6913dfc76543e50788eab4df26bc3217c7c02f6f16073ddfc41"
+    },
+    {
+      "path": "services/edge-api/test/identity/catalog/u4-local-worker.ts",
+      "blobBytes": 4069,
+      "blobSha256": "999e5b527a25d0d2ff40fa8888efc9befb1411cfacce3b3a906dbd8f677d0e9d"
+    },
+    {
+      "path": "services/edge-api/test/identity/catalog/u4-local.test.mjs",
+      "blobBytes": 9345,
+      "blobSha256": "c8abdd7f29ffa187470585e61d220085838892f797ba885c044f627a50dbd792"
+    },
+    {
+      "path": "services/edge-api/test/identity/catalog/u4-support.ts",
+      "blobBytes": 6628,
+      "blobSha256": "7d08a959f9b293d4fa5e19b4a6b55c87b05ed474059ed1f392e9cc14ec93682d"
+    },
+    {
+      "path": "services/edge-api/test/identity/catalog/u4-transactions.test.ts",
+      "blobBytes": 5668,
+      "blobSha256": "3dd7242b54606081e6218be7a427aeec4fa35c7bd594a02bad1531372a291467"
+    },
+    {
+      "path": "services/edge-api/test/identity/catalog/u4-validation.test.ts",
+      "blobBytes": 13546,
+      "blobSha256": "c54262fcc43cbccb3cc91853d29addd112b49d806ce2be2c5828ead507052acd"
+    },
+    {
+      "path": "services/edge-api/test/identity/catalog/u6-support.ts",
+      "blobBytes": 1575,
+      "blobSha256": "f6eb3479b8dc551bdee0c0c1c7a0d1f25f82c845c770497f2e0055aa01b9d635"
+    },
+    {
+      "path": "services/edge-api/test/identity/catalog/u7-local-worker.ts",
+      "blobBytes": 1658,
+      "blobSha256": "ce880cb408ff80b237330e8cceebc7a3ca0b81aa455c064fbaa1eaa7cdf3dc49"
+    },
+    {
+      "path": "services/edge-api/test/identity/catalog/validation.test.ts",
+      "blobBytes": 5353,
+      "blobSha256": "f23258af2eb96466e8cfe762a08dddc5f1e0dbee69a9c2260dede6993e5a0704"
+    },
+    {
+      "path": "services/edge-api/test/identity/discovery/boundaries.test.ts",
+      "blobBytes": 2131,
+      "blobSha256": "a10f5fab03e4e9fb2f7347954b03e10d0f636f2397325028c12b4c5586619db7"
+    },
+    {
+      "path": "services/edge-api/test/identity/discovery/collector.test.ts",
+      "blobBytes": 4973,
+      "blobSha256": "17c92e77dd41059883c0f8eba455fb683f750c58d6a4702a44d81559c80c85bf"
+    },
+    {
+      "path": "services/edge-api/test/identity/discovery/extractor.test.ts",
+      "blobBytes": 12046,
+      "blobSha256": "bea5092a529f8ed7dcb0040c06cd4d690163f2bc5b82adfa413f281d9eac5b88"
+    },
+    {
+      "path": "services/edge-api/test/identity/discovery/keys.test.ts",
+      "blobBytes": 2103,
+      "blobSha256": "fd9ed857da1f9a886880a89f6d18f64fe3bef5329a9150938e7b187b9b8bcb88"
+    },
+    {
+      "path": "services/edge-api/test/identity/discovery/parity.test.ts",
+      "blobBytes": 11666,
+      "blobSha256": "3d98fb79a055fba685fa3c010ece9a7181455bc9e16cf7533e67d9504c069ab6"
+    },
+    {
+      "path": "services/edge-api/test/identity/discovery/shadow.test.ts",
+      "blobBytes": 9483,
+      "blobSha256": "bca310c0d5316b4c4493dde87af0e35ef517fa25de730f74f5c83f5c95474cc4"
+    },
+    {
+      "path": "services/edge-api/test/identity/discovery/support.ts",
+      "blobBytes": 4423,
+      "blobSha256": "1c3082081caf176aac6de79500b18b4e9639a653414fd9fb5112b60daee59594"
+    },
+    {
+      "path": "services/edge-api/test/identity/discovery/sync-shadow.test.ts",
+      "blobBytes": 7476,
+      "blobSha256": "c47abd83f075a130a10c9f2e7b7d741cf09ac9bb8904cd156913172987ef3f06"
+    },
+    {
+      "path": "services/edge-api/test/identity/integration/capacity.test.mjs",
+      "blobBytes": 5123,
+      "blobSha256": "bff9599f3527eb3035456e15261800c190ffd06e623e427b9dbf92cae76b0263"
+    },
+    {
+      "path": "services/edge-api/test/identity/integration/cutover.test.mjs",
+      "blobBytes": 11008,
+      "blobSha256": "99952ff760101e71444a5965a6a2b3d5c32bf95bae5999cd1688c1051cd4d49d"
+    },
+    {
+      "path": "services/edge-api/test/identity/integration/isolation.test.mjs",
+      "blobBytes": 5452,
+      "blobSha256": "df0f3e3d8a7ecc287f749cfcbd42d8bd1ba24b4b994993079ff230d26c7fa7ed"
+    },
+    {
+      "path": "services/edge-api/test/identity/integration/local-worker.ts",
+      "blobBytes": 6553,
+      "blobSha256": "29a4d1392e1a4b4c376a7dd740aa317acb458fd853a9aa7bdd1dae31a2cfcaac"
+    },
+    {
+      "path": "services/edge-api/test/identity/integration/optional-inventory.test.mjs",
+      "blobBytes": 15532,
+      "blobSha256": "f8371807d333b8eda0bccf1622467cd95292afb9eba8bbfccf0ee0c9f460935c"
+    },
+    {
+      "path": "services/edge-api/test/identity/integration/recovery.mjs",
+      "blobBytes": 7594,
+      "blobSha256": "7993b1049848146c2b22946974729dc051c0367b078a0fd7d42efb3bbb4ad365"
+    },
+    {
+      "path": "services/edge-api/test/identity/integration/restart.test.mjs",
+      "blobBytes": 5838,
+      "blobSha256": "a48f6ee6f0b8b8db1607bb6ed324cc3f18131606950be8050a81380be6a7b8f5"
+    },
+    {
+      "path": "services/edge-api/test/identity/integration/restore.test.mjs",
+      "blobBytes": 10063,
+      "blobSha256": "d91bc958b8059bb531eec90efda8ca864ab644e8b576f48f4b095d93299bfc3a"
+    },
+    {
+      "path": "services/edge-api/test/identity/integration/support.mjs",
+      "blobBytes": 13837,
+      "blobSha256": "a5bdc9fed760d77b0722fab434f6cb68304dfff95db2363ffada300744d0e69b"
+    },
+    {
+      "path": "services/edge-api/test/ingest/catalog-v2-optional.test.ts",
+      "blobBytes": 15426,
+      "blobSha256": "4fbbb3442e9c896714508bdc9a08c2976fd615fc4338396a71f7a57e68076dff"
+    },
+    {
+      "path": "services/edge-api/test/ingest/catalog-v2.test.ts",
+      "blobBytes": 17320,
+      "blobSha256": "759405af9ab7e7417e2be969851a86f637744951dcee9471089707fc8ec38dc7"
+    },
+    {
+      "path": "services/edge-api/test/providers/coordination/candidate-payload-snapshot.test.ts",
+      "blobBytes": 31544,
+      "blobSha256": "3613db787cdcfcd565a15f2fb0ca29ecc71234e1aed4b7cc5f15620c928e1eaa"
+    },
+    {
+      "path": "services/edge-api/test/providers/coordination/coordination-containment.test.ts",
+      "blobBytes": 18503,
+      "blobSha256": "1b195ab5d409d08576ff1abcf157147e0c6817013933c254f9274e3f6602cf0d"
+    },
+    {
+      "path": "services/edge-api/test/providers/coordination/identity-closure-publication.test.ts",
+      "blobBytes": 10287,
+      "blobSha256": "37a49ebbc0f3d492360712e2d9d0f25700b88722a060208bc376421a1f6be254"
+    },
+    {
+      "path": "services/edge-api/test/providers/coordination/identity-closure-support.ts",
+      "blobBytes": 10583,
+      "blobSha256": "f787c2115d6414caabf937211b53b149fad86bd157a54bb663c1f4eddc9e14d4"
+    },
+    {
+      "path": "services/edge-api/test/providers/coordination/identity-closure.test.ts",
+      "blobBytes": 23808,
+      "blobSha256": "1a8c89f32ac8d7ffa7d677f7f63c5dcf45a73ad271edd73e4f720fab0383c182"
+    },
+    {
+      "path": "services/edge-api/test/providers/coordination/payload-contract.test.ts",
+      "blobBytes": 13658,
+      "blobSha256": "6a754067b2f8e3838cb718f6c3d74319ee420f3c5812d2cb7539674b07370381"
+    },
+    {
+      "path": "services/edge-api/test/providers/jolpica/driver-inventory.test.ts",
+      "blobBytes": 47084,
+      "blobSha256": "82b8f7fca6912480c5639238c0532f01dcbd596f999d49bf896cc52167341f35"
+    },
+    {
+      "path": "services/edge-api/test/providers/mappings/circuit-dataset-2026.test.ts",
+      "blobBytes": 40558,
+      "blobSha256": "bcc04957dba420d6c880166c80bdb3af3150ab5b7ab9e33b0dc97c559f28b2c4"
+    },
+    {
+      "path": "services/edge-api/test/providers/mappings/constructor-dataset-2026.test.ts",
+      "blobBytes": 31827,
+      "blobSha256": "22bb04d9df752584e7635b932c45159c325d9572f2246468bc25638e7ac3d028"
+    },
+    {
+      "path": "services/edge-api/test/providers/mappings/driver-dataset-2026.test.ts",
+      "blobBytes": 36512,
+      "blobSha256": "3589071cd53bf60b424824d32222666a6083f97ce96b9ca533eb1c004e6109d6"
+    },
+    {
+      "path": "services/edge-api/test/providers/mappings/mapping-acknowledgement.test.ts",
+      "blobBytes": 5710,
+      "blobSha256": "1c3f4bc2181ec726febefc0a574d36a5263a97e92774c5238b04567001cd4767"
+    },
+    {
+      "path": "services/edge-api/test/providers/mappings/mapping-containment.test.ts",
+      "blobBytes": 28780,
+      "blobSha256": "9f2dbb06e07783349a68528078febc1702fcba14e4825d16bcf34a4fa649f1d0"
+    },
+    {
+      "path": "services/edge-api/test/providers/provider-neutrality.test.ts",
+      "blobBytes": 43364,
+      "blobSha256": "88cc872eeb228021e0909b8027bb083537b0f0ed02b9971ea44a8c1389a6a3dc"
+    },
+    {
+      "path": "services/edge-api/test/season-batch/catalog-v2.test.ts",
+      "blobBytes": 11384,
+      "blobSha256": "b18d8b0afb6697a0db1aab5b87052d00b7a22a31885fe995dd62dc14d6ee2e0e"
+    },
+    {
+      "path": "services/edge-api/test/season-batch/cli.test.mjs",
+      "blobBytes": 12435,
+      "blobSha256": "ff433d4288b70ab9a546375fe90508a7eb7e09777aa16b6c809516683a4fcaaa"
+    },
+    {
+      "path": "services/edge-api/test/season-batch/dormancy.test.ts",
+      "blobBytes": 2408,
+      "blobSha256": "10ab29f64faa9e1a7b6b4f8d34543986da52f1feec1a6268bb930c3407fc7cce"
+    },
+    {
+      "path": "services/edge-api/test/sync/coordinated/entry-points/inventory-mode.test.ts",
+      "blobBytes": 4428,
+      "blobSha256": "90f81c49304678fd035d8ec224948341143fd7e9835c4c1363431161932cf585"
+    },
+    {
+      "path": "services/edge-api/test/sync/coordinated/entry-points/proxy-transport.test.ts",
+      "blobBytes": 14850,
+      "blobSha256": "56dbe9313388a04a155699f11d8dcf16a2c321b968f72ed596a7c585baeaf43e"
+    },
+    {
+      "path": "services/edge-api/test/sync/coordinated/identity-context.test.ts",
+      "blobBytes": 15055,
+      "blobSha256": "0f13c9c347cea78bc4f59d5d132190eb1664a984569d33f512c91bfe5a0f5279"
+    },
+    {
+      "path": "services/edge-api/test/sync/coordinated/identity-verification.test.ts",
+      "blobBytes": 8245,
+      "blobSha256": "791d672ff4434c58f04229b06679452e82165d50b9053e9b636bbeb2d0e31b3f"
+    },
+    {
+      "path": "services/edge-api/test/sync/coordinated/ledger/dormancy.test.ts",
+      "blobBytes": 6816,
+      "blobSha256": "ab1ca4d2bbcb1de509efb22e00df2123246d2aafebfbf84caeded5ae31709eb7"
+    },
+    {
+      "path": "services/edge-api/test/sync/coordinated/observation/dormancy.test.ts",
+      "blobBytes": 4432,
+      "blobSha256": "eea832f35841be9d18d78f1b9eccd2d9f7f6a6641fe4c44801199a69148439e5"
+    },
+    {
+      "path": "services/edge-api/test/sync/coordinated/operator/operator.test.ts",
+      "blobBytes": 6783,
+      "blobSha256": "aa1f09add937e6ed799cadc2a2649cd72ce2f16c54074453b01cb34c74ba2326"
+    },
+    {
+      "path": "services/edge-api/test/sync/coordinated/outcome/dormancy.test.ts",
+      "blobBytes": 4679,
+      "blobSha256": "2d4dc1879122daacf0d3ad9b098ac0e86039c3a519d5bcb561243571b3f4c462"
+    },
+    {
+      "path": "services/edge-api/test/sync/coordinated/policy/dormancy.test.ts",
+      "blobBytes": 3425,
+      "blobSha256": "6b093cf9503671c82cb1c7799210c1f13256ceea744a7be75072bfe492ccc43b"
+    },
+    {
+      "path": "services/edge-api/tsconfig.json",
+      "blobBytes": 833,
+      "blobSha256": "2d2b3532808c1d2f86f8b432f24841cc076812fef2ebc771b228f48f104d80f9"
+    },
+    {
+      "path": "services/edge-api/wrangler.identity-local.toml",
+      "blobBytes": 440,
+      "blobSha256": "43ec66127ae966354f140e21e0363cb3315d7d079ba5537122c529703a34ec4e"
+    },
+    {
+      "path": "services/edge-api/wrangler.toml",
+      "blobBytes": 23056,
+      "blobSha256": "8a61db8beaff500d2d2966f214e84c187c76083ac1c3bf0132748976c796956f"
+    }
+  ]
+}

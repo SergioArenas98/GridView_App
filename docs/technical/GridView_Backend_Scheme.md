@@ -1,3 +1,8 @@
+> **U0 approval, 2026-11-13:** PO-1 through PO-8 are accepted as architecture only.
+> See [the dated U0 amendment](#u0-amendment---2026-11-13) for current authority and gates.
+> Earlier text is preserved as historical context; U1-U11 and deployments remain
+> pending separate authorization. No runtime behavior changed in U0.
+
 # GridView - Backend Scheme
 
 ## Document information
@@ -2601,3 +2606,15 @@ The user never waits for a scraper or provider transformation.
 ```
 
 This preserves the simplicity expected from an information application while giving GridView the control needed to remain reliable and extensible.
+
+## U0 amendment - 2026-11-13
+
+Status: Accepted architecture; implementation and activation pending separate approval.
+
+For sections 6.5, 8.1 and 9, [ADR 0029](../adr/0029-persistent-identity-discovery-and-reviewed-runtime-catalog.md) and [ADR 0031](../adr/0031-identity-review-authority-and-catalog-cutover.md) replace repository-only runtime identity authority after controlled migration with one SQLite-backed IdentityCatalog. It owns verified driver profiles and all exact typed season-scoped provider bindings, with sealed reviewed non-driver/base imports. Git remains seed/export/historical provenance, never a live editable overlay. Existing IDs are stable; identities are never guessed. Before cutover the bundled authority remains in effect.
+
+For section 8.1's blanket unknown-identity failure and section 17 validation, [ADR 0030](../adr/0030-provider-driver-inventory-and-required-identity-closure.md) permits only explicitly accounted private unresolved driver inventory in separately activated optional mode. Constructor inventory, classifications, standings and required references remain strict. Race participation derives only from accepted selected race evidence; whole-season publication and D14-D16 remain required. Reconciliation and catalog acceptance do not grant publication authority.
+
+Season metadata ownership: the seed dataset version stays `2026.10.07.1`. After migration, effective identity-content changes reserve new season dataset labels through ADR 0031 D3; evidence-only changes do not. Catalog revisions, public dataset labels and sequencer release versions remain distinct. Media/attribution policy retains its existing owner and reviewed-base admission. Historical snapshots remain immutable and readable.
+
+Sections 18, 21 and 26 gain fail-closed pre-request catalog pinning, individually authenticated catalog mutations and per-Worker installation isolation under ADR 0031. A catalog outage does not affect existing snapshot reads; there is no silent bundled fallback. Shared ADMIN_TOKEN remains for existing unrelated operations, never catalog mutation. No legacy Spring Boot/MySQL/scraper foundation, public API v1/Flutter change, infrastructure change or deployment is introduced by U0.

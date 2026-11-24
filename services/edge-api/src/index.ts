@@ -1,4 +1,6 @@
 import { isInternalPath } from './admin/auth';
+import { shadowDiscoveryFor } from './identity/factory';
+import type { BackgroundTasks } from './identity/discovery/persist';
 import { handleAdminRequest, type AdminSynchronization } from './admin/router';
 import {
   CloudflareCacheApiPurgeAdapter,
@@ -7,12 +9,17 @@ import {
 } from './cache/purge';
 import {
   ConfigurationError,
+  resolveJolpicaTransport,
   resolveRuntimeConfig,
   type Env,
   type RuntimeConfig,
 } from './config/environment';
 import { errorResponse } from './http/envelope';
 import { SeasonBatchIngest } from './ingest/service';
+import {
+  identityConfiguration,
+  resolveIdentityCatalogMode,
+} from './identity/catalog/run-context';
 import { consoleLogger } from './logging/logger';
 import {
   completedLine,
@@ -46,6 +53,7 @@ import {
   resolveProviderRateLimiter,
   unboundRateLimiter,
 } from './providers/http/factory';
+import { jolpicaTransport } from './providers/http/jolpica-transport';
 import { systemClock } from './runtime/clock';
 import { handleStatus } from './routes/status';
 import { resolveStorage } from './storage/factory';
@@ -108,13 +116,25 @@ export { SeasonPublicationSequencer } from './publication/sequencer/durable-obje
  */
 export { ReconciliationLedger } from './sync/coordinated/ledger/durable-object';
 
+/** U2 export only. Registered/bound solely in the separate local test config. */
+export { IdentityCatalog } from './identity/durable-object';
+
 export default {
-  async fetch(request: Request, env: Env): Promise<Response> {
+  async fetch(
+    request: Request,
+    env: Env,
+    context?: ExecutionContext,
+  ): Promise<Response> {
     const startedAt = Date.now();
-    const requestId = requestIdFor(request.headers.get('X-Request-ID'), () =>
-      crypto.randomUUID(),
-    );
     const url = new URL(request.url);
+    const identityAdmin =
+      url.pathname === '/internal/admin/identity' ||
+      url.pathname.startsWith('/internal/admin/identity/');
+    const requestId = identityAdmin
+      ? crypto.randomUUID()
+      : requestIdFor(request.headers.get('X-Request-ID'), () =>
+          crypto.randomUUID(),
+        );
     // What this request's own lines may carry (ADR 0028 D8): in production
     // a public request persists no line on success and no request ID.
     const logScope = requestLogScope(
@@ -164,6 +184,7 @@ export default {
                   storage,
                   logger,
                   clock,
+                  context,
                 ),
               ),
           }
@@ -204,6 +225,15 @@ export default {
           // Always constructed, and disabled by its own admission: with no
           // `SEASON_BATCH_INGEST` it refuses before reading a body.
           ingest: new SeasonBatchIngest({
+            identity: identityConfiguration(env),
+            ledger: resolveReconciliationLedger(env),
+            compatibilityInstallation:
+              env.IDENTITY_BATCH_V1_COMPATIBILITY_INSTALLATION_ID,
+            recovery:
+              authority.mode === 'sequencer'
+                ? { port: authority.port, storage }
+                : undefined,
+            identityMode: resolveIdentityCatalogMode(env.IDENTITY_CATALOG_MODE),
             environment: config.environment,
             providerMode: config.providerMode,
             cutoverControl: config.publicationCutoverControl,
@@ -320,7 +350,7 @@ export default {
     env: Env,
     context?: ExecutionContext,
   ): Promise<void> {
-    const task = runScheduled(env);
+    const task = runScheduled(env, context);
     if (context) {
       context.waitUntil(task);
       return;
@@ -329,7 +359,10 @@ export default {
   },
 } satisfies ExportedHandler<Env>;
 
-async function runScheduled(env: Env): Promise<void> {
+async function runScheduled(
+  env: Env,
+  background?: BackgroundTasks,
+): Promise<void> {
   const clock = env.__CLOCK ?? systemClock;
   const logger = env.__LOGGER ?? consoleLogger;
   try {
@@ -341,7 +374,14 @@ async function runScheduled(env: Env): Promise<void> {
     );
     const storage = resolveStorage(env);
     if (coordinatedMode(config)) {
-      await runScheduledCoordinated(env, config, storage, clock, logger);
+      await runScheduledCoordinated(
+        env,
+        config,
+        storage,
+        clock,
+        logger,
+        background,
+      );
       return;
     }
     const purger = resolveCachePurger(env, config);
@@ -393,6 +433,7 @@ async function runScheduledCoordinated(
   storage: import('./storage/types').SnapshotStorage,
   clock: import('./runtime/clock').Clock,
   logger: import('./logging/logger').Logger,
+  background?: BackgroundTasks,
 ): Promise<void> {
   const authority = resolvePublicationAuthority(env, config);
   const purgeOrigin = config.publicBaseUrl;
@@ -420,6 +461,7 @@ async function runScheduledCoordinated(
       storage,
       logger,
       clock,
+      background,
     ),
   );
 }
@@ -446,6 +488,7 @@ function coordinatedDependencies(
 ): CoordinatedRuntimeDependencies {
   const limiter = resolveProviderRateLimiter(env);
   return {
+    identity: identityConfiguration(env),
     limiter: limiter === unboundRateLimiter ? null : limiter,
     authorityMode: authority.mode,
     guarded,
@@ -461,9 +504,9 @@ function coordinatedDependencies(
 /**
  * The transport a composed runtime hands its hardened client: the test hook,
  * else the controlled KV source a coordinated staging Worker selected (ADR
- * 0028 D10), else `undefined` - the runtime `fetch`. The controlled source
- * makes no request until the composed runtime calls it, and it reads only
- * the Worker's own namespace.
+ * 0028 D10), else optional Jolpica egress or `undefined` (direct runtime fetch).
+ * The controlled source makes no request until the composed runtime calls it,
+ * and it reads only the Worker's own namespace.
  */
 function providerTransport(
   env: Env,
@@ -478,7 +521,12 @@ function providerTransport(
     config.environment,
     config.providerMode,
   );
-  if (source !== 'kv') return undefined;
+  const transportConfig = resolveJolpicaTransport(env);
+  if (source !== 'kv') {
+    return transportConfig.mode === 'direct'
+      ? undefined
+      : jolpicaTransport(transportConfig, (request) => fetch(request));
+  }
   if (!env.GRIDVIEW_DATA) {
     throw new ConfigurationError(
       'The controlled provider source needs the GRIDVIEW_DATA KV binding.',
@@ -501,6 +549,7 @@ function coordinatedSyncDependencies(
   storage: import('./storage/types').SnapshotStorage,
   logger: import('./logging/logger').Logger,
   clock: import('./runtime/clock').Clock,
+  background?: BackgroundTasks,
 ): CoordinatedSyncDependencies {
   return {
     ...coordinatedDependencies(
@@ -513,6 +562,19 @@ function coordinatedSyncDependencies(
     ),
     sequencer: authority.mode === 'sequencer' ? authority.port : null,
     storage,
+    ...(env.IDENTITY_DISCOVERY_MODE === undefined ||
+    env.IDENTITY_DISCOVERY_MODE === 'off'
+      ? {}
+      : {
+          discoveryFactory: (context) =>
+            shadowDiscoveryFor(
+              env,
+              logger,
+              () => clock.now().getTime(),
+              background,
+              context,
+            ),
+        }),
     // A test hook, like `__PACER_SLEEP`: with none, the run budget times its
     // deadline with a timer, armed only once a run holds its lease.
     ...(env.__RUN_BUDGET_TIMER ? { budgetTimer: env.__RUN_BUDGET_TIMER } : {}),

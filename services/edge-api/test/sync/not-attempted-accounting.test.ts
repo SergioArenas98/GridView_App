@@ -237,13 +237,13 @@ describe('Phase 9B-2 changes no runtime provider posture', () => {
     );
   });
 
-  it('keeps production on none and commits staging to coordinated (mock until the ingest configuration, then none until AU-4)', () => {
+  it('commits staging (AU-4) and production (AU-7) to coordinated, and nothing to mock', () => {
     expect(wrangler).toMatch(
       /\[env\.staging\.vars\]\nENVIRONMENT = "staging"\n(?:#.*\n)*PROVIDER_MODE = "coordinated"\n/,
     );
     expect(wrangler).not.toMatch(/^PROVIDER_MODE = "mock"/m);
     expect(wrangler).toMatch(
-      /\[env\.production\.vars\][\s\S]*PROVIDER_MODE = "none"/,
+      /\[env\.production\.vars\][\s\S]*PROVIDER_MODE = "coordinated"/,
     );
   });
 
@@ -263,8 +263,7 @@ describe('Phase 9B-2 changes no runtime provider posture', () => {
     expect(wrangler).not.toContain('[[d1_databases]]');
     expect(wrangler).not.toContain('[[r2_buckets]]');
     expect(wrangler).not.toContain('[[queues');
-    // The staging cron is an explicit empty list since the season-batch
-    // ingest configuration.
+    // The demonstration Worker's cron is an explicit empty list since AU-3.
     expect(wrangler).toContain('crons = []');
   });
 

@@ -134,7 +134,10 @@ describe('every approved provider identity is accounted for', () => {
       expect(record.evidence, JSON.stringify(record)).toBeTruthy();
       // Provenance points inside the repository, never at a contract,
       // credential or confidential document.
-      expect(String(record.evidence)).toMatch(/GridView_Provider_Evaluation/);
+      // The P0 rafael_camara mapping cites its staging R1 review record.
+      expect(String(record.evidence)).toMatch(
+        /GridView_Provider_Evaluation|GridView_Identity_Catalog_U11\.md/,
+      );
     }
   });
 

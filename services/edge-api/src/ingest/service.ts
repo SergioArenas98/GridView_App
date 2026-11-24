@@ -83,11 +83,31 @@ import {
   type VerifiedSeasonBatch,
 } from './batch-verification';
 import type { SeasonBatchSubmission } from './submission';
+import type {
+  IdentityContextConfiguration,
+  IdentityRunContext,
+} from '../identity/catalog/run-context';
+import type { ReconciliationLedgerPort } from '../sync/coordinated/ledger-port';
+import { releaseSeasonLease } from '../sync/coordinated/operator/lease';
+import {
+  admitBatchCatalog,
+  batchCatalogCall,
+  BatchCatalogError,
+} from './catalog-admission';
+import type { BatchAdmissionRequest } from '../identity/catalog/batch-admission';
+import { canonicalJson, sha256Hex, utf8 } from './canonical-json';
+import type { SeasonPublicationSequencerPort } from '../publication/sequencer/port';
+import type { SnapshotStorage } from '../storage/types';
+import { readStoredPublicationMetadata } from '../publication/publication-metadata';
 
 export const SEASON_BATCH_INGEST_OPERATION = 'season-batch.ingest';
 
 /** Why an ingest was refused before its body was read. Closed. */
 export const ingestAdmissionRefusals = [
+  'catalog-admission-refused',
+  'batch-lease-unavailable',
+  'batch-recovery-required',
+  'runtime-batch-requires-u7',
   'ingest-disabled',
   'ingest-misconfigured',
   'environment-not-permitted',
@@ -136,6 +156,7 @@ export type SeasonBatchIngestOutcome =
 
 /** The bounded part of a `PublicationResult`: no purged URL is returned. */
 export interface IngestPublication {
+  readonly recovered?: true;
   readonly status: PublicationResult['status'];
   readonly season: number;
   readonly version: string;
@@ -156,6 +177,15 @@ export interface IngestBatchSummary {
 }
 
 export interface SeasonBatchIngestDeps {
+  readonly recovery?: {
+    readonly port: SeasonPublicationSequencerPort;
+    readonly storage: SnapshotStorage;
+  };
+  readonly identity?: IdentityContextConfiguration;
+  readonly ledger?: ReconciliationLedgerPort | null;
+  /** Explicit installation-scoped opt-in, absent everywhere by default. */
+  readonly compatibilityInstallation?: string;
+  readonly identityMode?: 'bundled' | 'compare' | 'runtime';
   readonly environment: EnvironmentName;
   readonly providerMode: ProviderMode;
   /** The resolved cutover control; production ingests only under `genesis:`. */
@@ -242,6 +272,11 @@ export class SeasonBatchIngest {
    * bundled content only, so the route calls it before reading the body.
    */
   admit(): Admitted | IngestAdmissionRefusal {
+    if (
+      this.deps.identityMode === 'runtime' &&
+      (!this.deps.identity?.namespace || !this.deps.ledger)
+    )
+      return 'runtime-batch-requires-u7';
     const raw = this.deps.enabledSeason;
     if (raw === undefined || raw === '') return 'ingest-disabled';
     if (!seasonPattern.test(raw) || this.metadataFor(Number(raw)) === null) {
@@ -274,27 +309,251 @@ export class SeasonBatchIngest {
     admitted: Admitted,
     submission: SeasonBatchSubmission,
   ): Promise<SeasonBatchIngestOutcome> {
+    if (this.deps.identityMode === 'runtime') {
+      if (!this.deps.identity?.namespace || !this.deps.ledger)
+        return this.refused('admission', 'runtime-batch-requires-u7');
+      return this.runtimeIngest(admitted, submission);
+    }
+    return this.verifiedIngest(admitted, submission);
+  }
+
+  private async verifiedIngest(
+    admitted: Admitted,
+    submission: SeasonBatchSubmission,
+    context?: IdentityRunContext,
+    now = this.deps.clock.now(),
+    beforePublish?: () => Promise<void>,
+    onPrepared?: (version: string) => Promise<void>,
+  ): Promise<SeasonBatchIngestOutcome> {
     if (submission.season !== admitted.season) {
       return this.refused('request', 'season-not-enabled');
     }
-    const now = this.deps.clock.now();
     const verified = await verifySeasonBatch({
+      identityContext: context,
       manifest: submission.manifest,
       artifact: submission.artifact,
       reviewedManifestSha256: submission.reviewedManifestSha256,
       season: admitted.season,
       now,
-      metadata: this.metadataFor(admitted.season),
+      metadata: context
+        ? context.seasonMetadata
+        : this.metadataFor(admitted.season),
       attribution: admitted.credit.attribution,
     });
     if (!verified.ok) return this.refused('verification', verified.failure);
 
     const set = candidateAt(verified.batch, now);
     if (set === null) return this.refused('verification', 'generation-failed');
+    await beforePublish?.();
     const result = await admitted.guarded.publishGuarded(set, {
+      onPrepared,
       expectedActiveVersion: submission.expectedActiveVersion,
     });
     return this.published(result, verified.batch, submission);
+  }
+
+  private async runtimeIngest(
+    admitted: Admitted,
+    submission: SeasonBatchSubmission,
+  ): Promise<SeasonBatchIngestOutcome> {
+    if (submission.season !== admitted.season)
+      return this.refused('request', 'season-not-enabled');
+    const ledger = this.deps.ledger!,
+      config = this.deps.identity!;
+    const acquired = await ledger.acquireLease(admitted.season);
+    if (acquired.outcome !== 'acquired')
+      return this.refused('admission', 'batch-lease-unavailable');
+    const lease = {
+      season: acquired.lease.season,
+      fence: acquired.lease.fence,
+    };
+    try {
+      const digest = await sha256Hex(utf8(canonicalJson(submission)));
+      const artifact = submission.artifact as { schemaVersion?: unknown };
+      const legacy = artifact?.schemaVersion === 1;
+      if (!legacy && !submission.operationId)
+        return this.refused('admission', 'runtime-batch-requires-u7');
+      // v1 wire format stays unchanged; identical legacy submissions share a stable operation.
+      const operationId =
+        submission.operationId ??
+        `${digest.slice(0, 8)}-${digest.slice(8, 12)}-4${digest.slice(13, 16)}-8${digest.slice(17, 20)}-${digest.slice(20, 32)}`;
+      // U10: the installation's trusted effective policy, never the
+      // submission's own claim. Legacy v1 batches never gain the optional
+      // policy: under it they are refused before any catalog call.
+      const optional = config.inventoryMode === 'optional-drivers';
+      if (legacy && optional)
+        return this.refused('admission', 'runtime-batch-requires-u7');
+      const request: BatchAdmissionRequest = {
+        ...(optional
+          ? {
+              schemaVersion: 2 as const,
+              inventoryPolicy: 'optional-driver-inventory-v1' as const,
+            }
+          : { schemaVersion: 1 as const }),
+        operationId,
+        installationId: config.installationId ?? '',
+        season: admitted.season,
+        submissionHash: 'sha256:' + digest,
+        leaseFence: lease.fence,
+        legacy,
+        compatibilityInstallation: this.deps.compatibilityInstallation ?? null,
+      };
+      const { receipt, context } = await admitBatchCatalog(config, request);
+      if (receipt.state === 'complete')
+        return receipt.result as SeasonBatchIngestOutcome;
+      if (!context) throw Error('catalog-context-required');
+      // A crash after intent may have finalized. Never send a second candidate;
+      // the sequencer/predecessor and the retained receipt resolve that uncertainty.
+      if (receipt.state === 'publishing') {
+        const recovered = await this.recoverBatch(
+          admitted,
+          submission,
+          context,
+          receipt.admittedAt,
+          receipt.result,
+        );
+        if (!recovered)
+          return this.refused('admission', 'batch-recovery-required');
+        await batchCatalogCall(config, '/batch-transition', {
+          request,
+          state: 'complete',
+          result: recovered,
+        });
+        return recovered;
+      }
+      if (legacy && !receipt.legacyAllowed)
+        return this.refused('admission', 'runtime-batch-requires-u7');
+      if (
+        !legacy &&
+        (
+          submission.manifest as {
+            identityCatalog?: { exportSha256?: unknown };
+          }
+        ).identityCatalog?.exportSha256 !== receipt.exportSha256
+      )
+        return this.refused('verification', 'catalog-reference-mismatch');
+      const assertLease = async () => {
+        const current = await ledger.readSeason(admitted.season);
+        if (
+          current.outcome !== 'read' ||
+          current.snapshot.lease?.state !== 'held' ||
+          current.snapshot.lease.fence !== lease.fence ||
+          Date.parse(acquired.lease.expiresAt) <=
+            this.deps.clock.now().getTime() ||
+          current.snapshot.seasonRecord?.record.operatorHold ||
+          current.snapshot.seasonRecord?.record.durableBlock
+        )
+          throw Error('batch-lease-invalid');
+      };
+      const result = await this.verifiedIngest(
+        admitted,
+        submission,
+        context,
+        new Date(receipt.admittedAt),
+        async () => {
+          await assertLease();
+          await batchCatalogCall(config, '/batch-transition', {
+            request,
+            state: 'publishing',
+            result: null,
+          });
+        },
+        async (candidateVersion) => {
+          await assertLease();
+          await batchCatalogCall(config, '/batch-transition', {
+            request,
+            state: 'publishing',
+            result: { candidateVersion },
+          });
+          if (
+            Date.parse(acquired.lease.expiresAt) <=
+            this.deps.clock.now().getTime()
+          )
+            throw Error('batch-lease-invalid');
+        },
+      );
+      await batchCatalogCall(config, '/batch-transition', {
+        request,
+        state: 'complete',
+        result,
+      });
+      return result;
+    } catch (error) {
+      return this.refused(
+        'admission',
+        error instanceof BatchCatalogError
+          ? error.failure
+          : 'catalog-admission-refused',
+      );
+    } finally {
+      await releaseSeasonLease(ledger, lease);
+    }
+  }
+
+  private async recoverBatch(
+    admitted: Admitted,
+    submission: SeasonBatchSubmission,
+    context: IdentityRunContext,
+    admittedAt: string,
+    intent: unknown,
+  ): Promise<SeasonBatchIngestOutcome | null> {
+    const recovery = this.deps.recovery;
+    if (
+      !recovery ||
+      !isRecord(intent) ||
+      typeof intent.candidateVersion !== 'string'
+    )
+      return null;
+    const authority = await recovery.port.readAuthority(admitted.season);
+    if (
+      authority.cutoverState !== 'active' ||
+      !authority.authoritative ||
+      (authority.activeVersion !== intent.candidateVersion &&
+        authority.previousVersion !== intent.candidateVersion)
+    )
+      return null;
+    const sidecar = await readStoredPublicationMetadata(
+      recovery.storage,
+      admitted.season,
+      intent.candidateVersion,
+    );
+    if (sidecar.kind !== 'record') return null;
+    const verified = await verifySeasonBatch({
+      manifest: submission.manifest,
+      artifact: submission.artifact,
+      reviewedManifestSha256: submission.reviewedManifestSha256,
+      season: admitted.season,
+      now: new Date(admittedAt),
+      metadata: context.seasonMetadata,
+      attribution: admitted.credit.attribution,
+      identityContext: context,
+    });
+    if (
+      !verified.ok ||
+      sidecar.record.sourceOrderingInput !== verified.batch.observedAt
+    )
+      return null;
+    const result = this.published(
+      {
+        status: 'applied',
+        season: admitted.season,
+        version: intent.candidateVersion,
+        previousVersion: submission.expectedActiveVersion,
+        reason: 'idempotent',
+        cachePurgeOk: true,
+        cachePurge: 'not-required',
+        pointerMaintenance: 'not-required',
+        purgedUrls: [],
+      },
+      verified.batch,
+      submission,
+    );
+    if (result.outcome !== 'publication') return null;
+    // These maintenance fields describe this recovery only, never the lost call.
+    return {
+      ...result,
+      publication: { ...result.publication, recovered: true },
+    };
   }
 
   /** Logs and returns a refusal that wrote nothing. */

@@ -1,0 +1,40 @@
+[Unit]
+Description=GridView temporary Jolpica egress transport
+Wants=network-online.target
+After=network-online.target
+StartLimitIntervalSec=0
+
+[Service]
+Type=simple
+User=gridview-jolpica
+Group=gridview-jolpica
+WorkingDirectory=/opt/gridview-jolpica-proxy
+ExecStart=/usr/bin/node src/main.mjs
+Environment=NODE_ENV=production
+Environment=JOLPICA_PROXY_TOKEN_FILE=%d/jolpica-token
+EnvironmentFile=-/etc/gridview-jolpica-proxy/service.env
+LoadCredential=jolpica-token:/etc/gridview-jolpica-proxy/token
+Restart=always
+RestartSec=5
+TimeoutStopSec=12
+UMask=0077
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictSUIDSGID=yes
+RestrictAddressFamilies=AF_UNIX AF_INET
+CapabilityBoundingSet=
+AmbientCapabilities=
+LimitNOFILE=256
+LimitCORE=0
+TasksMax=32
+MemoryMax=256M
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

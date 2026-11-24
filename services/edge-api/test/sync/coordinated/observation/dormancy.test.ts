@@ -69,6 +69,7 @@ describe('the observation orchestration is wired through one entry, unbound', ()
       }
     }
     expect([...outside].sort()).toEqual([
+      'identity/catalog/run-context.ts',
       'logging/logger.ts',
       'providers/coordination/index.ts',
       'publication/canonical/ordering.ts',

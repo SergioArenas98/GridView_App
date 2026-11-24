@@ -4,13 +4,17 @@
 import { isInside } from './cli-guards.mjs';
 
 export const submissionUsage =
-  'Usage: npm run season-batch:submission -- --batch <dir> --manifest-sha256 <hex> (--expected-active-version <version> | --first-release) --out <file>';
+  'Usage: npm run season-batch:submission -- --batch <dir> --manifest-sha256 <hex> (--expected-active-version <version> | --first-release) --out <file> [--catalog-export <file> --installation-id <uuid> --operation-id <uuid> [--inventory-policy <policy>]]';
 
 const valued = [
   '--batch',
   '--manifest-sha256',
   '--expected-active-version',
   '--out',
+  '--catalog-export',
+  '--installation-id',
+  '--operation-id',
+  '--inventory-policy',
 ];
 
 /**
@@ -52,6 +56,15 @@ export function parseSubmissionArguments(argv) {
   const named = '--expected-active-version' in values;
   if (named && first) return { ok: false, reason: 'conflicting-arguments' };
   for (const name of valued) {
+    if (
+      [
+        '--catalog-export',
+        '--installation-id',
+        '--operation-id',
+        '--inventory-policy',
+      ].includes(name)
+    )
+      continue;
     if (name === '--expected-active-version' && first) continue;
     if (!(name in values)) return { ok: false, reason: 'missing-argument' };
   }
@@ -64,6 +77,18 @@ export function parseSubmissionArguments(argv) {
     manifestSha256: values['--manifest-sha256'],
     expectedActiveVersion: first ? null : values['--expected-active-version'],
     out: values['--out'],
+    ...(values['--catalog-export']
+      ? { catalogExport: values['--catalog-export'] }
+      : {}),
+    ...(values['--installation-id']
+      ? { installationId: values['--installation-id'] }
+      : {}),
+    ...(values['--operation-id']
+      ? { operationId: values['--operation-id'] }
+      : {}),
+    ...(values['--inventory-policy']
+      ? { inventoryPolicy: values['--inventory-policy'] }
+      : {}),
   };
 }
 

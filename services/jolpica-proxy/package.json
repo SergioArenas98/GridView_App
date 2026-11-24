@@ -1,0 +1,27 @@
+{
+  "name": "gridview-jolpica-proxy",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Temporary, removable Jolpica egress transport. No runtime dependencies.",
+  "packageManager": "npm@10.9.9",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "start": "node src/main.mjs",
+    "test": "node --test test/*.test.mjs",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint .",
+    "format": "prettier --check .",
+    "validate": "npm run typecheck && npm run lint && npm run format && npm test"
+  },
+  "devDependencies": {
+    "@eslint/js": "10.0.1",
+    "@types/node": "24.13.3",
+    "eslint": "10.7.0",
+    "globals": "16.5.0",
+    "prettier": "3.9.5",
+    "typescript": "6.0.3"
+  }
+}

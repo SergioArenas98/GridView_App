@@ -13,7 +13,7 @@ import {
 } from 'node:path';
 
 export const usage =
-  'Usage: npm run season-batch:generate -- --capture <dir> --out <dir> [--allow-dirty-tree]';
+  'Usage: npm run season-batch:generate -- --capture <dir> --out <dir> [--allow-dirty-tree] [--identity-mode runtime --installation-id <uuid> --catalog-export <local-file> [--inventory-policy strict-v1|optional-driver-inventory-v1]]';
 
 /**
  * @param {readonly string[]} argv
@@ -23,8 +23,31 @@ export function parseArguments(argv) {
   let capture = null;
   let out = null;
   let allowDirtyTree = false;
+  const catalogOptions = {};
   for (let index = 0; index < argv.length; index += 1) {
     const argument = argv[index];
+    if (
+      [
+        '--catalog-export',
+        '--installation-id',
+        '--identity-mode',
+        '--inventory-policy',
+      ].includes(argument)
+    ) {
+      const value = argv[++index];
+      if (!value || value.startsWith('--'))
+        return { ok: false, reason: 'missing-value' };
+      const key = {
+        '--catalog-export': 'catalogExport',
+        '--installation-id': 'installationId',
+        '--identity-mode': 'identityMode',
+        '--inventory-policy': 'inventoryPolicy',
+      }[argument];
+      if (Object.hasOwn(catalogOptions, key))
+        return { ok: false, reason: 'repeated-argument' };
+      catalogOptions[key] = value;
+      continue;
+    }
     if (argument === '--allow-dirty-tree') {
       if (allowDirtyTree) return { ok: false, reason: 'repeated-argument' };
       allowDirtyTree = true;
@@ -50,7 +73,7 @@ export function parseArguments(argv) {
   if (capture === null || out === null) {
     return { ok: false, reason: 'missing-argument' };
   }
-  return { ok: true, capture, out, allowDirtyTree };
+  return { ok: true, capture, out, allowDirtyTree, ...catalogOptions };
 }
 
 /**

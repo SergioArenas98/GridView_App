@@ -27,6 +27,10 @@
  */
 
 import type { Logger } from '../../logging/logger';
+import {
+  captureDiscovery,
+  type DiscoverySink,
+} from '../../identity/discovery/persist';
 import type {
   ProviderResourceOutcome,
   ProviderResourcePort,
@@ -70,6 +74,7 @@ export const calendarPathFor = (season: number): string =>
   `/ergast/f1/${season}/races/`;
 
 export interface JolpicaCalendarPortOptions {
+  readonly discovery?: DiscoverySink;
   /** The hardened outbound boundary. Injected; never defaulted to `fetch`. */
   readonly client: ProviderHttpClient;
   readonly logger: Logger;
@@ -90,11 +95,13 @@ export class JolpicaCalendarPort implements ProviderResourcePort {
   private readonly client: ProviderHttpClient;
   private readonly logger: Logger;
   private readonly registry: ProviderMappingRegistry;
+  private readonly discovery: DiscoverySink | undefined;
   private readonly eventNames: CuratedEventNames;
   private readonly reference: () => string;
   private sequence = 0;
 
   constructor(options: JolpicaCalendarPortOptions) {
+    this.discovery = options.discovery;
     this.client = options.client;
     this.logger = options.logger;
     this.registry = options.registry ?? providerMappingRegistry();
@@ -170,6 +177,17 @@ export class JolpicaCalendarPort implements ProviderResourcePort {
       };
     }
 
+    captureDiscovery(
+      this.discovery,
+      {
+        endpointKind: 'season-calendar',
+        season,
+        requestedLimit: calendarPageLimit,
+        decoded,
+      },
+      result.data,
+      this.registry,
+    );
     const normalized = normalizeSeasonCalendar(
       decoded.races,
       season,

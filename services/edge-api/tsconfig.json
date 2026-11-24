@@ -20,5 +20,5 @@
     "allowImportingTsExtensions": true,
     "noEmit": true
   },
-  "include": ["src", "test", "scripts/season-batch"]
+  "include": ["src", "test", "scripts/season-batch", "scripts/identity"]
 }

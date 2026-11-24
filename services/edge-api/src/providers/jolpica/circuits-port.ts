@@ -24,6 +24,10 @@
  */
 
 import type { Logger } from '../../logging/logger';
+import {
+  captureDiscovery,
+  type DiscoverySink,
+} from '../../identity/discovery/persist';
 import type {
   CoordinatedSourceId,
   ProviderResourceOutcome,
@@ -63,6 +67,7 @@ const circuitsPathFor = (season: number): string =>
   `/ergast/f1/${season}/circuits/`;
 
 export interface JolpicaCircuitsPortOptions {
+  readonly discovery?: DiscoverySink;
   /** The hardened outbound boundary. Injected; never defaulted to `fetch`. */
   readonly client: ProviderHttpClient;
   readonly logger: Logger;
@@ -83,11 +88,13 @@ export class JolpicaCircuitsPort implements ProviderResourcePort {
   private readonly client: ProviderHttpClient;
   private readonly logger: Logger;
   private readonly registry: ProviderMappingRegistry;
+  private readonly discovery: DiscoverySink | undefined;
   private readonly circuits: CuratedCircuits;
   private readonly reference: () => string;
   private sequence = 0;
 
   constructor(options: JolpicaCircuitsPortOptions) {
+    this.discovery = options.discovery;
     this.client = options.client;
     this.logger = options.logger;
     this.registry = options.registry ?? providerMappingRegistry();
@@ -141,6 +148,17 @@ export class JolpicaCircuitsPort implements ProviderResourcePort {
       return this.invalidPayload(attempt, season, decoded.problem);
     }
 
+    captureDiscovery(
+      this.discovery,
+      {
+        endpointKind: 'season-circuits',
+        season,
+        requestedLimit: circuitsPageLimit,
+        decoded,
+      },
+      result.data,
+      this.registry,
+    );
     let normalized: ReturnType<typeof normalizeSeasonCircuits>;
     try {
       normalized = normalizeSeasonCircuits(

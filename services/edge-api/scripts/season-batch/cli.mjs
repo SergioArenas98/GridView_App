@@ -196,8 +196,26 @@ async function main() {
     );
 
   const generator = await loadGenerator();
+  let catalogExport;
+  if (parsed.catalogExport) {
+    catalogExport = await readCaptureFile(
+      parsed.catalogExport,
+      2 * 1024 * 1024,
+      {
+        oversized: 'catalog-export-invalid',
+        notAFile: 'catalog-export-invalid',
+        unreadable: 'catalog-export-invalid',
+      },
+    );
+  }
   const input = await readCapture(capture, generator.decodeCaptureManifest);
   const result = await generator.generateSeasonBatch({
+    identityMode:
+      parsed.identityMode ?? process.env.IDENTITY_CATALOG_MODE ?? 'bundled',
+    installationId: parsed.installationId,
+    // Explicit only: the policy is never read from the environment.
+    inventoryPolicy: parsed.inventoryPolicy,
+    catalogExport,
     ...input,
     provenance: source,
   });
