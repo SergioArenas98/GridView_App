@@ -5326,3 +5326,11 @@ platform guarantee:
 - [Outbound connections keep Durable Objects alive](https://developers.cloudflare.com/changelog/post/2026-06-19-outbound-connections-keep-dos-alive/) — accessed 2026-09-05
 - [Workers KV: Write key-value pairs](https://developers.cloudflare.com/kv/api/write-key-value-pairs/) — accessed 2026-09-05
 - [Workers KV: How KV works (consistency model)](https://developers.cloudflare.com/kv/concepts/how-kv-works/) — accessed 2026-09-05
+
+## U0 amendment - 2026-11-13
+
+Status: Accepted architecture; implementation and activation pending separate approval.
+
+[ADR 0029](0029-persistent-identity-discovery-and-reviewed-runtime-catalog.md) and [ADR 0031](0031-identity-review-authority-and-catalog-cutover.md) create a separate future identity authority, not a publication authority. Catalog activation cannot publish, trigger synchronization, accept a classification or release a hold. Complete guarded publication, immutable release content, D14-D16 and the expected-predecessor binding remain mandatory.
+
+Future batch v2 admission and legacy v1 restrictions follow ADR 0031 D4 without weakening this ADR's ingest/review/regeneration safeguards. Catalog revisions and dataset labels never replace sequencer release versions. Code rollback cannot roll back catalog state; identity retargeting/deletion or destructive historical repair needs a separate reviewed architecture. No break-glass bypass or resource-scoped publication is authorized.

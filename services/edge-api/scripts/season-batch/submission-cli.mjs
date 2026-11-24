@@ -143,6 +143,12 @@ async function main() {
     reviewedManifestSha256: parsed.manifestSha256,
     expectedActiveVersion: parsed.expectedActiveVersion,
     now: new Date(),
+    catalogExport: parsed.catalogExport
+      ? await readBatchFile(parsed.catalogExport, 2 * 1024 * 1024)
+      : undefined,
+    installationId: parsed.installationId,
+    operationId: parsed.operationId,
+    inventoryPolicy: parsed.inventoryPolicy,
   });
   if (!result.ok) refuse(result.failure);
 

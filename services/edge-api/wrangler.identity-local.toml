@@ -1,0 +1,14 @@
+# U2 local SQLite harness only. No staging/production declaration or remote use.
+name = "gridview-identity-local"
+main = "src/identity/local.ts"
+compatibility_date = "2026-07-01"
+[vars]
+IDENTITY_INSTALLATION_ID = "33333333-3333-4333-8333-333333333333"
+IDENTITY_DISCOVERY_MODE = "off"
+[exports.IdentityCatalog]
+type = "durable-object"
+storage = "sqlite"
+[[durable_objects.bindings]]
+name = "IDENTITY_CATALOG"
+class_name = "IdentityCatalog"
+

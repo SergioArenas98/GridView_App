@@ -170,8 +170,9 @@ describe('wrangler.toml declares the sequencer surface and selects it in staging
   });
 
   it('changes no provider mode or deployment setting', () => {
+    // Production moved from `none` to `coordinated` at gate AU-7.
     expect(declaredConfig).toMatch(
-      /\[env\.production\.vars\][\s\S]*PROVIDER_MODE = "none"/,
+      /\[env\.production\.vars\][\s\S]*PROVIDER_MODE = "coordinated"/,
     );
     // Staging moved from `mock` to `none` with the season-batch ingest
     // configuration, and to `coordinated` at gate AU-4; those changes are

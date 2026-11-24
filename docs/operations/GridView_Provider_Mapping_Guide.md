@@ -1,3 +1,8 @@
+> **U0 approval, 2026-11-13:** PO-1 through PO-8 are accepted as architecture only.
+> See [the dated U0 amendment](#u0-amendment---2026-11-13) for current authority and gates.
+> Earlier text is preserved as historical context; U1-U11 and deployments remain
+> pending separate authorization. No runtime behavior changed in U0.
+
 # GridView - Data-provider mapping guide
 
 ## Document information
@@ -215,6 +220,15 @@ refers to the same competitor but stays unmapped: its reason is now
 OpenF1 decision. **Three identities are acknowledged today, all OpenF1**: `12`,
 `Cadillac` and `Racing Bulls`. **No Jolpica driver is acknowledged**: all 32
 observed season-2026 `driverId`s are curated and mapped.
+
+**Proposal 2026-11-12 (staging proxy investigation).** The
+[offline investigation](2026-11-12-jolpica-mapping-investigation.md) records
+four additional operator-reported Jolpica driver keys. None has a canonical
+GridView identity or approved full-name evidence in this worktree. They are
+explicitly acknowledged as `no-canonical-gridview-identity`, bringing the
+proposed corpus to seven acknowledgements. The 32 existing Jolpica driver
+mappings remain unchanged; September coverage is not a guarantee of November
+coverage. These acknowledgements do not unblock synchronization.
 
 ---
 
@@ -500,3 +514,19 @@ Evidence and review are at least as strict as for drivers, constructors and
 circuits: mandatory evidence already in the repository, all four components
 recorded as observed, and no component recalled, inferred or completed by hand.
 Collecting new evidence from Jolpica is a separately authorized activity.
+
+## U0 amendment - 2026-11-13
+
+Status: Accepted architecture; implementation and activation pending separate approval.
+
+[ADR 0029](../adr/0029-persistent-identity-discovery-and-reviewed-runtime-catalog.md), [ADR 0030](../adr/0030-provider-driver-inventory-and-required-identity-closure.md) and [ADR 0031](../adr/0031-identity-review-authority-and-catalog-cutover.md) govern the approved future workflow. This amendment qualifies the repository-only and blanket resource-blocking instructions above; it does not enable catalog commands.
+
+Until controlled cutover, reviewed repository curation remains the authority. Afterwards, verified driver profiles and all provider bindings come exclusively from one pinned activated catalog and its reviewed base. Git is seed/export/history. Review evidence and exact typed scoped bindings; do not derive IDs from slugs/names. Individual approval creates a proposal, validation certifies it, and separate activation changes runtime authority for subsequent pins without starting sync or publication. Shared ADMIN_TOKEN cannot mutate the catalog.
+
+Use bounded sanitized evidence with the exact retention/capacity limits in ADR 0029 D5. Diagnostic-only IDs and synthetic observations cannot approve real identities. Required race/standings identities remain blocking. Only the separately enabled driver-inventory policy may keep valid unresolved inventory observations private; constructors stay strict and inventory never creates participation. No existing acknowledgement becomes a mapping.
+
+Dataset guidance: preserve seed `2026.10.07.1`; after cutover ADR 0031 D3 allocates new labels for effective season catalog changes. Do not manually overlay runtime identity fields from Git or relabel a stale batch. Future batch v2 requires explicit catalog export/provenance; v1 remains readable but new admission closes permanently after runtime-only data-changing activation.
+
+The [November investigation](2026-11-12-jolpica-mapping-investigation.md) and all its existing changes remain preserved. `rafael_camara`, `gabriele_mini`, `freddie_slater` and `nikola_tsolov` remain unresolved, with no canonical IDs/mappings created and no acknowledgements removed. All seven acknowledgements remain. The synthetic regression demonstrates a possible failure pattern, not the complete root cause of the staging incident. No dataset change, provider call, synchronization or publication is authorized by U0.
+
+Before provisioning/staging activation, record named reviewer, activator, recovery custodian and backup responsibilities under ADR 0031 D6. They remain unassigned. Recovery exports and restore verification must precede runtime cutover; production deployment needs separate authorization.

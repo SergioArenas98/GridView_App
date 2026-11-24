@@ -131,6 +131,28 @@ does not extend `ProviderError`, so the synchronization service cannot record
 a failed provider attempt for a request that never happened. Its category is a
 bounded union (`ProviderNotAttemptedCategory`), not a free string.
 
+## Phase 1 transport exception (2026-11-10)
+
+The optional temporary Jolpica egress wrapper narrows D2.1 and D2.9 only at
+`services/edge-api/src/index.ts:providerTransport`. Adapters and the hardened
+client still construct the fixed canonical Jolpica URL and reserve under the
+same `jolpica` source identity. Only after that boundary may a configured
+transport replace its origin with a separate HTTPS proxy origin and add a
+proxy-only bearer credential. That credential must never be sent onward by
+the future proxy. Redirects remain manual; there is no retry, automatic direct
+fallback, additional cache or response transformation.
+
+Direct transport remains the default with no proxy settings or secrets.
+Invalid proxy configuration fails closed. Removing the transport setting
+restores direct fetch and does not reset limiter holds or publication state.
+The controlled KV source and test injection retain their existing behaviour;
+explicit proxy mode cannot be combined with controlled KV. No adapter,
+coordination or publication algorithm changes. Configuration details and the
+future proxy's obligations are in the
+[edge README](../../services/edge-api/README.md#optional-jolpica-egress-phase-1).
+This phase implements only Worker wiring and offline tests, with no proxy
+service, deployment, live provider request or environment activation.
+
 ## Consequences
 
 - A future adapter cannot reach the network except through this boundary, and

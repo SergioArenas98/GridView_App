@@ -2187,3 +2187,11 @@ run, and cannot run until an adapter exists.
 - [`0020-provider-source-observation-and-reconciliation.md`](0020-provider-source-observation-and-reconciliation.md) §5 (D5.1-D5.8), implementation obligations 5 and 7
 - [`0021-hardened-provider-boundary-and-durable-object-rate-limiter.md`](0021-hardened-provider-boundary-and-durable-object-rate-limiter.md) — the reservation and transport authority this seam sits above
 - [`0022-curated-provider-identifier-mappings.md`](0022-curated-provider-identifier-mappings.md) — the fail-closed identity boundary this seam contains
+
+## U0 amendment - 2026-11-13
+
+Status: Accepted architecture; implementation and activation pending separate approval.
+
+[ADR 0030](0030-provider-driver-inventory-and-required-identity-closure.md) supplements D10/D11 with explicit private driver-inventory accounting and assembly-owned required-driver profile closure from one pinned catalog. The adapter still resolves exact provider keys, and the coordinator never guesses identities. Only valid unmapped inventory-only driver observations are optional after the separately gated U9/U10 implementation; constructor inventory and required race/standings identities remain strict.
+
+A1 actual request accounting, A2 classification normalization, A3 standings coherence, selection/source preference, completed-run assembly and guarded D11 publication remain authoritative. No predecessor resource repairs a current candidate. A4's offline batch path gains future v2 catalog provenance and restricted v1 admission under [ADR 0031](0031-identity-review-authority-and-catalog-cutover.md) D4; capture review, completeness and publication fencing remain required. No batch schema changes in U0.

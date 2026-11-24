@@ -34,6 +34,11 @@ import type {
 } from '../mappings';
 import { maxReportedMappingFailures } from './calendar-normalizer';
 import type { CuratedParticipants } from './curated-participants';
+import type { IdentityHash } from '../../identity/discovery/model';
+import {
+  normalizeDriverInventory,
+  type DriverInventoryNormalization,
+} from '../../identity/inventory/normalize';
 import type { DecodedConstructor, DecodedDriver } from './participants-payload';
 
 /** Why a resolved collection still could not be normalized. Closed, log-safe. */
@@ -143,6 +148,39 @@ export function normalizeSeasonDrivers(
     'duplicate-canonical-driver',
     'curated-driver-missing',
   );
+}
+
+/**
+ * U9: the separate optional-driver inventory normalization (design §8.3).
+ *
+ * Used **only** when the run's trusted policy is `optional-drivers`; strict
+ * mode keeps `normalizeSeasonDrivers` above unchanged. The rows are the
+ * complete strictly decoded inventory. Only the registry's exact `unmapped`
+ * answer becomes an accounted unresolved observation; every other mapping,
+ * profile or duplicate problem fails the whole inventory.
+ */
+export function normalizeSeasonDriverInventory(
+  rows: readonly DecodedDriver[],
+  season: number,
+  registry: ProviderMappingRegistry,
+  curated: CuratedParticipants,
+  catalogHash: IdentityHash,
+): Promise<DriverInventoryNormalization<ProviderMappingFailure>> {
+  return normalizeDriverInventory({
+    providerValues: rows.map((row) => row.driverId),
+    season,
+    resolve: (providerValue) =>
+      registry.resolve({
+        season,
+        source: 'jolpica',
+        entity: 'driver',
+        providerField: 'driverId',
+        providerValue,
+      }),
+    driverById: (id) => curated.driverById(id),
+    catalogHash,
+    maxReportedFailures: maxReportedMappingFailures,
+  });
 }
 
 /** Resolves and normalizes one complete constructor identity list. */

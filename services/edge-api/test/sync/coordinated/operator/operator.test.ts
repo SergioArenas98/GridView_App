@@ -43,6 +43,8 @@ describe('the operator package is connected only where PR-E2 connects it', () =>
       'admin/reconciliation-requests.ts',
       'admin/reconciliation-routes.ts',
       'admin/reconciliation-view.ts',
+      // U7 guarded batches release the same existing fenced season lease.
+      'ingest/service.ts',
       'sync/coordinated/observation/observe.ts',
       'sync/coordinated/run.ts',
     ]);
@@ -70,6 +72,7 @@ describe('the operator package is connected only where PR-E2 connects it', () =>
     expect([...outside].sort()).toEqual([
       'contract/types.ts',
       'contract/validation.ts',
+      'identity/catalog/run-context.ts',
       'logging/logger.ts',
       'publication/guard/predecessor.ts',
       'publication/publisher.ts',

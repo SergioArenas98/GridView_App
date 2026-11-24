@@ -60,6 +60,7 @@ function resolved(environment: 'staging' | 'e2e') {
 function present(vars: Record<string, unknown>): Record<string, string> {
   return Object.fromEntries(
     Object.entries(vars)
+      .filter(([, value]) => value !== undefined)
       .map(([name, value]): [string, string] => [name, String(value)])
       .filter(([, value]) => value !== ''),
   );

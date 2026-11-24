@@ -43,10 +43,15 @@
 
 import type { SeasonPublicationSequencerPort } from '../../../publication/sequencer/port';
 import type { Clock } from '../../../runtime/clock';
+import {
+  admitIdentityContext,
+  CatalogAdmissionError,
+} from '../../../identity/catalog/run-context';
 import type { SnapshotStorage } from '../../../storage/types';
 import { classificationRevision } from '../classification-revision';
 import {
   composeCoordinatedRuntime,
+  missingCoordinatedDependencies,
   requestClassification,
   type ClassificationRequestRefusal,
   type CoordinatedRuntime,
@@ -113,7 +118,7 @@ export interface VerificationDependencies {
 /** What the lease-held part of a verification runs with, once composed. */
 interface Composed {
   readonly ledger: ReconciliationLedgerPort;
-  readonly runtime: CoordinatedRuntime;
+  readonly runtimeDependencies: CoordinatedRuntimeDependencies;
   readonly sequencer: SeasonPublicationSequencerPort;
   readonly storage: SnapshotStorage;
   readonly clock: Clock;
@@ -121,6 +126,8 @@ interface Composed {
 
 /** Why a verification was refused before any request. Closed. */
 export const verificationPreconditions = [
+  'catalog-unavailable',
+  'catalog-invalid',
   /**
    * The request names another verification generation than the round's: a
    * resend from before a rotation, or a stale or future generation (PR-E4).
@@ -251,20 +258,17 @@ export async function verifyUnderLease(
   command: VerificationCommand,
   dependencies: VerificationDependencies,
 ): Promise<VerificationResult> {
-  const composition = composeCoordinatedRuntime(dependencies.runtime);
-  if (composition.kind === 'unavailable' || dependencies.sequencer === null) {
+  const missing = missingCoordinatedDependencies(dependencies.runtime);
+  if (missing.length > 0 || dependencies.sequencer === null) {
     return {
       status: 'coordinated-runtime-unavailable',
-      reasons:
-        composition.kind === 'unavailable'
-          ? composition.reasons
-          : ['authority-not-sequencer'],
+      reasons: missing.length > 0 ? missing : ['authority-not-sequencer'],
       providerRequests: 0,
     };
   }
   return verifyComposed(command, {
-    ledger: composition.runtime.ledger,
-    runtime: composition.runtime,
+    ledger: dependencies.runtime.ledger,
+    runtimeDependencies: dependencies.runtime,
     sequencer: dependencies.sequencer,
     storage: dependencies.storage,
     clock: dependencies.runtime.clock,
@@ -369,8 +373,47 @@ async function underLease(
   }
   const current = stored!;
 
+  let runtime: CoordinatedRuntime;
+  try {
+    const context = await admitIdentityContext(
+      dependencies.runtimeDependencies.identity,
+      {
+        runId: command.operationId,
+        season: command.season,
+        purpose: 'operator-verification',
+        leaseFence: lease.fence,
+      },
+      dependencies.runtimeDependencies.logger,
+    );
+    if (Date.parse(leaseExpiresAt) <= dependencies.clock.now().getTime())
+      return bare({
+        status: 'precondition-failed',
+        reason: 'lease-expired',
+        providerRequests: 0,
+      });
+    const composition = composeCoordinatedRuntime(
+      dependencies.runtimeDependencies,
+      context,
+    );
+    if (composition.kind !== 'composed')
+      return bare({
+        status: 'precondition-failed',
+        reason: 'catalog-unavailable',
+        providerRequests: 0,
+      });
+    runtime = composition.runtime;
+  } catch (error) {
+    if (error instanceof CatalogAdmissionError)
+      return bare({
+        status: 'precondition-failed',
+        reason: error.failure,
+        providerRequests: 0,
+      });
+    throw error;
+  }
+
   const request = await requestClassification(
-    dependencies.runtime,
+    runtime,
     command.season,
     command.round,
   );

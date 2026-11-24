@@ -7,6 +7,7 @@
   "packageManager": "npm@10.9.9",
   "scripts": {
     "dev": "wrangler dev",
+    "identity": "node scripts/identity/cli.mjs",
     "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.scripts.json",
     "lint": "eslint .",
     "format": "prettier --check .",
@@ -39,6 +40,7 @@
     "eslint": "^10.7.0",
     "globals": "^16.5.0",
     "js-yaml": "^4.3.0",
+    "miniflare": "4.20260714.0",
     "prettier": "^3.9.5",
     "sharp": "^0.34.5",
     "typescript": "^6.0.3",

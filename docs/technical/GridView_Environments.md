@@ -1,3 +1,8 @@
+> **U0 approval, 2026-11-13:** PO-1 through PO-8 are accepted as architecture only.
+> See [the dated U0 amendment](#u0-amendment---2026-11-13) for current authority and gates.
+> Earlier text is preserved as historical context; U1-U11 and deployments remain
+> pending separate authorization. No runtime behavior changed in U0.
+
 # GridView - Environment configuration
 
 Status: living document, updated as environments gain real configuration.
@@ -870,3 +875,13 @@ fvm flutter <cmd>  # run Flutter through the pinned SDK
 ```
 
 `.fvm/` is ignored; only `.fvmrc` is committed.
+
+## U0 amendment - 2026-11-13
+
+Status: Accepted architecture; implementation and activation pending separate approval.
+
+[ADR 0031](../adr/0031-identity-review-authority-and-catalog-cutover.md) D5-D6 defines future identity isolation and rollout. Each local/staging/E2E/production Worker uses its own catalog namespace and explicit persisted installation UUID. `ENVIRONMENT` alone cannot distinguish staging from E2E; no cross-Worker catalog binding or copied staging credentials/synthetic decisions are permitted.
+
+No IdentityCatalog binding, export, secret, flag or migration is provisioned by U0. Future defaults remain discovery off, catalog bundled, admin off and inventory strict. Read-only/review, compare/runtime and optional-driver modes need their respective implementation and activation gates. Existing environment configuration remains unchanged.
+
+Named reviewer, activator, recovery/export custodian and backups are unassigned. Names, individual credentials, local capacity evidence, verified exports and restore drills are gates before provisioning/staging activation or runtime cutover as specified in ADR 0031. U11 authorizes nothing by its presence in a roadmap: actual staging work needs separate approval; production always requires a separate change approval. Code rollback must retain compatible runtime state after cutover.

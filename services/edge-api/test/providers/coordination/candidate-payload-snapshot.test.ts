@@ -34,6 +34,10 @@ import {
 } from '../../../src/providers/coordination';
 import type { ProviderSeasonSource } from '../../../src/providers/formula-one-provider';
 import {
+  driverInventoryProjectionDigest,
+  optionalDriverInventoryPolicy,
+} from '../../../src/identity/inventory/model';
+import {
   FIXED_NOW,
   FakePort,
   SEASON,
@@ -231,6 +235,51 @@ describe('an accepted candidate is detached from the adapter that produced it', 
     >;
     for (const entry of record.driverEntries ?? []) entry.season = OTHER_SEASON;
     for (const driver of record.drivers ?? []) driver.fullName = 'rewritten';
+
+    expect(selectedPayload(run, PARTICIPANTS)).toEqual(expected);
+  });
+
+  it('U9: keeps optional-driver accounting the adapter rewrites after coordination', async () => {
+    const source = await seasonFixture();
+    const participants = fixturePayload(source, PARTICIPANTS) as {
+      drivers: readonly { id: string }[];
+    };
+    const catalogHash = `sha256:${'c'.repeat(64)}` as const;
+    const projection = {
+      policyVersion: 1 as const,
+      catalogHash,
+      providerRowCount: participants.drivers.length,
+      resolved: participants.drivers.map((driver, index) => ({
+        driverId: driver.id,
+        observationKeyHash: `sha256:${index.toString(16).padStart(64, '0')}`,
+      })),
+      unresolved: [],
+    };
+    const payload = deepCopy({
+      ...participants,
+      driverInventory: {
+        ...projection,
+        projectionDigest: await driverInventoryProjectionDigest(
+          projection as never,
+        ),
+      },
+    });
+    const expected = deepCopy(payload);
+
+    const run = await new MultiSourceCoordinator({
+      ports: [payloadPort(payload)],
+      logger: new CapturingLogger(),
+      inventoryPolicy: optionalDriverInventoryPolicy(catalogHash),
+    }).coordinate({ plan: { season: SEASON, resources: [PARTICIPANTS] } });
+    expect(run.resources[0]?.selection.outcome).toBe('selected');
+
+    const inventory = payload.driverInventory as unknown as Record<
+      string,
+      unknown
+    >;
+    inventory.providerRowCount = 0;
+    inventory.catalogHash = `sha256:${'d'.repeat(64)}`;
+    (inventory.resolved as unknown[]).length = 0;
 
     expect(selectedPayload(run, PARTICIPANTS)).toEqual(expected);
   });

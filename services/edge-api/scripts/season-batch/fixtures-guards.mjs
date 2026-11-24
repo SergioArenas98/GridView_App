@@ -58,7 +58,14 @@ function parse(argv, valued, flags) {
 export function parseConvertArguments(argv) {
   const parsed = parse(
     argv,
-    ['--batch', '--out', '--manifest-sha256', '--origin'],
+    [
+      '--batch',
+      '--out',
+      '--manifest-sha256',
+      '--origin',
+      '--catalog-export',
+      '--installation-id',
+    ],
     [],
   );
   if (!parsed.ok) return parsed;
@@ -78,6 +85,12 @@ export function parseConvertArguments(argv) {
     out: values['--out'],
     manifestSha256: values['--manifest-sha256'],
     origin: values['--origin'],
+    ...(values['--catalog-export']
+      ? { catalogExport: values['--catalog-export'] }
+      : {}),
+    ...(values['--installation-id']
+      ? { installationId: values['--installation-id'] }
+      : {}),
   };
 }
 
@@ -101,6 +114,8 @@ export function parseBuildArguments(argv) {
       '--work',
       '--out',
       '--commit',
+      '--catalog-export',
+      '--installation-id',
     ],
     ['--prepare-only'],
   );
@@ -137,6 +152,12 @@ export function parseBuildArguments(argv) {
     out: values['--out'],
     commit,
     prepareOnly: flags['--prepare-only'] === true,
+    ...(values['--catalog-export']
+      ? { catalogExport: values['--catalog-export'] }
+      : {}),
+    ...(values['--installation-id']
+      ? { installationId: values['--installation-id'] }
+      : {}),
   };
 }
 

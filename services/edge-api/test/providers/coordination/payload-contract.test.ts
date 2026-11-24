@@ -29,6 +29,7 @@ import {
   validateGrandPrix,
   validateRaceResult,
 } from '../../../src/contract/normalized';
+import { optionalDriverInventoryPolicy } from '../../../src/identity/inventory/model';
 import {
   payloadFor,
   seasonFixture,
@@ -72,6 +73,48 @@ describe('dispatch is total over the payload vocabulary', () => {
     expect(
       validateCoordinatedPayload(payload, 'payload').map((issue) => issue.code),
     ).toEqual(['unknown-property']);
+  });
+
+  it('U9: keeps the strict participants wrapper closed to private inventory accounting', async () => {
+    const source = await seasonFixture();
+    const participants = payloadFor(
+      source,
+      seasonResources[1]!,
+    ) as CoordinatedPayload;
+    const withAccounting = {
+      ...participants,
+      driverInventory: {},
+    } as unknown as CoordinatedPayload;
+
+    expect(
+      validateCoordinatedPayload(withAccounting, 'payload').map((i) => i.code),
+    ).toEqual(['unknown-property']);
+    // The explicit optional wrapper is a separate closed shape that requires
+    // the accounting rather than a permissive superset that merely allows it.
+    const optional = optionalDriverInventoryPolicy(`sha256:${'a'.repeat(64)}`);
+    expect(
+      validateCoordinatedPayload(participants, 'payload', optional),
+    ).toEqual([
+      expect.objectContaining({
+        path: 'payload.driverInventory',
+        code: 'missing',
+      }),
+    ]);
+    expect(
+      validateCoordinatedPayload(
+        {
+          ...withAccounting,
+          upstreamCursor: 'x',
+        } as unknown as CoordinatedPayload,
+        'payload',
+        optional,
+      ).map((i) => i.code),
+    ).toEqual(['unknown-property']);
+    // Other payload kinds are unaffected by the participants-only policy.
+    const calendar = payloadFor(source, seasonResources[0]!)!;
+    expect(validateCoordinatedPayload(calendar, 'payload', optional)).toEqual(
+      [],
+    );
   });
 
   it('reports a failure inside a collection at its own structural path', async () => {

@@ -78,6 +78,16 @@ export const AUTOMATIC_ACTIVATION_DELTA = Object.freeze({
  * by genesis, it reads the controlled source, and it ingests nothing.
  */
 export const DEMONSTRATION_DELTA = Object.freeze({
+  // Staging's temporary egress must not enter the controlled-source fixture.
+  JOLPICA_TRANSPORT: undefined,
+  JOLPICA_PROXY_ORIGIN: undefined,
+  // Staging's identity installation is staging's alone (ADR 0031 D5): the
+  // demonstration Worker declares no catalog, so none of it may carry over.
+  IDENTITY_INSTALLATION_ID: undefined,
+  IDENTITY_CATALOG_MODE: undefined,
+  IDENTITY_DISCOVERY_MODE: undefined,
+  IDENTITY_ADMIN_MODE: undefined,
+  IDENTITY_INVENTORY_MODE: undefined,
   SEASON_PUBLICATION_CUTOVER_CONTROL: 'genesis:2026',
   CONTROLLED_PROVIDER_SOURCE: 'kv',
   SEASON_BATCH_INGEST: '',
@@ -322,6 +332,13 @@ export class AutomaticUpdateStage {
     options: {
       /** The KV namespace a `demonstration` Worker reads its source from. */
       readonly controlledSource?: ControlledSourceStore;
+      /**
+       * Keep the committed identity authority. Since identity U11 G5, staging
+       * commits runtime authority, which needs a bound, active catalog; this
+       * in-process stage binds none, so with the committed authority every run
+       * fails closed (pinned in staging-automatic-updates.test.ts).
+       */
+      readonly committedAuthority?: boolean;
     } = {},
   ): Promise<AutomaticUpdateStage> {
     const harness = await ObservationHarness.create({
@@ -341,6 +358,16 @@ export class AutomaticUpdateStage {
     }
     const env: Env = {
       ...committedVars(demonstration ? 'staging' : environment),
+      // The automatic-update behaviour under test is the coordinated pipeline,
+      // run under bundled authority unless the committed one is requested. The
+      // runtime path is output-identical for the active R0 catalog (U11 G4
+      // offline parity; cutover.test.mjs compares bundled, compare, runtime).
+      ...(options.committedAuthority
+        ? {}
+        : { IDENTITY_CATALOG_MODE: 'bundled' }),
+      // The stage binds no catalog, and the optional-driver inventory (U11
+      // P3) requires one, so the stage keeps the strict policy.
+      IDENTITY_INVENTORY_MODE: undefined,
       ...(demonstration ? DEMONSTRATION_DELTA : {}),
       PROVIDER_MODE: AUTOMATIC_ACTIVATION_DELTA.PROVIDER_MODE,
       ADMIN_TOKEN: 'never-used-by-the-gate',

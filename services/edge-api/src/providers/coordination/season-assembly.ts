@@ -39,6 +39,11 @@ import {
   validateSeasonReferences,
   type SeasonRelation,
 } from './season-integrity';
+import {
+  closeSeasonDriverIdentities,
+  type SeasonIdentityContext,
+} from './season-identity-closure';
+import { validateDriverInventoryPayload } from '../../identity/inventory/validate';
 import type {
   CoordinatedPayload,
   CoordinatedPayloadFor,
@@ -266,6 +271,7 @@ function selectedPayloads(
 export function assembleSeasonSource(
   run: CoordinationRun,
   metadata: SeasonSnapshotMetadata,
+  identity?: SeasonIdentityContext,
 ): SeasonAssembly {
   if (run.status !== 'completed') {
     return {
@@ -320,6 +326,29 @@ export function assembleSeasonSource(
       missing: [],
       relations: [],
     };
+  }
+
+  // U10 boundary (design §8.2, ADR 0030 D2). The participants contribution
+  // is either the strict five-key payload or, under the run's explicit
+  // optional policy, one carrying private `driverInventory` accounting. Which
+  // one is acceptable is decided by the run's single admitted policy, never
+  // by the payload. Without trusted identity inputs - every pre-U10 caller -
+  // an inventory-bearing payload is refused exactly as U9 refused it.
+  const inventoryBearing = Object.hasOwn(participants, 'driverInventory');
+  if (inventoryBearing && identity === undefined) {
+    return {
+      complete: false,
+      gap: 'inconsistent-references',
+      missing: [],
+      relations: [],
+    };
+  }
+  const optional = identity?.policy.mode === 'optional-drivers';
+  if (identity !== undefined && inventoryBearing !== optional) {
+    return contextRefusal('driver-inventory-context');
+  }
+  if (optional && !inventoryAccountingAdmissible(participants, identity!)) {
+    return contextRefusal('driver-inventory-context');
   }
 
   const schedules = new Map<number, readonly Session[]>();
@@ -475,6 +504,31 @@ export function assembleSeasonSource(
     .slice()
     .sort((left, right) => left.round - right.round);
 
+  // U10 required-identity closure, optional policy only. Strict keeps the
+  // participants profiles verbatim, so its sources are byte-identical to the
+  // pre-U10 ones. The private accounting was consumed above and is never read
+  // again: the public source below is built from named public collections.
+  let drivers = [...participants.drivers] as Driver[];
+  if (optional) {
+    const closure = closeSeasonDriverIdentities({
+      inventoryDrivers: participants.drivers,
+      results: classifications,
+      driverStandings: driverStandingsPayload.standings,
+      driverEntries: [...participants.driverEntries, ...derivation.entries],
+      constructorEntries: participants.constructorEntries,
+      profiles: identity!.profiles,
+    });
+    if (!closure.ok) {
+      return contextRefusal(
+        closure.problem === 'duplicate-inventory-driver' ||
+          closure.problem === 'inventory-profile-mismatch'
+          ? 'driver-inventory-context'
+          : 'required-driver-profile',
+      );
+    }
+    drivers = [...closure.drivers];
+  }
+
   const source: ProviderSeasonSource = {
     season: run.season,
     contentVersion: metadata.contentVersion,
@@ -484,7 +538,7 @@ export function assembleSeasonSource(
     seasonLabel: metadata.seasonLabel,
     calendar,
     results,
-    drivers: [...participants.drivers] as Driver[],
+    drivers,
     constructors: [...participants.constructors] as Constructor[],
     circuits: [...circuitsPayload.circuits] as Circuit[],
     // The contribution carries no participation evidence (ADR 0026 D11): the
@@ -521,4 +575,40 @@ export function assembleSeasonSource(
   }
 
   return { complete: true, source };
+}
+
+/** A U10 identity-boundary refusal: one closed relation, nothing else. */
+function contextRefusal(relation: SeasonRelation): SeasonAssembly {
+  return {
+    complete: false,
+    gap: 'inconsistent-references',
+    missing: [],
+    relations: [relation],
+  };
+}
+
+/**
+ * Re-checks the coordinator-validated accounting against the run's own
+ * policy and pinned catalog at the consumption boundary. The coordinator
+ * already recomputed the digest on its detached snapshot; this re-applies the
+ * closed structural rules and binds both hashes to the same pinned context.
+ * The digest is an integrity checksum over the projection, never an
+ * authentication of source completeness.
+ */
+function inventoryAccountingAdmissible(
+  participants: object,
+  identity: SeasonIdentityContext,
+): boolean {
+  const policy = identity.policy;
+  if (policy.mode !== 'optional-drivers') return false;
+  if (policy.catalogHash !== identity.profiles.catalogHash) return false;
+  const accounting = (participants as { driverInventory?: unknown })
+    .driverInventory as { projectionDigest?: unknown } | undefined;
+  const digest =
+    typeof accounting?.projectionDigest === 'string'
+      ? accounting.projectionDigest
+      : null;
+  return (
+    validateDriverInventoryPayload(participants, policy, digest).length === 0
+  );
 }

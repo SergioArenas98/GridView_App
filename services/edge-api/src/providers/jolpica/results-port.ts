@@ -31,6 +31,10 @@
  */
 
 import type { Logger } from '../../logging/logger';
+import {
+  captureDiscovery,
+  type DiscoverySink,
+} from '../../identity/discovery/persist';
 import type {
   CoordinatedSourceId,
   ProviderResourceOutcome,
@@ -69,6 +73,7 @@ const resultsPathFor = (season: number, round: number): string =>
   `/ergast/f1/${season}/${round}/results/`;
 
 export interface JolpicaResultsPortOptions {
+  readonly discovery?: DiscoverySink;
   /** The hardened outbound boundary. Injected; never defaulted to `fetch`. */
   readonly client: ProviderHttpClient;
   readonly logger: Logger;
@@ -87,10 +92,12 @@ export class JolpicaResultsPort implements ProviderResourcePort {
   private readonly client: ProviderHttpClient;
   private readonly logger: Logger;
   private readonly registry: ProviderMappingRegistry;
+  private readonly discovery: DiscoverySink | undefined;
   private readonly reference: () => string;
   private sequence = 0;
 
   constructor(options: JolpicaResultsPortOptions) {
+    this.discovery = options.discovery;
     this.client = options.client;
     this.logger = options.logger;
     this.registry = options.registry ?? providerMappingRegistry();
@@ -145,6 +152,18 @@ export class JolpicaResultsPort implements ProviderResourcePort {
     if (!decoded.ok)
       return this.invalidPayload(season, attempt, decoded.problem);
 
+    captureDiscovery(
+      this.discovery,
+      {
+        endpointKind: 'race-results',
+        season,
+        round,
+        requestedLimit: resultsPageLimit,
+        decoded,
+      },
+      result.data,
+      this.registry,
+    );
     if (decoded.race === null) {
       // C-9: a structurally valid answer naming no race. It identifies no
       // event, so no result document can be built from it, and an empty

@@ -205,6 +205,7 @@ interface ActiveAuthority {
 }
 
 interface TwoPhaseInput {
+  readonly onPrepared?: (candidateVersion: string) => Promise<void>;
   readonly season: number;
   readonly operationKind: OperationKind;
   /**
@@ -304,12 +305,13 @@ export class SequencedPublicationService
         'guard-predecessor-stale',
       );
     }
-    return this.publishToAuthority(set, authority);
+    return this.publishToAuthority(set, authority, options.onPrepared);
   }
 
   private async publishToAuthority(
     set: GeneratedSnapshotSet,
     authority: ActiveAuthority | 'unavailable',
+    onPrepared?: (candidateVersion: string) => Promise<void>,
   ): Promise<PublicationResult> {
     if (authority === 'unavailable') {
       return failed(
@@ -336,6 +338,7 @@ export class SequencedPublicationService
     }
 
     return this.runTwoPhase({
+      onPrepared,
       season: set.season,
       operationKind: 'ordinary-publication',
       documents: set.documents,
@@ -714,6 +717,24 @@ export class SequencedPublicationService
       candidateVersion,
       assignedTimestamps,
     } = prepared;
+
+    if (input.onPrepared) {
+      const receipt = await attempt(() => input.onPrepared!(candidateVersion));
+      if (!receipt.ok) {
+        await this.cancelAndClean(
+          input.season,
+          operationEpoch,
+          operationToken,
+          candidateVersion,
+        );
+        return failed(
+          input.season,
+          candidateVersion,
+          input.authority.activeVersion,
+          'storage-write',
+        );
+      }
+    }
 
     const baked = bakeAssignedTimestamps(documents, assignedTimestamps);
 

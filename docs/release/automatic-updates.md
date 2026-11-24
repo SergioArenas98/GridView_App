@@ -150,8 +150,12 @@ visible until the sequencer's `finalize` commits.
 - the sequencer's single-flight `prepare`, predecessor CAS and epoch fencing;
 - a strictly increasing ordering input.
 
-A release that only re-stamps freshness is never minted. A legitimate content
-change, such as Home's featured event moving on at a race start, is.
+A release that only re-stamps freshness is never minted once the ledger records
+a publication. A legitimate content change, such as Home's featured event
+moving on at a race start, is. **Exception, measured in the AU-7 rehearsal:**
+when an environment's serving release was made by the guarded ingest, its
+ledger holds no publication, so the first full scheduled run mints one release
+whose documents differ from the ingest's only in instants. It happens once.
 
 ## 6. Alerts (ADR 0028 D9)
 
@@ -737,29 +741,70 @@ started with full burst headroom whatever Jolpica was enforcing.
 
 ### 8.4 Production (AU-7)
 
-PR #85's configuration is the interim state. The W2 PR (2026-10-22) commits
-only the production KV id and keeps that bootstrap configuration
-(`PROVIDER_MODE = "none"`, no ledger, `crons = []`). The coordinated
-configuration comes afterwards, in its own AU-7 PR, once AU-7's
-prerequisites hold. That PR commits:
+**State on 2026-11-23.** Production has been live since that day:
 
-- `PROVIDER_MODE = "coordinated"`;
-- the production exports table with the three classes, and the
-  `RECONCILIATION_LEDGER` binding;
-- `crons = []`.
+- version `f1700b39` (code `9535a04`, bundle `6acb6230…`);
+- catalog P0 active (runtime, optional-driver inventory), with the ledger and
+  catalog classes deployed (U11 P4);
+- season 2026 born through genesis, and `pm1-0000000000001-15abf90e`
+  published through the guarded ingest;
+- `PROVIDER_MODE = "none"`, `crons = []`.
 
-Then:
+The bootstrap path above (genesis, then a coordinated first release) was
+replaced by genesis plus one ingest.
 
-1. **Deploy [approval]:** the AU-7 configuration. Then read the Workers Logs
-   for two public GETs, which must leave **no** event. W3 itself already
-   happened: on 2026-10-22 the bootstrap configuration was deployed as
-   version `62bf40e9-426f-40b7-9fc1-44ab4c42999b` (`production-release-plan.md`
-   W3), so this deploy replaces that version and needs no `--secrets-file`.
-2. **D2, genesis [approval].**
-3. **[approval] Schedule:** `crons = ["17 * * * *"]`, `triggers deploy`. The
-   first two ticks bootstrap and publish the first release, from genesis, with
-   no capture or submission.
-4. **[approval] Monitor:** schedule it for production (AU-5 for production).
+**The AU-7 configuration (commit `deb98ac`)** changes configuration only. The
+dry-run bundle is still `6acb6230…`:
+
+- `PROVIDER_MODE = "coordinated"`, `JOLPICA_TRANSPORT = "proxy"` and staging's
+  `JOLPICA_PROXY_ORIGIN`;
+- `JOLPICA_PROXY_TOKEN` added to the required secrets, so Wrangler refuses a
+  deploy without it;
+- `crons = ["17 * * * *"]` for production. Staging verified the scheduled
+  path with `47 * * * *` on 2026-11-23 (version `b8d7c462`: catalog pin in
+  4.65 s, 27 Jolpica requests, heartbeat written, no publication) and is
+  committed unscheduled again (`crons = []`), so production is the only
+  scheduled user of the proxy's egress address;
+- no class, binding or KV change. While this mode is deployed, the ingest
+  refuses every batch (`provider-mode-coordinated`).
+
+**Offline rehearsal**
+(`test/e2e/automatic-updates/production-first-run-rehearsal.test.mjs`): the
+2026-11-23 capture, the production P0 catalog and the release production
+serves, driven through the scheduled handler.
+
+- First tick: 1 request, nothing published.
+- Second tick: 27 requests and one release with no content change (the §5
+  exception). Idle ticks send nothing.
+- Qatar (round 22): the race-start tick publishes the Home release. A first
+  result is held, then published at the next tick that sees it again.
+- A `429` withholds the run, and the next tick recovers.
+- An unmapped driver withholds every run; nothing is published.
+
+**Activation [approval], one live confirmation:**
+
+1. Upload the proxy token and deploy in one version:
+   `wrangler deploy --env production --secrets-file …`. Use the token transfer
+   in `services/jolpica-proxy/deploy/staging.md` §1-2 with only the
+   environment changed. `--secrets-file` is additive, so `ADMIN_TOKEN` and the
+   identity credentials are kept. The deploy installs the schedule.
+2. Verify:
+   - the schedules API lists `17 * * * *`;
+   - the first tick is logged (`sync.coordinated.observation`);
+   - within two ticks `/v1/status.lastSuccessfulSyncAt` is set;
+   - public data is unchanged apart from instants.
+3. Monitor: `.github/workflows/automation-monitor.yml` checks production
+   hourly at :47 once this branch is on `master` (schedules run only from the
+   default branch).
+
+**Recovery.** None of these needs a release rollback:
+
+- stop: set `crons = []` and run `wrangler triggers deploy --env production`;
+- manual batches again: deploy `PROVIDER_MODE = "none"` with classes and
+  bindings kept, then regenerate the batch at the deployed commit;
+- a bad release: a hold, then the release rollback, as for staging (§8.3);
+- a version rollback to `f1700b39`, which stays possible because no class
+  changes. Schedules are not part of a version, so stop the schedule as well.
 
 ## 9. Owner decisions
 

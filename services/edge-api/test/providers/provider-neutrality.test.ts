@@ -307,6 +307,17 @@ const jolpicaPortModules: readonly string[] = [
  * packages into either of them. The composition imports each package through
  * its index and nothing else does.
  */
+const discoveryDecoderEdges = [
+  'calendar-payload.ts',
+  'circuits-payload.ts',
+  'participants-payload.ts',
+  'results-payload.ts',
+  'standings-payload.ts',
+].map(
+  (file) =>
+    `src/identity/discovery/boundary.ts -> ${dormantDir}${file} (import-statement)`,
+);
+
 const allowedPackageEdges: readonly string[] = [
   // The guarded staging ingest re-runs assembly's pure referential preflight
   // (`validateSeasonReferences`) on a submitted source. It reaches no port,
@@ -407,14 +418,14 @@ describe('runtime provider modes are unchanged by Phase 9B-1', () => {
     );
   });
 
-  it('pins production to none in the deployed wrangler configuration', () => {
+  it('pins production to the coordinated runtime (gate AU-7) and never a direct provider mode', () => {
     const wrangler = readFileSync(
       join(repoRoot, 'services', 'edge-api', 'wrangler.toml'),
       'utf8',
     );
 
     expect(wrangler).toMatch(
-      /\[env\.production\.vars\][\s\S]*PROVIDER_MODE = "none"/,
+      /\[env\.production\.vars\][\s\S]*PROVIDER_MODE = "coordinated"/,
     );
     expect(wrangler).not.toMatch(
       /PROVIDER_MODE = "(jolpica|openf1|live|dual)"/,
@@ -459,13 +470,33 @@ describe('runtime provider modes are unchanged by Phase 9B-1', () => {
    * ESM import at all. Asking esbuild under Wrangler's own options removes
    * the class rather than another instance of it.
    */
-  it('reaches both packages from the Worker entry point only through the composition', async () => {
+  // U5 exposes the existing U3/U4 pure catalog validation through individually
+  // gated administration. These exact helpers perform no provider requests.
+  const catalogProfileEdges = [
+    'indexes',
+    'snapshot',
+    'bundled-context',
+    'run-context',
+  ].flatMap((module) =>
+    ['curated-circuits', 'curated-participants'].map(
+      (profile) =>
+        `src/identity/catalog/${module}.ts -> src/providers/jolpica/${profile}.ts (import-statement)`,
+    ),
+  );
+
+  it('allows only composition, referential preflight, shadow decoders and catalog validation profiles', async () => {
     const graph = await moduleGraph(edgeApiRoot, [workerEntryPoint]);
 
     // The coordinated composition is reachable, so the packages are in the
     // bundle. Every edge that crosses into either one comes from the single
     // allow-listed module and nowhere else.
-    expect(edgesIntoPackages(graph)).toEqual(allowedPackageEdges);
+    expect(edgesIntoPackages(graph)).toEqual(
+      [
+        ...allowedPackageEdges,
+        ...discoveryDecoderEdges,
+        ...catalogProfileEdges,
+      ].sort(),
+    );
 
     // Non-vacuous: the graph really contains the five ports, the dispatcher,
     // the coordinator and the bridge, and the path to the composition runs
@@ -538,7 +569,7 @@ describe('runtime provider modes are unchanged by Phase 9B-1', () => {
     ]);
   });
 
-  it('lets no other runtime module import either package', async () => {
+  it('allows only reviewed discovery and catalog validation edges across all modules', async () => {
     const entryPoints = runtimeEntryPointsOutsidePackages();
     const graph = await moduleGraph(edgeApiRoot, entryPoints);
 
@@ -546,7 +577,19 @@ describe('runtime provider modes are unchanged by Phase 9B-1', () => {
     // edge from a module the Worker does not reach today is reported too.
     // The orchestration imports only types from the coordination package,
     // which the build erases, so no edge of its own appears.
-    expect(edgesIntoPackages(graph)).toEqual(allowedPackageEdges);
+    // U1 revalidates a bounded inert projection with the unchanged strict
+    // decoders. Only these five pure modules are admitted, never a port or
+    // package index. U3 additionally reuses the two pure curated profile
+    // adapters. U5 now reaches these same four pure edges through gated administration;
+    // no additional port or package-index edge is admitted.
+
+    expect(edgesIntoPackages(graph)).toEqual(
+      [
+        ...allowedPackageEdges,
+        ...discoveryDecoderEdges,
+        ...catalogProfileEdges,
+      ].sort(),
+    );
 
     // The enumeration is real, and it excludes exactly the two packages.
     expect(entryPoints).toContain(workerEntryPoint);

@@ -8,3 +8,5 @@ worker-configuration.d.ts
 .media-out/
 # Recorded baseline trace: one step per line, compared parsed (test/sync/baseline).
 test/sync/baseline/whole-season-trace.json
+# Static generated validators; exact regeneration is checked separately.
+src/identity/catalog/content-schemas.cjs

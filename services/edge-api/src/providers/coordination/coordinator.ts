@@ -67,7 +67,16 @@ import {
   type NormalizedTransportAttempt,
   type ProviderResourcePort,
 } from './port';
-import { validateCoordinatedPayload } from './payload-contract';
+import {
+  validateCoordinatedPayload,
+  validateParticipantsInventory,
+} from './payload-contract';
+import {
+  readDriverInventoryPolicy,
+  recomputeDriverInventoryDigest,
+  type DriverInventoryPolicy,
+} from '../../identity/inventory/model';
+import { ownDataProperty } from '../../runtime/own-property';
 import {
   jobCategoryForResource,
   payloadMatchesResource,
@@ -121,6 +130,13 @@ export interface MultiSourceCoordinatorOptions {
    */
   readonly provisionalSessionEndBound?: unknown;
   readonly maxConcurrentOperations?: number;
+  /**
+   * U9: the inventory policy of the **whole run**, supplied by the trusted run
+   * context. Omitted means `strict`, the pre-U9 behaviour. A payload's own
+   * policy or catalog claim is never authority; it is compared against this.
+   * A malformed value is a wiring error, never a permissive default.
+   */
+  readonly inventoryPolicy?: unknown;
 }
 
 export class CoordinatorConfigurationError extends Error {
@@ -152,7 +168,16 @@ interface Operation {
  * attempt it appeared to carry, so nothing about it may be counted.
  */
 type OperationResult =
-  | { readonly kind: 'answered'; readonly outcome: NormalizedProviderOutcome }
+  | {
+      readonly kind: 'answered';
+      readonly outcome: NormalizedProviderOutcome;
+      /**
+       * U9: the accounting digest recomputed from the **detached** snapshot on
+       * arrival (hashing is asynchronous; attribution is not). `null` in
+       * strict mode, for non-participants payloads, or when uncomputable.
+       */
+      readonly inventoryDigest: string | null;
+    }
   | { readonly kind: 'malformed' }
   | { readonly kind: 'threw' }
   | { readonly kind: 'not-executed' };
@@ -172,6 +197,7 @@ export class MultiSourceCoordinator {
   private readonly logger: Logger;
   private readonly eligibility: ProvisionalEligibility;
   private readonly maxConcurrent: number;
+  private readonly inventoryPolicy: DriverInventoryPolicy;
 
   constructor(options: MultiSourceCoordinatorOptions) {
     const ports = new Map<CoordinatedSourceId, ProviderResourcePort>();
@@ -203,6 +229,13 @@ export class MultiSourceCoordinator {
       );
     }
     this.maxConcurrent = requested;
+    const inventoryPolicy = readDriverInventoryPolicy(options.inventoryPolicy);
+    if (inventoryPolicy === null) {
+      throw new CoordinatorConfigurationError(
+        'The inventory policy must be a supported closed policy.',
+      );
+    }
+    this.inventoryPolicy = inventoryPolicy;
   }
 
   async coordinate(request: CoordinationRequest): Promise<CoordinationRun> {
@@ -368,11 +401,50 @@ export class MultiSourceCoordinator {
       const outcome = readProviderOutcome(answer);
       return outcome === null
         ? { kind: 'malformed' }
-        : { kind: 'answered', outcome };
+        : {
+            kind: 'answered',
+            outcome,
+            // Strict mode never awaits here, so its scheduling is unchanged.
+            inventoryDigest:
+              this.inventoryPolicy.mode === 'strict'
+                ? null
+                : await this.inventoryDigestOf(outcome),
+          };
     } catch {
       // The thrown value is never read, logged or re-raised: it can embed a
       // URL, a provider body or a stack.
       return { kind: 'threw' };
+    }
+  }
+
+  /**
+   * U9: recomputes the accounting digest of an optional-mode participants
+   * candidate from the coordinator's own detached snapshot. The adapter's
+   * object is unreachable here, so the value digested is the value later
+   * validated, stored and selected. Never throws.
+   */
+  private async inventoryDigestOf(
+    outcome: NormalizedProviderOutcome,
+  ): Promise<string | null> {
+    if (
+      this.inventoryPolicy.mode !== 'optional-drivers' ||
+      outcome.outcome !== 'candidate' ||
+      !outcome.payload.detached
+    )
+      return null;
+    const payload = outcome.payload.payload;
+    try {
+      if (
+        typeof payload !== 'object' ||
+        payload === null ||
+        ownDataProperty(payload, 'kind')?.value !== 'season-participants'
+      )
+        return null;
+      return await recomputeDriverInventoryDigest(
+        ownDataProperty(payload, 'driverInventory')?.value,
+      );
+    } catch {
+      return null;
     }
   }
 
@@ -504,7 +576,19 @@ export class MultiSourceCoordinator {
     // generation would publish verbatim. The same detached snapshot binding
     // just accepted is what is validated, and what is stored if it passes, so
     // nothing between the two is a different value.
-    if (validateCoordinatedPayload(candidate).length > 0) {
+    if (
+      validateCoordinatedPayload(candidate, 'payload', this.inventoryPolicy)
+        .length > 0 ||
+      // U9: in optional mode the private accounting is checked against the
+      // trusted run policy and the digest recomputed on arrival. Forged,
+      // inconsistent or incomplete accounting is the same bounded
+      // `invalid-payload` as any other contract failure.
+      validateParticipantsInventory(
+        candidate,
+        this.inventoryPolicy,
+        result.inventoryDigest,
+      ).length > 0
+    ) {
       // The established reason for exactly this case: "the response was read
       // but did not validate against the contract". The request happened and is
       // already registered, so the contribution stays attempted and the run's
@@ -696,6 +780,7 @@ function notAttempted(
   return {
     kind: 'answered',
     outcome: { outcome: 'not-attempted', reason, retryAt: null },
+    inventoryDigest: null,
   };
 }
 

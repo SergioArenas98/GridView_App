@@ -42,3 +42,20 @@ GridView reconstruction.
 | [0026](0026-season-participation-semantics-and-derivation.md) | Season participation semantics and derivation | Accepted |
 | [0027](0027-legacy-preference-migration-and-storage-removal.md) | Legacy preference migration and legacy storage removal | Accepted |
 | [0028](0028-automatic-end-to-end-season-updates.md) | Automatic end-to-end season updates | Accepted |
+
+### Identity management ADRs
+
+| ADR                                                                        | Title                                                      | Status   |
+| -------------------------------------------------------------------------- | ---------------------------------------------------------- | -------- |
+| [0029](0029-persistent-identity-discovery-and-reviewed-runtime-catalog.md) | Persistent identity discovery and reviewed runtime catalog | Accepted |
+| [0030](0030-provider-driver-inventory-and-required-identity-closure.md)    | Provider driver inventory and required identity closure    | Accepted |
+| [0031](0031-identity-review-authority-and-catalog-cutover.md)              | Identity review authority and catalog cutover              | Accepted |
+
+## Identity architecture approval - 2026-11-13
+
+ADRs 0029-0031 accept PO-1 through PO-8 under U0 only. Accepted denotes an
+architectural decision, not implemented code, provisioned credentials or
+deployment authorization. U1-U11 remain pending separate approval. ADRs 0009,
+0020, 0022-0026 and 0028 retain their original reasoning and have dated partial
+amendments/supplements; none is superseded in full. See the
+[implementation roadmap](../technical/GridView_Implementation_Plan.md#31-identity-management-u0-approval-and-u1-u11-gates).

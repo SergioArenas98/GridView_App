@@ -34,6 +34,8 @@ import {
   maximumSubmissionBytes,
 } from '../../src/ingest/submission';
 import { curatedSeasonMetadata } from '../../src/sync/coordinated/outcome/metadata';
+import { verifyCatalogFile } from '../identity/catalog-file';
+import { inventoryPolicyVersionFor } from '../../src/identity/inventory/model';
 
 /** Every reason a batch is refused here. Closed; safe to print. */
 export type SubmissionBuildFailure =
@@ -41,9 +43,20 @@ export type SubmissionBuildFailure =
   | 'batch-malformed'
   | 'expected-version-invalid'
   | 'submission-oversized'
+  | 'inventory-policy-invalid'
   | BatchVerificationFailure;
 
 export interface SubmissionBuildInput {
+  readonly catalogExport?: Uint8Array;
+  readonly installationId?: string;
+  readonly operationId?: string;
+  /**
+   * The installation's effective inventory policy, exactly as the generator
+   * takes it (`strict-v1` or `optional-driver-inventory-v1`); absent is
+   * strict. The Worker uses its own trusted policy; this only lets the local
+   * verification bind the same context the generator did.
+   */
+  readonly inventoryPolicy?: string;
   readonly manifestBytes: Uint8Array;
   readonly artifactBytes: Uint8Array;
   /** The SHA-256 of the manifest the operator reviewed, lower-case hex. */
@@ -129,7 +142,10 @@ export async function buildSubmission(
 
   const body = {
     kind: submissionKind,
-    schemaVersion: 1,
+    schemaVersion: (manifest as Record<string, unknown>).schemaVersion,
+    ...((manifest as Record<string, unknown>).schemaVersion === 2
+      ? { operationId: input.operationId }
+      : {}),
     season,
     expectedActiveVersion: input.expectedActiveVersion,
     reviewedManifestSha256: input.reviewedManifestSha256,
@@ -142,14 +158,39 @@ export async function buildSubmission(
   if (submission === null) return refuse('expected-version-invalid');
 
   const record = input.attributionRecord ?? dataSources;
+  let context;
+  if ((manifest as Record<string, unknown>).schemaVersion === 2) {
+    if (!input.catalogExport) return refuse('catalog-context-required');
+    const inventoryPolicy = inventoryPolicyVersionFor(
+      input.inventoryPolicy ?? 'strict-v1',
+    );
+    if (inventoryPolicy === null) return refuse('inventory-policy-invalid');
+    try {
+      const catalog = await verifyCatalogFile(input.catalogExport, {
+        installationId: input.installationId ?? '',
+        season,
+        inventoryPolicy,
+      });
+      context = catalog.context;
+      const ref = (manifest as { identityCatalog?: { exportSha256?: unknown } })
+        .identityCatalog;
+      if (ref?.exportSha256 !== catalog.reference.exportSha256)
+        return refuse('catalog-reference-mismatch');
+    } catch {
+      return refuse('catalog-reference-mismatch');
+    }
+  }
   const credit = attributionCredit(record);
   const verified = await verifySeasonBatch({
+    identityContext: context,
     manifest: submission.manifest,
     artifact: submission.artifact,
     reviewedManifestSha256: submission.reviewedManifestSha256,
     season,
     now: input.now,
-    metadata: curatedSeasonMetadata(season, undefined, record),
+    metadata: context
+      ? context.seasonMetadata
+      : curatedSeasonMetadata(season, undefined, record),
     attribution: credit?.attribution ?? null,
   });
   if (!verified.ok) return refuse(verified.failure);

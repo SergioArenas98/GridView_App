@@ -1,3 +1,8 @@
+> **Identity architecture update, 2026-11-13:** [Section 31](#31-identity-management-u0-approval-and-u1-u11-gates)
+> records approved U0 and the pending U1-U11 roadmap. This supplements Phase 9
+> and the Definition of Ready; it authorizes no implementation or deployment.
+> Existing investigation notes and their evidence limitations remain intact.
+
 # GridView - Implementation Plan
 
 ## Document information
@@ -1654,7 +1659,7 @@ nothing was provisioned or deployed.**
 | Operational signal | One bounded structured event (`failureCategory: provider_mapping_unresolved`) carrying source, season, entity kind, provider field and a closed failure reason, plus the bounded exact provider value in a single **internal** diagnostic field. No registry, mapping record, upstream payload or exception body is serialized. |
 | Provider-ID containment | **Unchanged and extended.** Provider identifiers appear only in the curated mapping and evidence content, the internal diagnostic log field and narrowly scoped internal tests. Tests assert they reach no public v1 response, no OpenAPI text, no public fixture, no published snapshot and no Flutter-facing artifact. |
 | Operator workflow | A **reviewed repository change**, documented in [GridView_Provider_Mapping_Guide.md](../operations/GridView_Provider_Mapping_Guide.md). There is no admin mutation endpoint and no KV, Durable Object or database store. |
-| **G-l - mapping dataset coverage** | **Open, and deliberately so.** The mechanism is complete; the dataset is not. Only identifiers already recorded in Provider Evaluation §8 are curated, and three approved identities are explicitly acknowledged as unmapped. *Updated 2026-09-23 (§14.0.19, §14.0.20):* all three are OpenF1 values (`driver_number` `12`, `Cadillac`, `Racing Bulls`) whose canonical GridView identity now exists but whose OpenF1 mapping has not been approved. The circuit portion is complete at 24 of 24 circuit-resource rows (the 23 calendar circuits of §8.8.1 and, since 2026-10-07, the off-calendar `jeddah`, §14.0.48), and so are the 2026 Jolpica constructor (11 of 11) and driver (32 of 32) portions. *Updated 2026-10-07 (§14.0.48):* the circuit resource has a 24th, off-calendar row, `jeddah`, whose identity and mapping the curator approved on 2026-10-08. Every one blocks the affected resource. This is tracked separately from G8 so "the registry works" is never read as "the season is mapped". |
+| **G-l - mapping dataset coverage** | **Open, and deliberately so.** The mechanism is complete; the dataset is not. Only identifiers already recorded in Provider Evaluation §8 are mapped. Including the proposed November diagnostic additions, six approved identities are explicitly acknowledged as unmapped. **Proposal 2026-11-12:** the [offline staging proxy investigation](../operations/2026-11-12-jolpica-mapping-investigation.md) records four additional Jolpica driver keys without canonical identities; they stay blocked pending evidence and curation. *Updated 2026-11-22 (U11 P4):* `rafael_camara` is now mapped to `rafael-camara` (Rafael Câmara), reviewed and activated in staging catalog R1 (U11 Addendum O); the other three stay blocked. September driver coverage below does not establish November coverage. *Updated 2026-09-23 (§14.0.19, §14.0.20):* all three are OpenF1 values (`driver_number` `12`, `Cadillac`, `Racing Bulls`) whose canonical GridView identity now exists but whose OpenF1 mapping has not been approved. The circuit portion is complete at 24 of 24 circuit-resource rows (the 23 calendar circuits of §8.8.1 and, since 2026-10-07, the off-calendar `jeddah`, §14.0.48), and so are the 2026 Jolpica constructor (11 of 11) and driver (32 of 32) portions. *Updated 2026-10-07 (§14.0.48):* the circuit resource has a 24th, off-calendar row, `jeddah`, whose identity and mapping the curator approved on 2026-10-08. Every one blocks the affected resource. This is tracked separately from G8 so "the registry works" is never read as "the season is mapped". |
 | **G4, G5, G9 and everything else** | **Still open at the end of 9B-3.** G4 - the multi-source coordination mechanism - was subsequently **closed by Phase 9B-4** (§14.0.8). No Jolpica or OpenF1 adapter, no event-aware scheduling (G5), no production cron (G3/G-b), no reconciliation or provisional/reconciled state (G9), no `sourceObservedAt` / `snapshotRevision` / `snapshotObservedAt` persistence, no operator backlog, no attribution or ShareAlike publication surface. |
 | Provider modes | **Unchanged.** `PROVIDER_MODE` admits exactly `mock` and `none`; staging is `mock`, production is `none`. |
 | OpenF1 | **Still fail-closed** ([ADR 0020](../adr/0020-provider-source-observation-and-reconciliation.md) §5). Recording its field names and a driver number is curation, not an unlock. |
@@ -3821,10 +3826,11 @@ these are the implementation tasks.
   9B-3** (§14.0.7,
   [ADR 0022](../adr/0022-curated-provider-identifier-mappings.md)), dormant
   until an adapter consumes it. **The mapping dataset remains incomplete and
-  is still outstanding work under gap G-l**: 94 exact mappings are curated -
-  47 driver and constructor mappings, including all 11 season-2026 Jolpica
-  constructor mappings (§14.0.19, Provider Evaluation §8.9) and all 32
-  season-2026 Jolpica driver mappings (§14.0.20, Provider Evaluation §8.10),
+  is still outstanding work under gap G-l**: 95 exact mappings are curated -
+  48 driver and constructor mappings, including all 11 season-2026 Jolpica
+  constructor mappings (§14.0.19, Provider Evaluation §8.9) and all 33
+  season-2026 Jolpica driver mappings (§14.0.20, Provider Evaluation §8.10,
+  plus `rafael_camara` reviewed in staging catalog R1, U11 Addendum O),
   the 24 season-2026 circuit mappings (the 23 calendar circuits plus the
   off-calendar `jeddah`, §14.0.48, Provider Evaluation §8.13) and the 23
   season-2026 event locators (§14.0.14, Provider Evaluation §8.8 and §8.8.1) - and three approved identities are explicitly acknowledged as
@@ -4649,3 +4655,115 @@ The central implementation rule is:
 > Do not build every layer independently. Complete and validate one vertical slice, then extend the proven pattern across the product.
 
 This approach minimizes late architectural surprises and ensures that GridView becomes a coherent, maintainable application rather than another collection of disconnected components.
+
+## 31. Identity management U0 approval and U1-U11 gates
+
+Date: 2026-11-13. **U0 architectural decisions accepted and documented; U1-U11
+pending separate authorization.** This supplements section 14 and sections
+22-24, without closing unrelated provider, legal, automatic-update or release
+gates. U0 is a documentation decision, not a feature completion under section 23.
+
+The product owner approved PO-1 through PO-8 from the
+[Identity Management Design](GridView_Identity_Management_Design.md).
+[ADR 0029](../adr/0029-persistent-identity-discovery-and-reviewed-runtime-catalog.md),
+[ADR 0030](../adr/0030-provider-driver-inventory-and-required-identity-closure.md) and
+[ADR 0031](../adr/0031-identity-review-authority-and-catalog-cutover.md) are the accepted decisions.
+Their PO traceability table covers all eight approvals. Original ADR reasoning
+remains, with precise dated amendments. Existing application behavior is unchanged.
+
+### 31.1 Ordered units and acceptance boundaries
+
+The twelve units below retain design section 13's sequence and detailed
+acceptance/test matrix. Dependency completion does not itself authorize a unit.
+
+| Unit | Scope and acceptance boundary                                                                                                                                    | Status                                 |
+| ---- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------- |
+| U0   | Architectural authority, evidence/retention, inventory, authentication, versions/batches, history and operational gates recorded; documentation validation only. | Accepted/documented; no implementation |
+| U1   | Pure bounded evidence model, exact key enumeration and safe extraction from decoder-accepted resources; inert collector, no persistence/integration.             | Pending separate approval              |
+| U2   | Atomic durable candidates/evidence, bounded retention, caught shadow persistence; actual local SQLite restart/capacity tests and exact request/outcome parity.   | Pending separate approval              |
+| U3   | Complete catalog snapshot, reviewed seed import/export and shared validation; exact canonical/key/profile/evidence/base/version parity.                          | Pending separate approval              |
+| U4   | Immutable review/proposal/version/activation state machine; CAS/idempotency/audit and append-only history, no publication authority.                             | Pending separate approval              |
+| U5   | Individual reader/reviewer/activator workflow and administrative CLI; server-derived actor, separate approval/activation, no shared-token mutations.             | Pending separate approval              |
+| U6   | Whole-run pinned identity context in all entry points; bundled default, runtime failure before any provider request, no silent fallback.                         | Pending separate approval              |
+| U7   | Private catalog-aware batch v2, explicit local exports and restricted legacy v1 admission; unchanged public schema and guarded ingest.                           | Pending separate approval              |
+| U8   | Local seed comparison, environment isolation, restart/export/restore and cutover rehearsal; reviewable staging preparation, no implicit provisioning/deploy.     | Pending separate approval              |
+| U9   | Closed optional-driver inventory accounting; strict constructor behavior and actual request counting, disabled until U10 and activation gate.                    | Pending separate approval              |
+| U10  | Required verified driver-profile closure plus complete guarded season publication; positive inventory-only and negative required-identity/D14-D16 cases.         | Pending separate approval              |
+| U11  | Separately authorized staging rollout and production-readiness evidence, verified recovery and ownership; production untouched.                                  | Pending separate staging authorization |
+
+Thus U1-U2 cover safe discovery/persistent candidates; U3-U8 cover the verified
+runtime catalog, review, migration and compatibility; U9-U10 cover the narrow
+inventory separation; U11 is rollout/readiness only. There is no unit for
+resource-scoped publication or destructive historical identity repair.
+
+### 31.2 Definition of Ready and operational gates
+
+PO policy decisions are resolved; named people and credentials are not supplied.
+The design's U0 named-owner acceptance item is recorded as an open operational
+gate, as expressly directed by the owner, rather than invented assignments.
+Before provisioning or staging activation, record named reviewer and backup,
+activator and backup, recovery/export custodian and backup recovery
+responsibilities, and the authorized rollout operator. ADR 0031 D6 is the
+accountability record; all assignments remain unassigned.
+
+Before deployment, validate the accepted initial capacity limits locally.
+Before runtime cutover, verify recovery exports and isolated restore, complete
+seed parity and compatibility, controlled compare runs and failure cases,
+hold/drain active operations and retain a runtime-compatible recovery build.
+Optional-driver mode needs a separate U9/U10 gate. Production deployment always
+requires separate authorization, including after successful U11.
+
+Accepted architecture creates no credential, endpoint, namespace or schema.
+Do not use this roadmap or the existing automatic-update requirement as
+permission for Cloudflare/Webdock operations, live provider calls, synchronization,
+publication or staging/production deployment.
+
+### 31.3 Recommended next authorization: U1 only
+
+Scope: design section 13 U1 and section 12 T1-T4. Introduce only pure
+IdentityObservation/Evidence/Candidate types, deterministic typed key/hash
+helpers, allowlisted Jolpica extraction and a bounded inert collector under the
+proposed discovery modules, with focused offline tests. Consume existing
+decoder/key contracts unchanged; no production-port wiring or storage client.
+
+Acceptance criteria for a future separately authorized U1:
+
+1. Extract only from successful strict decodes at the exact supported inventory,
+   result, standings, calendar and circuit seams. Malformed, truncated,
+   duplicate and wrong-season responses yield no eligible evidence.
+2. Enumerate all unknown decoded keys, including beyond diagnostic log caps;
+   preserve exact season/provider/entity/field/value types and scope. Known
+   identities produce no unresolved candidate; invalid-key/registry/profile
+   faults do not masquerade as new-person candidates.
+3. Sanitize optional claims without invoking accessors, coercing keys, retaining
+   raw bodies/headers or emitting private evidence into public types/logs.
+   Apply ADR 0029 bounds, deterministic projection hashes, honest provenance
+   and explicit synthetic tagging; a projection hash is never a body hash.
+4. Prove unchanged decoder/normalizer behavior with controlled tests for
+   known/unknown identities, hostile properties, oversized optional fields and
+   rejected pagination. Inert modules have no network/storage imports or
+   production integration, hence no changed provider request path.
+5. Preserve canonical IDs, all acknowledgements, dataset `2026.10.07.1`,
+   public contracts and November investigation. Add no mapping or runtime
+   catalog activation, and perform no deployment or live operation.
+
+U2 persistence and shadow integration are outside U1. Stop after U1 acceptance
+if that unit is later authorized; no unit is auto-approved by this recommendation.
+
+### 31.4 November investigation and U0 preservation
+
+The prior [November investigation](../operations/2026-11-12-jolpica-mapping-investigation.md)
+and technical design are preserved. The four Jolpica keys `rafael_camara`,
+`gabriele_mini`, `freddie_slater` and `nikola_tsolov` remain unresolved;
+no canonical ID/mapping is created and none of the seven acknowledgements is
+removed. Dataset version stays `2026.10.07.1`.
+
+The earlier G-l phrase "seven approved identities" describes acknowledgement
+accounting only; it does not approve canonical identities or provider mappings.
+The four November keys still lack sufficient reviewed identity evidence.
+
+The synthetic regression establishes a possible failure pattern, not the
+complete root cause of the November staging incident or a guarantee that the
+inventory exception would publish that run. Existing investigation edits in
+content and tests belong to the prior work, not U0. U0 changes documentation
+only, with no commits, pushes, merges or operations.

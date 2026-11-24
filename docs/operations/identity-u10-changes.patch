@@ -1,0 +1,3931 @@
+diff --git a/services/edge-api/scripts/identity/catalog-file.ts b/services/edge-api/scripts/identity/catalog-file.ts
+index aabb175..9125d7e 100644
+--- a/services/edge-api/scripts/identity/catalog-file.ts
++++ b/services/edge-api/scripts/identity/catalog-file.ts
+@@ -18,7 +18,12 @@ import {
+  * Formatting is not authority; complete U3/U4 lineage is still mandatory. */
+ export async function verifyCatalogFile(
+   bytes: Uint8Array,
+-  expected: { installationId: string; season: number },
++  expected: {
++    installationId: string;
++    season: number;
++    /** U10: the whole generation's explicit policy; absent is strict. */
++    inventoryPolicy?: 'strict/1' | 'optional-drivers/1';
++  },
+ ) {
+   requireCatalog(
+     bytes.byteLength > 0 && bytes.byteLength <= catalogLimits.exportBytes,
+diff --git a/services/edge-api/scripts/season-batch/cli-guards.mjs b/services/edge-api/scripts/season-batch/cli-guards.mjs
+index 73e2865..df9107c 100644
+--- a/services/edge-api/scripts/season-batch/cli-guards.mjs
++++ b/services/edge-api/scripts/season-batch/cli-guards.mjs
+@@ -13,7 +13,7 @@ import {
+ } from 'node:path';
+ 
+ export const usage =
+-  'Usage: npm run season-batch:generate -- --capture <dir> --out <dir> [--allow-dirty-tree] [--identity-mode runtime --installation-id <uuid> --catalog-export <local-file>]';
++  'Usage: npm run season-batch:generate -- --capture <dir> --out <dir> [--allow-dirty-tree] [--identity-mode runtime --installation-id <uuid> --catalog-export <local-file> [--inventory-policy strict-v1|optional-driver-inventory-v1]]';
+ 
+ /**
+  * @param {readonly string[]} argv
+@@ -27,9 +27,12 @@ export function parseArguments(argv) {
+   for (let index = 0; index < argv.length; index += 1) {
+     const argument = argv[index];
+     if (
+-      ['--catalog-export', '--installation-id', '--identity-mode'].includes(
+-        argument,
+-      )
++      [
++        '--catalog-export',
++        '--installation-id',
++        '--identity-mode',
++        '--inventory-policy',
++      ].includes(argument)
+     ) {
+       const value = argv[++index];
+       if (!value || value.startsWith('--'))
+@@ -38,6 +41,7 @@ export function parseArguments(argv) {
+         '--catalog-export': 'catalogExport',
+         '--installation-id': 'installationId',
+         '--identity-mode': 'identityMode',
++        '--inventory-policy': 'inventoryPolicy',
+       }[argument];
+       if (Object.hasOwn(catalogOptions, key))
+         return { ok: false, reason: 'repeated-argument' };
+diff --git a/services/edge-api/scripts/season-batch/cli.mjs b/services/edge-api/scripts/season-batch/cli.mjs
+index c0e0bdd..acbe583 100644
+--- a/services/edge-api/scripts/season-batch/cli.mjs
++++ b/services/edge-api/scripts/season-batch/cli.mjs
+@@ -213,6 +213,8 @@ async function main() {
+     identityMode:
+       parsed.identityMode ?? process.env.IDENTITY_CATALOG_MODE ?? 'bundled',
+     installationId: parsed.installationId,
++    // Explicit only: the policy is never read from the environment.
++    inventoryPolicy: parsed.inventoryPolicy,
+     catalogExport,
+     ...input,
+     provenance: source,
+diff --git a/services/edge-api/scripts/season-batch/generate.ts b/services/edge-api/scripts/season-batch/generate.ts
+index 9454325..e523260 100644
+--- a/services/edge-api/scripts/season-batch/generate.ts
++++ b/services/edge-api/scripts/season-batch/generate.ts
+@@ -48,6 +48,11 @@ import {
+ import { CapturingLogger } from '../../src/logging/logger';
+ import { assembleSeasonSource } from '../../src/providers/coordination/season-assembly';
+ import { MultiSourceCoordinator } from '../../src/providers/coordination/coordinator';
++import { pinnedDriverProfiles } from '../../src/identity/catalog/closure-profiles';
++import {
++  inventoryPolicyForContext,
++  inventoryPolicyVersionFor,
++} from '../../src/identity/inventory/model';
+ import type { CoordinationRun } from '../../src/providers/coordination/outcome';
+ import type {
+   CoordinatedPayload,
+@@ -112,6 +117,7 @@ export const seasonBatchFailures = [
+   'runtime-batch-requires-u7',
+   'catalog-export-invalid',
+   'catalog-export-mode-mismatch',
++  'inventory-policy-invalid',
+   'invalid-provenance',
+   'capture-malformed',
+   'capture-body-missing',
+@@ -148,6 +154,12 @@ export interface SeasonBatchInput {
+   readonly identityMode?: 'bundled' | 'compare' | 'runtime';
+   readonly catalogExport?: Uint8Array;
+   readonly installationId?: string;
++  /**
++   * U10: the explicit private batch-v2 inventory policy. Absent is
++   * `strict-v1`. `optional-driver-inventory-v1` requires runtime authority
++   * with a verified catalog export, and then governs the whole generation.
++   */
++  readonly inventoryPolicy?: string;
+   /** The parsed `capture.json`, still untrusted. */
+   readonly capture: unknown;
+   /** Each body file named by the capture, by file name. */
+@@ -270,6 +282,8 @@ async function coordinate(
+   recordings: readonly RecordedResponse[],
+   context: IdentityRunContext,
+ ): Promise<Coordinated | Refusal> {
++  // One policy for the whole generation, from the verified context only.
++  const inventoryPolicy = inventoryPolicyForContext(context);
+   const logger = new CapturingLogger();
+   const replay = replayTransport(recordings);
+   const instant = Date.parse(manifest.observedAt);
+@@ -297,6 +311,7 @@ async function coordinate(
+       logger,
+       registry: context.registry,
+       participants: context.participants,
++      inventoryPolicy,
+     }),
+     results: new JolpicaResultsPort({
+       client,
+@@ -313,6 +328,7 @@ async function coordinate(
+     ports: [port],
+     logger,
+     maxConcurrentOperations: 1,
++    inventoryPolicy,
+   });
+   const run = await coordinator.coordinate({
+     plan: { season: manifest.season, resources: planFor(manifest) },
+@@ -414,6 +430,14 @@ export async function generateSeasonBatch(
+     return refuse('identity-mode-invalid');
+   if (input.identityMode === 'runtime' && !input.catalogExport)
+     return refuse('runtime-batch-requires-u7');
++  const policyVersion = inventoryPolicyVersionFor(
++    input.inventoryPolicy ?? 'strict-v1',
++  );
++  if (
++    policyVersion === null ||
++    (policyVersion === 'optional-drivers/1' && input.identityMode !== 'runtime')
++  )
++    return refuse('inventory-policy-invalid');
+   if (!gitCommitPattern.test(input.provenance.gitCommit)) {
+     return refuse('invalid-provenance');
+   }
+@@ -427,6 +451,7 @@ export async function generateSeasonBatch(
+       runtime = await verifyCatalogFile(input.catalogExport!, {
+         installationId: input.installationId ?? '',
+         season: manifest.season,
++        inventoryPolicy: policyVersion,
+       });
+     } catch {
+       return refuse('catalog-export-invalid');
+@@ -458,7 +483,12 @@ export async function generateSeasonBatch(
+     ...metadata,
+     sourceUpdatedAt: manifest.observedAt,
+   };
+-  const assembly = assembleSeasonSource(run, release);
++  // The same closure boundary the Worker's guarded publication uses, over
++  // the same verified context's pinned profiles and single policy.
++  const assembly = assembleSeasonSource(run, release, {
++    policy: inventoryPolicyForContext(context),
++    profiles: pinnedDriverProfiles(context),
++  });
+   if (!assembly.complete) return refuse('assembly-withheld', assembly.gap);
+   // After assembly, so a resource that failed part-way - and therefore never
+   // asked for its remaining recordings - is reported as the failure it is.
+diff --git a/services/edge-api/src/config/environment.ts b/services/edge-api/src/config/environment.ts
+index f3b8191..a95404f 100644
+--- a/services/edge-api/src/config/environment.ts
++++ b/services/edge-api/src/config/environment.ts
+@@ -52,17 +52,24 @@ export function resolveIdentityInventoryMode(
+ }
+ 
+ /**
+- * The inventory mode an **operational** run may select. Before U10 supplies
+- * required-reference closure and the separately approved phase-3 gate,
+- * `optional-drivers` is recognised vocabulary but unavailable: selecting it is
+- * a bounded configuration refusal, so no deployed configuration can enable a
+- * partial or incomplete season publication. Optional normalization is
+- * exercised only through explicit isolated internal test contexts.
++ * The inventory mode an **operational** run may select (U10, design §11.1).
++ *
++ * `strict` is the default under every catalog mode. `optional-drivers` is
++ * accepted only together with `IDENTITY_CATALOG_MODE=runtime`: bundled and
++ * compare authority cannot enable it, and nothing falls back to strict when it
++ * is refused - the configuration is simply invalid. Runtime binding and
++ * installation checks follow in `identityConfiguration`. Selecting it is an
++ * explicit, owner-approved configuration change; no committed environment
++ * selects it.
+  */
+-export function resolveOperationalInventoryMode(value?: string): 'strict' {
+-  if (resolveIdentityInventoryMode(value) === 'strict') return 'strict';
++export function resolveOperationalInventoryMode(
++  value: string | undefined,
++  catalogMode: IdentityCatalogMode,
++): IdentityInventoryMode {
++  const mode = resolveIdentityInventoryMode(value);
++  if (mode === 'strict' || catalogMode === 'runtime') return mode;
+   throw new ConfigurationError(
+-    'IDENTITY_INVENTORY_MODE=optional-drivers is unavailable until required identity closure is approved.',
++    'IDENTITY_INVENTORY_MODE=optional-drivers requires IDENTITY_CATALOG_MODE=runtime.',
+   );
+ }
+ 
+diff --git a/services/edge-api/src/identity/catalog/batch-admission.ts b/services/edge-api/src/identity/catalog/batch-admission.ts
+index e2adcc6..dddaa66 100644
+--- a/services/edge-api/src/identity/catalog/batch-admission.ts
++++ b/services/edge-api/src/identity/catalog/batch-admission.ts
+@@ -11,8 +11,15 @@ import { administrativeExport } from './admin-export';
+ /** Exact corrected, reviewed U3 R0, not a current-head inference. */
+ export const approvedR0Hash =
+   'sha256:8a2a62d8412fdfd71cfd5138b4f87682f33a690d21c3d5eec46153bfbda39851';
++/**
++ * Schema 1 is every strict admission, unchanged. Schema 2 (U10) records the
++ * installation's explicit optional-driver inventory policy, so the durable
++ * receipt identity and the run pin both carry it: the same operation ID under
++ * another policy is a `batch-operation-conflict`.
++ */
+ export interface BatchAdmissionRequest {
+-  schemaVersion: 1;
++  schemaVersion: 1 | 2;
++  inventoryPolicy?: 'optional-driver-inventory-v1';
+   operationId: string;
+   installationId: string;
+   season: number;
+@@ -57,7 +64,7 @@ export class CatalogBatchAdmissions extends CatalogRunPins {
+   }
+   private decode(input: unknown): BatchAdmissionRequest {
+     const v = boundedJson(input);
+-    exact(v, [
++    const keys = [
+       'schemaVersion',
+       'operationId',
+       'installationId',
+@@ -66,11 +73,20 @@ export class CatalogBatchAdmissions extends CatalogRunPins {
+       'leaseFence',
+       'legacy',
+       'compatibilityInstallation',
+-    ]);
++    ];
++    const schema =
++      v !== null && typeof v === 'object' && !Array.isArray(v)
++        ? (v as { schemaVersion?: unknown }).schemaVersion
++        : undefined;
++    exact(v, schema === 2 ? [...keys, 'inventoryPolicy'] : keys);
+     uuid(v.operationId);
+     uuid(v.installationId);
+     requireCatalog(
+-      v.schemaVersion === 1 &&
++      (v.schemaVersion === 1 ||
++        (v.schemaVersion === 2 &&
++          v.inventoryPolicy === 'optional-driver-inventory-v1' &&
++          // New v1 (legacy) ingestion never gains an optional-policy path.
++          v.legacy === false)) &&
+         v.installationId === this.installation &&
+         isHash(v.submissionHash) &&
+         Number.isSafeInteger(v.season) &&
+@@ -132,14 +148,21 @@ export class CatalogBatchAdmissions extends CatalogRunPins {
+     this.initializeBatch();
+     const replay = await this.storedBatch(request);
+     if (replay?.state === 'complete') return { receipt: replay, catalog: null };
+-    const pinRequest = {
+-      schemaVersion: 1 as const,
++    const base = {
+       runId: request.operationId,
+       installationId: request.installationId,
+       season: request.season,
+       purpose: 'season-batch' as const,
+       leaseFence: request.leaseFence,
+     };
++    const pinRequest =
++      request.schemaVersion === 2
++        ? {
++            schemaVersion: 2 as const,
++            ...base,
++            inventoryPolicy: 'optional-driver-inventory-v1' as const,
++          }
++        : { schemaVersion: 1 as const, ...base };
+     const catalog = await this.pinRun(pinRequest);
+     if (replay) return { receipt: replay, catalog };
+     const head = this.head();
+diff --git a/services/edge-api/src/identity/catalog/pin-contract.ts b/services/edge-api/src/identity/catalog/pin-contract.ts
+index b6ba29e..94c3c95 100644
+--- a/services/edge-api/src/identity/catalog/pin-contract.ts
++++ b/services/edge-api/src/identity/catalog/pin-contract.ts
+@@ -10,14 +10,35 @@ export const pinPurposes = [
+   'calendar-diagnostic',
+   'season-batch',
+ ] as const;
+-export interface PinRequest {
+-  schemaVersion: 1;
++/**
++ * Schema 1 is every strict request, byte-identical to its pre-U10 form, so
++ * stored strict pins and receipts are unchanged. Schema 2 (U10) exists only to
++ * record the explicit optional-driver inventory policy in the durable pin:
++ * because a replay compares the complete stored request, a retry of the same
++ * run ID under a different policy is a `pin-run-conflict`, never a silent
++ * reinterpretation.
++ */
++export type PinRequest = PinRequestV1 | PinRequestV2;
++interface PinRequestBase {
+   runId: string;
+   installationId: string;
+   season: number;
+   purpose: (typeof pinPurposes)[number];
+   leaseFence: number | null;
+ }
++export interface PinRequestV1 extends PinRequestBase {
++  schemaVersion: 1;
++}
++export interface PinRequestV2 extends PinRequestBase {
++  schemaVersion: 2;
++  inventoryPolicy: 'optional-driver-inventory-v1';
++}
++/** The inventory policy version a pin request records. */
++export function pinInventoryPolicyVersion(
++  request: PinRequest,
++): 'strict/1' | 'optional-drivers/1' {
++  return request.schemaVersion === 2 ? 'optional-drivers/1' : 'strict/1';
++}
+ export interface RunPin {
+   format: 'gridview-identity-run-pin/1';
+   request: PinRequest;
+@@ -47,18 +68,25 @@ export function samePinExecution(a: PinRequest, b: PinRequest): boolean {
+ 
+ export function decodePinRequest(input: unknown): PinRequest {
+   const v = boundedJson(input);
+-  exact(v, [
++  const base = [
+     'schemaVersion',
+     'runId',
+     'installationId',
+     'season',
+     'purpose',
+     'leaseFence',
+-  ]);
++  ];
++  const schema =
++    v !== null && typeof v === 'object' && !Array.isArray(v)
++      ? (v as { schemaVersion?: unknown }).schemaVersion
++      : undefined;
++  exact(v, schema === 2 ? [...base, 'inventoryPolicy'] : base);
+   uuid(v.runId);
+   uuid(v.installationId);
+   requireCatalog(
+-    v.schemaVersion === 1 &&
++    (v.schemaVersion === 1 ||
++      (v.schemaVersion === 2 &&
++        v.inventoryPolicy === 'optional-driver-inventory-v1')) &&
+       integer(v.season, 1950) &&
+       (v.season as number) <= 2200 &&
+       pinPurposes.includes(v.purpose as PinRequest['purpose']) &&
+diff --git a/services/edge-api/src/identity/catalog/run-context.ts b/services/edge-api/src/identity/catalog/run-context.ts
+index 06268d5..5bda388 100644
+--- a/services/edge-api/src/identity/catalog/run-context.ts
++++ b/services/edge-api/src/identity/catalog/run-context.ts
+@@ -1,10 +1,13 @@
+ import dataSources from '../../../../../content/attribution/data-sources.json';
+ import type { Env } from '../../config/environment';
+ import {
++  ConfigurationError,
+   resolveIdentityCatalogMode,
+   resolveOperationalInventoryMode,
+   type IdentityCatalogMode,
++  type IdentityInventoryMode,
+ } from '../../config/environment';
++import type { InventoryPolicyVersion } from '../inventory/model';
+ export {
+   resolveIdentityCatalogMode,
+   type IdentityCatalogMode,
+@@ -39,6 +42,7 @@ import { catalogLimits, requireCatalog, type CatalogBinding } from './model';
+ import { seasonProjection, hashSeasonProjection } from './projection';
+ import {
+   decodeRunPin,
++  pinInventoryPolicyVersion,
+   samePinExecution,
+   type RunPin,
+   type PinRequest,
+@@ -59,11 +63,13 @@ export interface IdentityContextConfiguration {
+   readonly installationId?: string;
+   readonly namespace?: IdentityNamespace;
+   /**
+-   * U9: the operational inventory policy. Only `strict` is representable
+-   * before U10; `optional-drivers` is refused while parsing configuration.
+-   * Absent (direct test wiring) also means strict.
++   * The operational inventory policy for every run admitted under this
++   * configuration. `optional-drivers` (U10) is representable only with
++   * runtime catalog mode, a UUID installation and a catalog binding; it is
++   * refused while parsing configuration otherwise. Absent (direct test
++   * wiring) means strict.
+    */
+-  readonly inventoryMode?: 'strict';
++  readonly inventoryMode?: IdentityInventoryMode;
+ }
+ export function identityConfiguration(
+   env: Pick<
+@@ -74,11 +80,28 @@ export function identityConfiguration(
+     | 'IDENTITY_INVENTORY_MODE'
+   >,
+ ): IdentityContextConfiguration {
++  const mode = resolveIdentityCatalogMode(env.IDENTITY_CATALOG_MODE);
++  const inventoryMode = resolveOperationalInventoryMode(
++    env.IDENTITY_INVENTORY_MODE,
++    mode,
++  );
++  // Optional-driver inventory needs a complete runtime catalog authority for
++  // every run: no binding or installation means no admissible pin, and that
++  // is a configuration error rather than a later fallback to strict.
++  if (
++    inventoryMode === 'optional-drivers' &&
++    (!uuidPattern.test(env.IDENTITY_INSTALLATION_ID ?? '') ||
++      typeof env.IDENTITY_CATALOG?.idFromName !== 'function' ||
++      typeof env.IDENTITY_CATALOG?.get !== 'function')
++  )
++    throw new ConfigurationError(
++      'IDENTITY_INVENTORY_MODE=optional-drivers requires a catalog binding and installation.',
++    );
+   return Object.freeze({
+-    mode: resolveIdentityCatalogMode(env.IDENTITY_CATALOG_MODE),
++    mode,
+     installationId: env.IDENTITY_INSTALLATION_ID,
+     namespace: env.IDENTITY_CATALOG,
+-    inventoryMode: resolveOperationalInventoryMode(env.IDENTITY_INVENTORY_MODE),
++    inventoryMode,
+   });
+ }
+ export interface IdentityRunContext {
+@@ -112,7 +135,8 @@ export interface IdentityRunContext {
+   }[];
+   readonly baseContentDigest: string;
+   readonly seasonMetadata: CuratedSeasonMetadata | null;
+-  readonly inventoryPolicyVersion: 'strict/1';
++  /** The run's single admitted inventory policy (U6/U10 provenance). */
++  readonly inventoryPolicyVersion: InventoryPolicyVersion;
+   readonly pin: RunPin | null;
+   readonly comparison: 'equal' | 'different' | 'unavailable' | null;
+ }
+@@ -254,21 +278,61 @@ export async function contextFromPin(
+ /** Offline verified lineage only. No pin, namespace or network authority is created. */
+ export async function contextFromExport(
+   lineage: string,
+-  input: { installationId: string; season: number },
++  input: {
++    installationId: string;
++    season: number;
++    inventoryPolicy?: InventoryPolicyVersion;
++  },
+ ): Promise<IdentityRunContext> {
+   requireCatalog(uuidPattern.test(input.installationId), 'export-installation');
++  const policy = input.inventoryPolicy ?? 'strict/1';
++  requireCatalog(
++    policy === 'strict/1' || policy === 'optional-drivers/1',
++    'export-inventory-policy',
++  );
+   return contextFromRevision(
+     await verifyRevisionExport(lineage),
+-    {
+-      ...input,
+-      schemaVersion: 1,
+-      runId: '00000000-0000-4000-8000-000000000007',
+-      purpose: 'manual',
+-      leaseFence: null,
+-    },
++    pinRequestFor(
++      {
++        installationId: input.installationId,
++        season: input.season,
++        runId: '00000000-0000-4000-8000-000000000007',
++        purpose: 'manual',
++        leaseFence: null,
++      },
++      policy,
++    ),
+     null,
+   );
+ }
++
++/**
++ * The durable pin request for one run under one policy. Strict stays the
++ * exact schema-1 request; only the optional policy produces schema 2.
++ */
++export function pinRequestFor(
++  base: Omit<PinRequest, 'schemaVersion' | 'inventoryPolicy'>,
++  policy: InventoryPolicyVersion,
++): PinRequest {
++  return policy === 'optional-drivers/1'
++    ? {
++        schemaVersion: 2,
++        runId: base.runId,
++        installationId: base.installationId,
++        season: base.season,
++        purpose: base.purpose,
++        leaseFence: base.leaseFence,
++        inventoryPolicy: 'optional-driver-inventory-v1',
++      }
++    : {
++        schemaVersion: 1,
++        runId: base.runId,
++        installationId: base.installationId,
++        season: base.season,
++        purpose: base.purpose,
++        leaseFence: base.leaseFence,
++      };
++}
+ async function contextFromRevision(
+   revision: CatalogRevision,
+   request: PinRequest,
+@@ -354,7 +418,7 @@ async function contextFromRevision(
+     ],
+     baseContentDigest: pin.baseContentDigest,
+     seasonMetadata: metadata,
+-    inventoryPolicyVersion: 'strict/1',
++    inventoryPolicyVersion: pinInventoryPolicyVersion(request),
+     pin: admittedPin,
+     comparison: null,
+   });
+@@ -451,19 +515,30 @@ export async function admitIdentityContext(
+   const mode = config?.mode ?? 'bundled';
+   if (!['bundled', 'compare', 'runtime'].includes(mode))
+     throw new CatalogAdmissionError('catalog-invalid');
++  const inventoryMode = config?.inventoryMode ?? 'strict';
++  // Defence in depth behind configuration parsing: the optional policy is a
++  // runtime-only whole-run policy, never a bundled or compare one, and an
++  // unknown value is never read as strict.
++  if (
++    (inventoryMode !== 'strict' && inventoryMode !== 'optional-drivers') ||
++    (inventoryMode === 'optional-drivers' && mode !== 'runtime')
++  )
++    throw new CatalogAdmissionError('catalog-invalid');
+   if (mode === 'bundled')
+     return bundledRunContext({
+       ...input,
+       installationId: config?.installationId,
+     });
+-  const request: PinRequest = {
+-    schemaVersion: 1,
+-    runId: input.runId,
+-    installationId: config?.installationId ?? '',
+-    season: input.season,
+-    purpose: input.purpose,
+-    leaseFence: input.leaseFence,
+-  };
++  const request = pinRequestFor(
++    {
++      runId: input.runId,
++      installationId: config?.installationId ?? '',
++      season: input.season,
++      purpose: input.purpose,
++      leaseFence: input.leaseFence,
++    },
++    inventoryMode === 'optional-drivers' ? 'optional-drivers/1' : 'strict/1',
++  );
+   if (mode === 'runtime') return readPin(config!, request, input.signal);
+   const bundled = await bundledRunContext({
+     ...input,
+diff --git a/services/edge-api/src/identity/inventory/model.ts b/services/edge-api/src/identity/inventory/model.ts
+index f767744..9e52fea 100644
+--- a/services/edge-api/src/identity/inventory/model.ts
++++ b/services/edge-api/src/identity/inventory/model.ts
+@@ -13,11 +13,12 @@
+  * never enter `ProviderSeasonSource`, a generated snapshot, a public schema, a
+  * dataset content hash or a classification revision hash.
+  *
+- * **No operational authority.** This module only describes the policy. U9
+- * never selects `optional-drivers` for an operational run; the composition
+- * derives the policy from the admitted run context through
+- * {@link inventoryPolicyForContext}, which accepts the strict policy only until
+- * U10 supplies required-reference closure and the phase-3 gate is approved.
++ * **No operational authority.** This module only describes the policy. The
++ * composition derives the policy from the admitted run context through
++ * {@link inventoryPolicyForContext}. Since U10 that context may carry
++ * `optional-drivers/1`, but only when the explicit runtime configuration
++ * selected it and the durable run pin recorded it; nothing here reads
++ * configuration or enables it.
+  */
+ 
+ import type { IdentityHash, IdentityKeyReference } from '../discovery/model';
+@@ -106,7 +107,8 @@ export const strictInventoryPolicy: DriverInventoryPolicy = Object.freeze({
+ /**
+  * Builds the optional policy for an **explicit isolated** context. The caller
+  * supplies the catalog hash of a trusted run context; nothing here reads
+- * configuration, and no operational wiring calls it before U10.
++ * configuration. Operational wiring reaches it only through
++ * {@link inventoryPolicyForContext}.
+  */
+ export function optionalDriverInventoryPolicy(
+   catalogHash: string,
+@@ -154,15 +156,67 @@ export function readDriverInventoryPolicy(
+ }
+ 
+ /**
+- * The policy an **operational** run may use, derived from its admitted
+- * context. Before U10 only `strict/1` exists in the run-context model, and any
+- * other value is refused rather than mapped onto a permissive default.
++ * The closed run-context inventory policy versions (U6 provenance).
++ *
++ * `strict/1` is the default and the pre-U9 behaviour. `optional-drivers/1` is
++ * the phase-3 policy, representable only in a **runtime** context admitted
++ * through a durable pin whose request named that policy, or in a verified
++ * offline export context generated under it.
++ */
++export const inventoryPolicyVersions = [
++  'strict/1',
++  'optional-drivers/1',
++] as const;
++export type InventoryPolicyVersion = (typeof inventoryPolicyVersions)[number];
++
++/** The private batch-v2 vocabulary for each run-context policy version. */
++export type BatchInventoryPolicy = 'strict-v1' | 'optional-driver-inventory-v1';
++const batchPolicyByVersion: Readonly<
++  Record<InventoryPolicyVersion, BatchInventoryPolicy>
++> = Object.freeze({
++  'strict/1': 'strict-v1',
++  'optional-drivers/1': 'optional-driver-inventory-v1',
++});
++
++/** Exact closed mapping; anything else is `null`, never a default. */
++export function batchInventoryPolicyFor(
++  version: unknown,
++): BatchInventoryPolicy | null {
++  return typeof version === 'string' &&
++    Object.hasOwn(batchPolicyByVersion, version)
++    ? batchPolicyByVersion[version as InventoryPolicyVersion]
++    : null;
++}
++
++/** Exact closed inverse mapping; anything else is `null`. */
++export function inventoryPolicyVersionFor(
++  policy: unknown,
++): InventoryPolicyVersion | null {
++  for (const version of inventoryPolicyVersions) {
++    if (batchPolicyByVersion[version] === policy) return version;
++  }
++  return null;
++}
++
++/**
++ * The policy an **operational** run uses, derived from its admitted context
++ * and nothing else. `optional-drivers/1` requires runtime authority and binds
++ * the context's own catalog hash; every other combination is refused rather
++ * than mapped onto a permissive or strict default.
+  */
+ export function inventoryPolicyForContext(context: {
+   readonly inventoryPolicyVersion: string;
++  readonly authority?: string;
++  readonly catalogHash?: string;
+ }): DriverInventoryPolicy {
+   if (context.inventoryPolicyVersion === 'strict/1')
+     return strictInventoryPolicy;
++  if (
++    context.inventoryPolicyVersion === 'optional-drivers/1' &&
++    context.authority === 'runtime' &&
++    typeof context.catalogHash === 'string'
++  )
++    return optionalDriverInventoryPolicy(context.catalogHash);
+   throw new InventoryPolicyError('inventory-policy-unavailable');
+ }
+ 
+diff --git a/services/edge-api/src/ingest/catalog-admission.ts b/services/edge-api/src/ingest/catalog-admission.ts
+index f4325e6..882db8d 100644
+--- a/services/edge-api/src/ingest/catalog-admission.ts
++++ b/services/edge-api/src/ingest/catalog-admission.ts
+@@ -1,5 +1,5 @@
+ import type { IdentityContextConfiguration } from '../identity/catalog/run-context';
+-import { contextFromPin } from '../identity/catalog/run-context';
++import { contextFromPin, pinRequestFor } from '../identity/catalog/run-context';
+ import type {
+   BatchAdmissionRequest,
+   BatchAdmissionReceipt,
+@@ -80,13 +80,18 @@ export async function admitBatchCatalog(
+   };
+   if (result.receipt.state === 'complete')
+     return { receipt: result.receipt, context: null };
+-  const context = await contextFromPin(result.catalog, {
+-    schemaVersion: 1,
+-    runId: request.operationId,
+-    installationId: request.installationId,
+-    season: request.season,
+-    purpose: 'season-batch',
+-    leaseFence: request.leaseFence,
+-  });
++  const context = await contextFromPin(
++    result.catalog,
++    pinRequestFor(
++      {
++        runId: request.operationId,
++        installationId: request.installationId,
++        season: request.season,
++        purpose: 'season-batch',
++        leaseFence: request.leaseFence,
++      },
++      request.schemaVersion === 2 ? 'optional-drivers/1' : 'strict/1',
++    ),
++  );
+   return { receipt: result.receipt, context };
+ }
+diff --git a/services/edge-api/src/ingest/catalog-reference.ts b/services/edge-api/src/ingest/catalog-reference.ts
+index 5ceb2e2..6790117 100644
+--- a/services/edge-api/src/ingest/catalog-reference.ts
++++ b/services/edge-api/src/ingest/catalog-reference.ts
+@@ -4,6 +4,7 @@ import {
+   type IdentityRunContext,
+ } from '../identity/catalog/run-context';
+ import { canonicalJson } from './canonical-json';
++import { batchInventoryPolicyFor } from '../identity/inventory/model';
+ import type { ProviderSeasonSource } from '../providers/formula-one-provider';
+ 
+ export interface CatalogReference {
+@@ -61,6 +62,12 @@ export function catalogReference(
+   exportSha256: string,
+ ): CatalogReference {
+   assertIdentityRunContext(context);
++  // The policy is the admitted context's own, never a caller's label: a
++  // strict context can only produce `strict-v1` and vice versa.
++  const inventoryPolicy = batchInventoryPolicyFor(
++    context.inventoryPolicyVersion,
++  );
++  if (inventoryPolicy === null) throw Error('catalog-reference-invalid');
+   const result = decodeCatalogReference({
+     format: 'gridview-identity-catalog-ref/1',
+     installationId: context.installationId,
+@@ -70,7 +77,7 @@ export function catalogReference(
+     datasetVersion: context.datasetVersion,
+     baseContentDigest: context.baseContentDigest,
+     exportSha256,
+-    inventoryPolicy: 'strict-v1',
++    inventoryPolicy,
+   });
+   if (!result) throw Error('catalog-reference-invalid');
+   return Object.freeze(result);
+@@ -81,10 +88,12 @@ export function matchesCatalog(
+   season: number,
+ ): boolean {
+   assertIdentityRunContext(context);
++  // Exact equality with the reference the pinned context itself produces,
++  // including `inventoryPolicy`: the reviewed artifact's policy must be the
++  // installation's trusted effective policy, in both directions.
+   return (
+     context.authority === 'runtime' &&
+     context.season === season &&
+-    reference.inventoryPolicy === 'strict-v1' &&
+     canonicalJson(reference) ===
+       canonicalJson(catalogReference(context, reference.exportSha256))
+   );
+diff --git a/services/edge-api/src/ingest/service.ts b/services/edge-api/src/ingest/service.ts
+index 2c97422..a70bff6 100644
+--- a/services/edge-api/src/ingest/service.ts
++++ b/services/edge-api/src/ingest/service.ts
+@@ -377,8 +377,19 @@ export class SeasonBatchIngest {
+       const operationId =
+         submission.operationId ??
+         `${digest.slice(0, 8)}-${digest.slice(8, 12)}-4${digest.slice(13, 16)}-8${digest.slice(17, 20)}-${digest.slice(20, 32)}`;
++      // U10: the installation's trusted effective policy, never the
++      // submission's own claim. Legacy v1 batches never gain the optional
++      // policy: under it they are refused before any catalog call.
++      const optional = config.inventoryMode === 'optional-drivers';
++      if (legacy && optional)
++        return this.refused('admission', 'runtime-batch-requires-u7');
+       const request: BatchAdmissionRequest = {
+-        schemaVersion: 1,
++        ...(optional
++          ? {
++              schemaVersion: 2 as const,
++              inventoryPolicy: 'optional-driver-inventory-v1' as const,
++            }
++          : { schemaVersion: 1 as const }),
+         operationId,
+         installationId: config.installationId ?? '',
+         season: admitted.season,
+diff --git a/services/edge-api/src/providers/coordination/coordinated-publication.ts b/services/edge-api/src/providers/coordination/coordinated-publication.ts
+index a72b255..7d6d320 100644
+--- a/services/edge-api/src/providers/coordination/coordinated-publication.ts
++++ b/services/edge-api/src/providers/coordination/coordinated-publication.ts
+@@ -61,6 +61,7 @@ import {
+   type SeasonSnapshotMetadata,
+ } from './season-assembly';
+ import type { SeasonRelation } from './season-integrity';
++import type { SeasonIdentityContext } from './season-identity-closure';
+ 
+ export const COORDINATED_PUBLICATION_OPERATION =
+   'provider.coordination.publication';
+@@ -79,6 +80,12 @@ export interface CoordinatedSeasonPublicationOptions {
+   /** The guarded sequenced publication; there is no legacy alternative. */
+   readonly commands: GuardedPublicationCommands;
+   readonly logger: Logger;
++  /**
++   * U10: the run's single admitted inventory policy and pinned driver
++   * profiles. Omitted by legacy direct wiring, which therefore keeps the
++   * strict, pre-U10 assembly exactly.
++   */
++  readonly identity?: SeasonIdentityContext;
+ }
+ 
+ /** A generated candidate, ready for exactly one guarded publication. */
+@@ -95,12 +102,14 @@ export type CandidatePreparation =
+ export class CoordinatedSeasonPublication {
+   private readonly commands: GuardedPublicationCommands;
+   private readonly logger: Logger;
++  private readonly identity: SeasonIdentityContext | undefined;
+   /** Candidates prepared here and not yet handed over. */
+   private readonly prepared = new WeakSet<PreparedSeasonCandidate>();
+ 
+   constructor(options: CoordinatedSeasonPublicationOptions) {
+     this.commands = options.commands;
+     this.logger = options.logger;
++    this.identity = options.identity;
+   }
+ 
+   /**
+@@ -144,7 +153,7 @@ export class CoordinatedSeasonPublication {
+     generatedAt: string,
+     version: string,
+   ): CandidatePreparation {
+-    const assembly = assembleSeasonSource(run, metadata);
++    const assembly = assembleSeasonSource(run, metadata, this.identity);
+     if (!assembly.complete) {
+       this.logger.warn({
+         operation: COORDINATED_PUBLICATION_OPERATION,
+diff --git a/services/edge-api/src/providers/coordination/season-assembly.ts b/services/edge-api/src/providers/coordination/season-assembly.ts
+index 034fece..f431a69 100644
+--- a/services/edge-api/src/providers/coordination/season-assembly.ts
++++ b/services/edge-api/src/providers/coordination/season-assembly.ts
+@@ -39,6 +39,11 @@ import {
+   validateSeasonReferences,
+   type SeasonRelation,
+ } from './season-integrity';
++import {
++  closeSeasonDriverIdentities,
++  type SeasonIdentityContext,
++} from './season-identity-closure';
++import { validateDriverInventoryPayload } from '../../identity/inventory/validate';
+ import type {
+   CoordinatedPayload,
+   CoordinatedPayloadFor,
+@@ -266,6 +271,7 @@ function selectedPayloads(
+ export function assembleSeasonSource(
+   run: CoordinationRun,
+   metadata: SeasonSnapshotMetadata,
++  identity?: SeasonIdentityContext,
+ ): SeasonAssembly {
+   if (run.status !== 'completed') {
+     return {
+@@ -322,13 +328,14 @@ export function assembleSeasonSource(
+     };
+   }
+ 
+-  // U9 boundary: an optional-driver participants payload carries private
+-  // inventory accounting and omits unresolved rows from `drivers`. Assembling
+-  // it safely needs U10's required-reference closure and the explicit removal
+-  // of that accounting before any public source exists. Until then it is
+-  // refused here, explicitly, rather than silently published as a season
+-  // whose driver set nobody has closed.
+-  if (Object.hasOwn(participants, 'driverInventory')) {
++  // U10 boundary (design §8.2, ADR 0030 D2). The participants contribution
++  // is either the strict five-key payload or, under the run's explicit
++  // optional policy, one carrying private `driverInventory` accounting. Which
++  // one is acceptable is decided by the run's single admitted policy, never
++  // by the payload. Without trusted identity inputs - every pre-U10 caller -
++  // an inventory-bearing payload is refused exactly as U9 refused it.
++  const inventoryBearing = Object.hasOwn(participants, 'driverInventory');
++  if (inventoryBearing && identity === undefined) {
+     return {
+       complete: false,
+       gap: 'inconsistent-references',
+@@ -336,6 +343,13 @@ export function assembleSeasonSource(
+       relations: [],
+     };
+   }
++  const optional = identity?.policy.mode === 'optional-drivers';
++  if (identity !== undefined && inventoryBearing !== optional) {
++    return contextRefusal('driver-inventory-context');
++  }
++  if (optional && !inventoryAccountingAdmissible(participants, identity!)) {
++    return contextRefusal('driver-inventory-context');
++  }
+ 
+   const schedules = new Map<number, readonly Session[]>();
+   for (const entry of selectedPayloads(run, 'event-schedule')) {
+@@ -490,6 +504,31 @@ export function assembleSeasonSource(
+     .slice()
+     .sort((left, right) => left.round - right.round);
+ 
++  // U10 required-identity closure, optional policy only. Strict keeps the
++  // participants profiles verbatim, so its sources are byte-identical to the
++  // pre-U10 ones. The private accounting was consumed above and is never read
++  // again: the public source below is built from named public collections.
++  let drivers = [...participants.drivers] as Driver[];
++  if (optional) {
++    const closure = closeSeasonDriverIdentities({
++      inventoryDrivers: participants.drivers,
++      results: classifications,
++      driverStandings: driverStandingsPayload.standings,
++      driverEntries: [...participants.driverEntries, ...derivation.entries],
++      constructorEntries: participants.constructorEntries,
++      profiles: identity!.profiles,
++    });
++    if (!closure.ok) {
++      return contextRefusal(
++        closure.problem === 'duplicate-inventory-driver' ||
++          closure.problem === 'inventory-profile-mismatch'
++          ? 'driver-inventory-context'
++          : 'required-driver-profile',
++      );
++    }
++    drivers = [...closure.drivers];
++  }
++
+   const source: ProviderSeasonSource = {
+     season: run.season,
+     contentVersion: metadata.contentVersion,
+@@ -499,7 +538,7 @@ export function assembleSeasonSource(
+     seasonLabel: metadata.seasonLabel,
+     calendar,
+     results,
+-    drivers: [...participants.drivers] as Driver[],
++    drivers,
+     constructors: [...participants.constructors] as Constructor[],
+     circuits: [...circuitsPayload.circuits] as Circuit[],
+     // The contribution carries no participation evidence (ADR 0026 D11): the
+@@ -537,3 +576,39 @@ export function assembleSeasonSource(
+ 
+   return { complete: true, source };
+ }
++
++/** A U10 identity-boundary refusal: one closed relation, nothing else. */
++function contextRefusal(relation: SeasonRelation): SeasonAssembly {
++  return {
++    complete: false,
++    gap: 'inconsistent-references',
++    missing: [],
++    relations: [relation],
++  };
++}
++
++/**
++ * Re-checks the coordinator-validated accounting against the run's own
++ * policy and pinned catalog at the consumption boundary. The coordinator
++ * already recomputed the digest on its detached snapshot; this re-applies the
++ * closed structural rules and binds both hashes to the same pinned context.
++ * The digest is an integrity checksum over the projection, never an
++ * authentication of source completeness.
++ */
++function inventoryAccountingAdmissible(
++  participants: object,
++  identity: SeasonIdentityContext,
++): boolean {
++  const policy = identity.policy;
++  if (policy.mode !== 'optional-drivers') return false;
++  if (policy.catalogHash !== identity.profiles.catalogHash) return false;
++  const accounting = (participants as { driverInventory?: unknown })
++    .driverInventory as { projectionDigest?: unknown } | undefined;
++  const digest =
++    typeof accounting?.projectionDigest === 'string'
++      ? accounting.projectionDigest
++      : null;
++  return (
++    validateDriverInventoryPayload(participants, policy, digest).length === 0
++  );
++}
+diff --git a/services/edge-api/src/providers/coordination/season-integrity.ts b/services/edge-api/src/providers/coordination/season-integrity.ts
+index a8bf5b8..83d32ed 100644
+--- a/services/edge-api/src/providers/coordination/season-integrity.ts
++++ b/services/edge-api/src/providers/coordination/season-integrity.ts
+@@ -209,6 +209,24 @@ export const seasonRelations = [
+   'driver-entry-support',
+   /** Two payloads claiming one identity that storage keys a single row on. */
+   'duplicate-identity',
++  /**
++   * U10 internal boundary, reported by assembly only - never by
++   * `validateSeasonReferences`. The participants contribution's private
++   * driver-inventory accounting disagrees with the run's single admitted
++   * inventory policy or pinned catalog: accounting under a strict policy, no
++   * accounting under the optional policy, a different catalog hash, closed
++   * accounting problems, a duplicate inventory identity, or an inventory
++   * profile that differs from the pinned profile of its identity.
++   */
++  'driver-inventory-context',
++  /**
++   * U10 internal boundary, reported by assembly only. A driver identity the
++   * selected resources require - a result entry, a fastest lap, a standing,
++   * a derived span or a constructor lineup - has no complete, valid,
++   * season-bound profile in the run's pinned catalog. Never repaired by
++   * creating an identity or copying a predecessor profile.
++   */
++  'required-driver-profile',
+ ] as const;
+ 
+ export type SeasonRelation = (typeof seasonRelations)[number];
+diff --git a/services/edge-api/src/sync/coordinated/composition.ts b/services/edge-api/src/sync/coordinated/composition.ts
+index 1a3bf90..8815626 100644
+--- a/services/edge-api/src/sync/coordinated/composition.ts
++++ b/services/edge-api/src/sync/coordinated/composition.ts
+@@ -49,6 +49,7 @@ import {
+   type IdentityContextConfiguration,
+ } from '../../identity/catalog/run-context';
+ import { bundledIdentityContent } from '../../identity/catalog/bundled-context';
++import { pinnedDriverProfiles } from '../../identity/catalog/closure-profiles';
+ import {
+   inventoryPolicyForContext,
+   strictInventoryPolicy,
+@@ -258,15 +259,17 @@ export function composeCoordinatedRuntime(
+     dependencies.identity.mode !== 'bundled'
+   )
+     throw new CatalogAdmissionError('catalog-invalid');
+-  // U9: one inventory policy for the whole run, derived from the admitted
+-  // context and handed to both the port and the coordinator, so the
+-  // coordinator validates against the trusted value rather than a payload's
+-  // own claim. Before U10 only strict exists: an operational configuration
+-  // other than strict is refused, and so is a context claiming another policy.
+-  if (
+-    dependencies.identity?.inventoryMode !== undefined &&
+-    dependencies.identity.inventoryMode !== 'strict'
+-  )
++  // One inventory policy for the whole run, derived from the admitted context
++  // and handed to the participants port, the coordinator and assembly, so
++  // each validates against the trusted value rather than a payload's own
++  // claim. The configuration that selected it and the context whose durable
++  // pin recorded it must agree exactly: a context admitted under another
++  // policy, a legacy direct composition under the optional policy, or any
++  // unknown value is refused, never mapped onto strict.
++  const configured = dependencies.identity?.inventoryMode ?? 'strict';
++  if (configured !== 'strict' && configured !== 'optional-drivers')
++    throw new CatalogAdmissionError('catalog-invalid');
++  if (configured === 'optional-drivers' && !context)
+     throw new CatalogAdmissionError('catalog-invalid');
+   let inventoryPolicy = strictInventoryPolicy;
+   try {
+@@ -274,6 +277,8 @@ export function composeCoordinatedRuntime(
+   } catch {
+     throw new CatalogAdmissionError('catalog-invalid');
+   }
++  if (inventoryPolicy.mode !== configured)
++    throw new CatalogAdmissionError('catalog-invalid');
+   const { client, limiter: pacer } = transport.runtime;
+   const { guarded, ledger, logger } = dependencies;
+   if (!guarded || !ledger)
+@@ -333,6 +338,16 @@ export function composeCoordinatedRuntime(
+   const publication = new CoordinatedSeasonPublication({
+     commands: guarded,
+     logger,
++    // U10: assembly closes required identities over this run's pinned
++    // profiles under the same policy. Legacy direct composition has none.
++    ...(context
++      ? {
++          identity: Object.freeze({
++            policy: inventoryPolicy,
++            profiles: pinnedDriverProfiles(context),
++          }),
++        }
++      : {}),
+   });
+ 
+   return {
+diff --git a/services/edge-api/test/providers/jolpica/driver-inventory.test.ts b/services/edge-api/test/providers/jolpica/driver-inventory.test.ts
+index 9f61b2c..f9979f2 100644
+--- a/services/edge-api/test/providers/jolpica/driver-inventory.test.ts
++++ b/services/edge-api/test/providers/jolpica/driver-inventory.test.ts
+@@ -252,11 +252,20 @@ describe('U9 inventory policy vocabulary', () => {
+     expect(getter).not.toHaveBeenCalled();
+   });
+ 
+-  it('derives only strict from an operational run context before U10', () => {
++  it('derives strict from a strict context and refuses unknown or non-runtime optional versions', () => {
++    // U10 widened the closed vocabulary to `optional-drivers/1` (runtime only);
++    // the strict default and every unknown version keep their U9 answers.
+     expect(inventoryPolicyForContext(runContext)).toBe(strictInventoryPolicy);
+     expect(() =>
+       inventoryPolicyForContext({ inventoryPolicyVersion: 'optional/1' }),
+     ).toThrow(InventoryPolicyError);
++    expect(() =>
++      inventoryPolicyForContext({
++        inventoryPolicyVersion: 'optional-drivers/1',
++        authority: 'bundled',
++        catalogHash: runContext.catalogHash,
++      }),
++    ).toThrow(InventoryPolicyError);
+     expect(() => optionalDriverInventoryPolicy('not-a-hash')).toThrow(
+       InventoryPolicyError,
+     );
+@@ -290,11 +299,17 @@ describe('U9 operational gate (T35, acceptance 36-37)', () => {
+       );
+   });
+ 
+-  it('keeps optional-drivers unavailable to every operational configuration before U10', () => {
+-    expect(resolveOperationalInventoryMode()).toBe('strict');
+-    expect(() => resolveOperationalInventoryMode('optional-drivers')).toThrow(
+-      ConfigurationError,
++  it('keeps optional-drivers unavailable to bundled, compare and incomplete runtime configuration', () => {
++    // U10 replaced the U9 blanket refusal: runtime with a binding and an
++    // installation is accepted (test/identity/catalog/inventory-policy.test.ts);
++    // every configuration below still refuses it.
++    expect(resolveOperationalInventoryMode(undefined, 'bundled')).toBe(
++      'strict',
+     );
++    for (const mode of ['bundled', 'compare'] as const)
++      expect(() =>
++        resolveOperationalInventoryMode('optional-drivers', mode),
++      ).toThrow(ConfigurationError);
+     expect(identityConfiguration({}).inventoryMode).toBe('strict');
+     for (const mode of ['bundled', 'compare', 'runtime'])
+       expect(() =>
+diff --git a/services/edge-api/test/season-batch/cli.test.mjs b/services/edge-api/test/season-batch/cli.test.mjs
+index d861991..9cae972 100644
+--- a/services/edge-api/test/season-batch/cli.test.mjs
++++ b/services/edge-api/test/season-batch/cli.test.mjs
+@@ -106,6 +106,35 @@ describe('season-batch CLI: arguments', () => {
+   ])('refuses %j', (argv, reason) => {
+     expect(parseArguments(argv)).toEqual({ ok: false, reason });
+   });
++
++  // U10: the private batch-v2 inventory policy is an explicit flag only.
++  it('parses an explicit --inventory-policy once and never infers it', () => {
++    const base = ['--capture', 'c', '--out', 'o'];
++    expect(
++      parseArguments([
++        ...base,
++        '--inventory-policy',
++        'optional-driver-inventory-v1',
++      ]),
++    ).toMatchObject({
++      ok: true,
++      inventoryPolicy: 'optional-driver-inventory-v1',
++    });
++    expect(
++      parseArguments([
++        ...base,
++        '--inventory-policy',
++        'strict-v1',
++        '--inventory-policy',
++        'strict-v1',
++      ]),
++    ).toEqual({ ok: false, reason: 'repeated-argument' });
++    expect(parseArguments([...base, '--inventory-policy'])).toEqual({
++      ok: false,
++      reason: 'missing-value',
++    });
++    expect(parseArguments(base)).not.toHaveProperty('inventoryPolicy');
++  });
+ });
+ 
+ describe('season-batch CLI: paths', () => {
+diff --git a/services/edge-api/test/sync/coordinated/entry-points/inventory-mode.test.ts b/services/edge-api/test/sync/coordinated/entry-points/inventory-mode.test.ts
+index 16bd1f3..4795be7 100644
+--- a/services/edge-api/test/sync/coordinated/entry-points/inventory-mode.test.ts
++++ b/services/edge-api/test/sync/coordinated/entry-points/inventory-mode.test.ts
+@@ -83,3 +83,39 @@ describe('U9 inventory mode cannot be enabled operationally before U10', () => {
+     expect(explicit.body.data).toEqual(absent.body.data);
+   });
+ });
++
++/**
++ * U10 replaced U9's blanket refusal: `optional-drivers` is accepted only with
++ * runtime catalog authority, a UUID installation and a catalog binding. Every
++ * incomplete runtime configuration is still the same bounded configuration
++ * refusal before any lease, limiter reservation or provider request. (The
++ * complete runtime path is exercised against a real SQLite catalog in
++ * `test/identity/integration/optional-inventory.test.mjs`.)
++ */
++describe('U10 optional inventory needs a complete runtime catalog authority', () => {
++  it.each([
++    [
++      'runtime without installation or binding',
++      { IDENTITY_CATALOG_MODE: 'runtime' },
++    ],
++    [
++      'runtime with an installation but no binding',
++      {
++        IDENTITY_CATALOG_MODE: 'runtime',
++        IDENTITY_INSTALLATION_ID: '44444444-4444-4444-8444-444444444444',
++      },
++    ],
++    ['compare', { IDENTITY_CATALOG_MODE: 'compare' }],
++  ])('refuses %s before any provider request', async (_, env) => {
++    const harness = await EntryPointHarness.create('local', bind, {
++      env: { ...env, IDENTITY_INVENTORY_MODE: 'optional-drivers' },
++    });
++    const answer = await harness.manual(PRE_SEASON);
++    expect(answer.status).toBe(500);
++    expect(answer.requests).toEqual([]);
++    expect(answer.reservations).toBe(0);
++    expect([answer.prepares, answer.finalizes, answer.storageWrites]).toEqual([
++      0, 0, 0,
++    ]);
++  });
++});
+diff --git a/services/edge-api/src/identity/catalog/closure-profiles.ts b/services/edge-api/src/identity/catalog/closure-profiles.ts
+new file mode 100644
+index 0000000..73f37f4
+--- /dev/null
++++ b/services/edge-api/src/identity/catalog/closure-profiles.ts
+@@ -0,0 +1,46 @@
++/**
++ * U10: the pinned driver-profile view required-identity closure reads.
++ *
++ * Built once from an **admitted** `IdentityRunContext`. Every lookup answers
++ * from that context's immutable profiles and verified bindings, so a catalog
++ * activation after admission can never change what one run supplements, and no
++ * lookup reaches a current head, a namespace or the network.
++ */
++
++import type { CuratedDriver } from '../../providers/jolpica/curated-participants';
++import {
++  assertIdentityRunContext,
++  type IdentityRunContext,
++} from './run-context';
++
++/**
++ * Structurally the coordination package's `PinnedDriverProfiles`; declared
++ * here so this module adds no import edge into that package (the
++ * coordination-containment consumer list stays exact).
++ */
++export interface PinnedDriverProfileView {
++  readonly catalogHash: string;
++  driverById(id: string): CuratedDriver | null;
++  isVerifiedSeasonDriver(id: string): boolean;
++}
++
++export function pinnedDriverProfiles(
++  context: IdentityRunContext,
++): PinnedDriverProfileView {
++  assertIdentityRunContext(context);
++  const bound = new Set(
++    context.verifiedBindings
++      .filter(
++        (b) =>
++          b.key.season === context.season &&
++          b.key.source === 'jolpica' &&
++          b.key.entity === 'driver',
++      )
++      .map((b) => b.targetId),
++  );
++  return Object.freeze({
++    catalogHash: context.catalogHash,
++    driverById: (id: string) => context.participants.driverById(id),
++    isVerifiedSeasonDriver: (id: string) => bound.has(id),
++  });
++}
+diff --git a/services/edge-api/src/providers/coordination/season-identity-closure.ts b/services/edge-api/src/providers/coordination/season-identity-closure.ts
+new file mode 100644
+index 0000000..c557f84
+--- /dev/null
++++ b/services/edge-api/src/providers/coordination/season-identity-closure.ts
+@@ -0,0 +1,219 @@
++/**
++ * U10: required driver identity closure (design §8.2, ADR 0030 D2).
++ *
++ * Under the explicit `optional-drivers` policy a provider driver inventory may
++ * omit a driver that a selected race result or standings row still requires,
++ * because the inventory and the classifications are separate provider
++ * resources. This module closes the season's public driver set over every
++ * required reference, using **only** profiles that are already verified in the
++ * same pinned catalog revision the run admitted:
++ *
++ * ```text
++ * required = driver IDs of every selected race result entry
++ *          ∪ every non-null selected fastestLap.driverId
++ *          ∪ every selected driver standing
++ *          ∪ every derived participation span driver
++ *          ∪ every non-null constructor-lineup driver reference
++ * output   = verified inventory profiles (provider order)
++ *          ++ (required − inventory), in exact canonical-ID order
++ * ```
++ *
++ * What it never does:
++ *
++ * - synthesize an identity, a fallback profile or a profile from provider
++ *   names - a required ID without a complete pinned profile is a refusal;
++ * - add every curated driver, or any driver nothing requires;
++ * - create, extend or infer a participation span, a team or a constructor
++ *   association: it returns profiles only, and span derivation stays
++ *   `deriveDriverSeasonEntries`'s;
++ * - read a mutable catalog head, the network or a clock.
++ *
++ * Pure and deterministic. Problems are closed codes and never carry a value.
++ */
++
++import type {
++  ConstructorSeasonEntry,
++  Driver,
++  DriverSeasonEntry,
++  DriverStanding,
++  RaceResult,
++} from '../../contract/types';
++import { validateDriver } from '../../contract/normalized';
++import type { DriverInventoryPolicy } from '../../identity/inventory/model';
++
++/**
++ * The verified driver profiles of one pinned catalog revision, for one season.
++ *
++ * Built once from the admitted `IdentityRunContext` (see
++ * `identity/catalog/closure-profiles.ts`), never from a current head.
++ */
++export interface PinnedDriverProfiles {
++  /** The catalog hash of the admitted run context. */
++  readonly catalogHash: string;
++  /** A fresh copy of the pinned canonical profile, or `null`. */
++  driverById(id: string): Omit<Driver, 'media'> | null;
++  /**
++   * Whether the pinned revision holds a verified Jolpica driver binding for
++   * this season targeting `id`. A profile without one was never admitted as a
++   * season identity and cannot be supplemented.
++   */
++  isVerifiedSeasonDriver(id: string): boolean;
++}
++
++/** The trusted identity inputs assembly receives for one whole run. */
++export interface SeasonIdentityContext {
++  /** The run's single admitted inventory policy. */
++  readonly policy: DriverInventoryPolicy;
++  readonly profiles: PinnedDriverProfiles;
++}
++
++export interface SeasonIdentityClosureInput {
++  /** The verified inventory profiles, in provider order. */
++  readonly inventoryDrivers: readonly Driver[];
++  /** Every selected race classification. */
++  readonly results: readonly RaceResult[];
++  readonly driverStandings: readonly DriverStanding[];
++  /** The derived participation spans (and any contributed entries). */
++  readonly driverEntries: readonly DriverSeasonEntry[];
++  readonly constructorEntries: readonly ConstructorSeasonEntry[];
++  readonly profiles: PinnedDriverProfiles;
++}
++
++/** Closed problem codes. Never an identifier. */
++export const identityClosureProblems = [
++  /** Two inventory profiles share one canonical identity. */
++  'duplicate-inventory-driver',
++  /** An inventory profile differs from the pinned profile of its identity. */
++  'inventory-profile-mismatch',
++  /** A required identity has no pinned profile. */
++  'missing-profile',
++  /** The pinned profile answers for a different identity. */
++  'contradictory-profile',
++  /** The pinned profile fails deep driver validation. */
++  'invalid-profile',
++  /** The identity has no verified season binding in the pinned revision. */
++  'unbound-profile',
++] as const;
++
++export type IdentityClosureProblem = (typeof identityClosureProblems)[number];
++
++export type SeasonIdentityClosure =
++  | {
++      readonly ok: true;
++      /** Inventory profiles, then supplemented profiles in exact-ID order. */
++      readonly drivers: readonly Driver[];
++      /** Exact-ID order; the supplemented subset of `drivers`. */
++      readonly supplemented: readonly string[];
++    }
++  | { readonly ok: false; readonly problem: IdentityClosureProblem };
++
++/** Exact UTF-16 code-unit order: locale-independent and total. */
++function exactOrder(left: string, right: string): number {
++  return left < right ? -1 : left > right ? 1 : 0;
++}
++
++/** The required driver identity set, exactly as design §8.2 defines it. */
++export function requiredDriverIds(
++  input: Omit<SeasonIdentityClosureInput, 'inventoryDrivers' | 'profiles'>,
++): ReadonlySet<string> {
++  const required = new Set<string>();
++  for (const result of input.results) {
++    for (const entry of result.entries) required.add(entry.driverId);
++    const fastest = result.fastestLap?.driverId ?? null;
++    if (fastest !== null) required.add(fastest);
++  }
++  for (const standing of input.driverStandings) required.add(standing.driverId);
++  for (const entry of input.driverEntries) required.add(entry.driverId);
++  for (const entry of input.constructorEntries) {
++    // A null lineup is "GridView records no lineup", never a reference.
++    for (const driverId of entry.driverLineup ?? []) required.add(driverId);
++  }
++  return required;
++}
++
++/** One pinned profile, deep-validated, or the closed reason it is unusable. */
++function pinnedProfile(
++  profiles: PinnedDriverProfiles,
++  id: string,
++): Driver | IdentityClosureProblem {
++  const profile = profiles.driverById(id);
++  if (profile === null) return 'missing-profile';
++  // The same media policy every Jolpica profile projection applies.
++  const driver = { ...profile, media: null } as Driver;
++  if (driver.id !== id) return 'contradictory-profile';
++  if (validateDriver(driver, 'driver').length > 0) return 'invalid-profile';
++  if (!profiles.isVerifiedSeasonDriver(id)) return 'unbound-profile';
++  return driver;
++}
++
++/**
++ * Structural equality, independent of key order. Every `Driver` field is a
++ * scalar today; comparing structurally keeps a future array or object field
++ * from turning every inventory profile into a spurious mismatch.
++ */
++function sameValue(left: unknown, right: unknown): boolean {
++  if (left === right) return true;
++  if (
++    typeof left !== 'object' ||
++    typeof right !== 'object' ||
++    left === null ||
++    right === null ||
++    Array.isArray(left) !== Array.isArray(right)
++  )
++    return false;
++  const keys = Object.keys(right);
++  return (
++    Object.keys(left).length === keys.length &&
++    keys.every(
++      (key) =>
++        Object.hasOwn(left, key) &&
++        sameValue(
++          (left as Record<string, unknown>)[key],
++          (right as Record<string, unknown>)[key],
++        ),
++    )
++  );
++}
++
++function sameProfile(left: Driver, right: Driver): boolean {
++  return sameValue(left, right);
++}
++
++/**
++ * Closes the season's public driver set over every required reference.
++ *
++ * Every inventory profile is re-checked against the pinned profile of its
++ * identity, so a coordination payload can never disagree with the run's
++ * catalog. Every supplemented profile is loaded from the same pinned profiles
++ * and deep-validated here, not only those that passed through a provider port.
++ */
++export function closeSeasonDriverIdentities(
++  input: SeasonIdentityClosureInput,
++): SeasonIdentityClosure {
++  const inventoryIds = new Set<string>();
++  const drivers: Driver[] = [];
++  for (const driver of input.inventoryDrivers) {
++    if (inventoryIds.has(driver.id))
++      return { ok: false, problem: 'duplicate-inventory-driver' };
++    inventoryIds.add(driver.id);
++    const pinned = pinnedProfile(input.profiles, driver.id);
++    if (typeof pinned === 'string') return { ok: false, problem: pinned };
++    if (!sameProfile(driver, pinned))
++      return { ok: false, problem: 'inventory-profile-mismatch' };
++    drivers.push(pinned);
++  }
++
++  const supplemented = [...requiredDriverIds(input)]
++    .filter((id) => !inventoryIds.has(id))
++    .sort(exactOrder);
++  for (const id of supplemented) {
++    const pinned = pinnedProfile(input.profiles, id);
++    if (typeof pinned === 'string') return { ok: false, problem: pinned };
++    drivers.push(pinned);
++  }
++  return {
++    ok: true,
++    drivers: Object.freeze(drivers),
++    supplemented: Object.freeze(supplemented),
++  };
++}
+diff --git a/services/edge-api/test/identity/catalog/inventory-policy.test.ts b/services/edge-api/test/identity/catalog/inventory-policy.test.ts
+new file mode 100644
+index 0000000..1d6c595
+--- /dev/null
++++ b/services/edge-api/test/identity/catalog/inventory-policy.test.ts
+@@ -0,0 +1,286 @@
++/**
++ * U10: whole-run inventory policy selection, durable pin provenance and
++ * batch-v2 reference discrimination (design §6.3, §9.2, §11.1; ADR 0030 D4,
++ * ADR 0031 D2/D4).
++ *
++ * Pure and in-memory. The namespace doubles record what would be sent and
++ * never reach a network; the global `fetch` throws.
++ */
++
++import { readFileSync, readdirSync } from 'node:fs';
++import { join } from 'node:path';
++
++import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
++
++import {
++  ConfigurationError,
++  resolveOperationalInventoryMode,
++} from '../../../src/config/environment';
++import {
++  decodePinRequest,
++  pinInventoryPolicyVersion,
++  samePinExecution,
++} from '../../../src/identity/catalog/pin-contract';
++import {
++  CatalogAdmissionError,
++  admitIdentityContext,
++  bundledRunContext,
++  identityConfiguration,
++  pinRequestFor,
++} from '../../../src/identity/catalog/run-context';
++import {
++  batchInventoryPolicyFor,
++  inventoryPolicyForContext,
++  inventoryPolicyVersionFor,
++} from '../../../src/identity/inventory/model';
++import { CapturingLogger } from '../../../src/logging/logger';
++
++const INSTALLATION = '44444444-4444-4444-8444-444444444444';
++const RUN = '55555555-5555-4555-8555-555555555555';
++
++beforeEach(() => {
++  vi.stubGlobal(
++    'fetch',
++    vi.fn(() => {
++      throw new Error('U10 network forbidden');
++    }),
++  );
++});
++afterEach(() => vi.unstubAllGlobals());
++
++function recordingNamespace(status = 503) {
++  const bodies: unknown[] = [];
++  return {
++    bodies,
++    namespace: {
++      idFromName: (name: string) => name,
++      get: () => ({
++        fetch: async (_url: string, init?: RequestInit) => {
++          bodies.push(JSON.parse(String(init?.body)));
++          return new Response('{}', { status });
++        },
++      }),
++    },
++  };
++}
++
++describe('U10 operational inventory selection (§11.1)', () => {
++  it('accepts optional-drivers only with runtime authority, a UUID installation and a catalog binding', () => {
++    const { namespace } = recordingNamespace();
++    expect(
++      identityConfiguration({
++        IDENTITY_CATALOG_MODE: 'runtime',
++        IDENTITY_INSTALLATION_ID: INSTALLATION,
++        IDENTITY_CATALOG: namespace as never,
++        IDENTITY_INVENTORY_MODE: 'optional-drivers',
++      }).inventoryMode,
++    ).toBe('optional-drivers');
++    const refused = [
++      { IDENTITY_CATALOG_MODE: 'bundled' },
++      { IDENTITY_CATALOG_MODE: 'compare' },
++      { IDENTITY_CATALOG_MODE: 'runtime' },
++      {
++        IDENTITY_CATALOG_MODE: 'runtime',
++        IDENTITY_INSTALLATION_ID: INSTALLATION,
++      },
++      {
++        IDENTITY_CATALOG_MODE: 'runtime',
++        IDENTITY_INSTALLATION_ID: 'not-a-uuid',
++        IDENTITY_CATALOG: namespace,
++      },
++      { IDENTITY_CATALOG_MODE: 'runtime', IDENTITY_CATALOG: namespace },
++    ];
++    for (const env of refused)
++      expect(() =>
++        identityConfiguration({
++          ...env,
++          IDENTITY_INVENTORY_MODE: 'optional-drivers',
++        } as never),
++      ).toThrow(ConfigurationError);
++  });
++
++  it('keeps strict the default and refuses unknown values without falling back', () => {
++    expect(resolveOperationalInventoryMode(undefined, 'runtime')).toBe(
++      'strict',
++    );
++    expect(resolveOperationalInventoryMode('strict', 'compare')).toBe('strict');
++    for (const bad of ['Optional-drivers', 'optional', 'off', ''])
++      expect(() => resolveOperationalInventoryMode(bad, 'runtime')).toThrow(
++        ConfigurationError,
++      );
++  });
++
++  it('admits an optional runtime run only through a schema-2 durable pin request', async () => {
++    const recorder = recordingNamespace(503);
++    await expect(
++      admitIdentityContext(
++        {
++          mode: 'runtime',
++          installationId: INSTALLATION,
++          namespace: recorder.namespace,
++          inventoryMode: 'optional-drivers',
++        },
++        {
++          runId: RUN,
++          season: 2026,
++          purpose: 'manual',
++          leaseFence: 3,
++        },
++        new CapturingLogger(),
++      ),
++    ).rejects.toThrow(CatalogAdmissionError);
++    // Both bounded attempts carried the identical optional request.
++    expect(recorder.bodies).toHaveLength(2);
++    expect(recorder.bodies[0]).toEqual({
++      schemaVersion: 2,
++      runId: RUN,
++      installationId: INSTALLATION,
++      season: 2026,
++      purpose: 'manual',
++      leaseFence: 3,
++      inventoryPolicy: 'optional-driver-inventory-v1',
++    });
++    expect(recorder.bodies[1]).toEqual(recorder.bodies[0]);
++  });
++
++  it('sends the exact pre-U10 schema-1 request for strict runtime runs', async () => {
++    const recorder = recordingNamespace(503);
++    await expect(
++      admitIdentityContext(
++        {
++          mode: 'runtime',
++          installationId: INSTALLATION,
++          namespace: recorder.namespace,
++        },
++        { runId: RUN, season: 2026, purpose: 'scheduled', leaseFence: null },
++        new CapturingLogger(),
++      ),
++    ).rejects.toThrow(CatalogAdmissionError);
++    expect(Object.keys(recorder.bodies[0] as object).sort()).toEqual(
++      [
++        'installationId',
++        'leaseFence',
++        'purpose',
++        'runId',
++        'schemaVersion',
++        'season',
++      ].sort(),
++    );
++    expect(
++      (recorder.bodies[0] as { schemaVersion: number }).schemaVersion,
++    ).toBe(1);
++  });
++
++  it('refuses bundled, compare and unknown inventory modes at admission before any catalog call', async () => {
++    const recorder = recordingNamespace(200);
++    for (const config of [
++      { mode: 'bundled' as const, inventoryMode: 'optional-drivers' as const },
++      { mode: 'compare' as const, inventoryMode: 'optional-drivers' as const },
++      { mode: 'runtime' as const, inventoryMode: 'permissive' as never },
++    ]) {
++      await expect(
++        admitIdentityContext(
++          {
++            ...config,
++            installationId: INSTALLATION,
++            namespace: recorder.namespace,
++          },
++          { runId: RUN, season: 2026, purpose: 'manual', leaseFence: 1 },
++          new CapturingLogger(),
++        ),
++      ).rejects.toMatchObject({ failure: 'catalog-invalid' });
++    }
++    expect(recorder.bodies).toEqual([]);
++  });
++});
++
++describe('U10 durable pin request schemas', () => {
++  const base = {
++    runId: RUN,
++    installationId: INSTALLATION,
++    season: 2026,
++    purpose: 'manual' as const,
++    leaseFence: 1,
++  };
++
++  it('decodes closed schema-1 and schema-2 requests and nothing in between', () => {
++    expect(decodePinRequest({ schemaVersion: 1, ...base })).toEqual({
++      schemaVersion: 1,
++      ...base,
++    });
++    const optional = {
++      schemaVersion: 2,
++      ...base,
++      inventoryPolicy: 'optional-driver-inventory-v1',
++    };
++    expect(decodePinRequest(optional)).toEqual(optional);
++    for (const bad of [
++      { schemaVersion: 2, ...base },
++      { schemaVersion: 2, ...base, inventoryPolicy: 'strict-v1' },
++      {
++        schemaVersion: 1,
++        ...base,
++        inventoryPolicy: 'optional-driver-inventory-v1',
++      },
++      {
++        schemaVersion: 3,
++        ...base,
++        inventoryPolicy: 'optional-driver-inventory-v1',
++      },
++    ])
++      expect(() => decodePinRequest(bad)).toThrow();
++  });
++
++  it('treats the same run ID under another policy as a different execution', () => {
++    const strict = pinRequestFor(base, 'strict/1');
++    const optional = pinRequestFor(base, 'optional-drivers/1');
++    expect(strict).toEqual({ schemaVersion: 1, ...base });
++    expect(samePinExecution(strict, optional)).toBe(false);
++    expect(samePinExecution(optional, { ...optional, leaseFence: 9 })).toBe(
++      true,
++    );
++    expect(pinInventoryPolicyVersion(strict)).toBe('strict/1');
++    expect(pinInventoryPolicyVersion(optional)).toBe('optional-drivers/1');
++  });
++});
++
++describe('U10 policy vocabulary', () => {
++  it('maps run-context and batch vocabularies exactly and closed', () => {
++    expect(batchInventoryPolicyFor('strict/1')).toBe('strict-v1');
++    expect(batchInventoryPolicyFor('optional-drivers/1')).toBe(
++      'optional-driver-inventory-v1',
++    );
++    expect(inventoryPolicyVersionFor('optional-driver-inventory-v1')).toBe(
++      'optional-drivers/1',
++    );
++    for (const bad of ['toString', '__proto__', 'strict', null, 1])
++      expect(batchInventoryPolicyFor(bad)).toBeNull();
++    expect(inventoryPolicyVersionFor('strict')).toBeNull();
++  });
++
++  it('never derives the optional policy from a bundled context, even if relabeled', async () => {
++    const bundled = await bundledRunContext({ runId: RUN, season: 2026 });
++    expect(bundled.inventoryPolicyVersion).toBe('strict/1');
++    expect(() =>
++      inventoryPolicyForContext({
++        ...bundled,
++        inventoryPolicyVersion: 'optional-drivers/1',
++      }),
++    ).toThrow();
++  });
++});
++
++describe('U10 committed environments never select the optional policy (acceptance 37)', () => {
++  it('no wrangler configuration or committed env file sets IDENTITY_INVENTORY_MODE', () => {
++    const root = join(__dirname, '..', '..', '..');
++    const configs = readdirSync(root).filter(
++      (name) => /^wrangler.*\.toml$/.test(name) || /^\.dev\.vars/.test(name),
++    );
++    expect(configs.length).toBeGreaterThan(0);
++    for (const name of configs) {
++      const text = readFileSync(join(root, name), 'utf8');
++      expect(text, name).not.toContain('IDENTITY_INVENTORY_MODE');
++      expect(text, name).not.toContain('optional-drivers');
++    }
++  });
++});
+diff --git a/services/edge-api/test/identity/integration/optional-inventory.test.mjs b/services/edge-api/test/identity/integration/optional-inventory.test.mjs
+new file mode 100644
+index 0000000..6900c91
+--- /dev/null
++++ b/services/edge-api/test/identity/integration/optional-inventory.test.mjs
+@@ -0,0 +1,413 @@
++/**
++ * U10 persistent local integration (design §11.3 step 8, §12 T16-T18, T23-T25,
++ * T31, T34-T35): optional-driver inventory over a real workerd SQLite
++ * `IdentityCatalog`, with an explicit installation UUID, a durable run pin,
++ * the reconciliation ledger lease, controlled recorded provider responses and
++ * the real guarded sequenced publisher.
++ *
++ * Synthetic identities and the reviewed R0 corpus only. Every Worker outbound
++ * request throws; the Node `fetch` is guarded; provider bodies come from the
++ * in-memory Jolpica double. No real identity is approved.
++ */
++import {
++  afterAll,
++  afterEach,
++  beforeAll,
++  beforeEach,
++  expect,
++  it,
++  vi,
++} from 'vitest';
++import {
++  assertNoExternalNetwork,
++  evidence,
++  guardNetwork,
++  localInstallation,
++  namespaceBridge,
++  reviewedProfile,
++} from './support.mjs';
++import { EntryPointHarness } from '../../sync/coordinated/entry-points/support';
++import {
++  paths,
++  resultsBody,
++  tickAfter,
++} from '../../sync/coordinated/observation/support';
++import {
++  driverRow,
++  driversEnvelope,
++  fullSeasonDriverRows,
++} from '../../providers/jolpica/participants-support';
++import {
++  canonicalDriver,
++  providerDrivers,
++} from '../../providers/jolpica/results-support';
++import { composeCoordinatedRuntime } from '../../../src/sync/coordinated/composition';
++import { generateSeasonBatch } from '../../../scripts/season-batch/generate';
++import { fixtureCapture, inputFor } from '../../season-batch/support';
++
++const injected = vi.hoisted(() => ({ ledger: null }));
++vi.mock('../../../src/sync/coordinated/ledger-port', async (original) => ({
++  ...(await original()),
++  resolveReconciliationLedger: () => injected.ledger?.() ?? null,
++}));
++vi.mock('../../../src/sync/coordinated/composition', async (original) => {
++  const actual = await original();
++  return {
++    ...actual,
++    composeCoordinatedRuntime: vi.fn(actual.composeCoordinatedRuntime),
++  };
++});
++
++const UNKNOWN = 'synthetic_u10_local_unknown';
++const PRIVATE = [
++  'driverInventory',
++  'candidateId',
++  'observationKeyHash',
++  'projectionDigest',
++  'inventoryPolicy',
++  'optional-driver',
++  UNKNOWN,
++];
++
++let catalog, root, wrapper;
++beforeAll(async () => {
++  catalog = await localInstallation();
++}, 60000);
++afterAll(async () => catalog?.stop());
++beforeEach(() => {
++  guardNetwork();
++  vi.mocked(composeCoordinatedRuntime).mockClear();
++});
++afterEach(() => vi.unstubAllGlobals());
++
++const current = () =>
++  vi.mocked(composeCoordinatedRuntime).mock.calls.at(-1)?.[1];
++
++async function documents(h) {
++  const version = h.activeVersion();
++  if (version === null) return [];
++  const names = await h.harness.storage.readVersionInventory(2026, version);
++  return Promise.all(
++    names.map((name) =>
++      h.harness.storage.readVersionedDocument(2026, version, name),
++    ),
++  );
++}
++
++async function harness(inventoryMode, bridge = namespaceBridge(catalog)) {
++  const h = await EntryPointHarness.create('durable-object', (binding) => {
++    injected.ledger = binding;
++  });
++  await h.published();
++  Object.assign(h.env, {
++    IDENTITY_CATALOG_MODE: 'runtime',
++    IDENTITY_INSTALLATION_ID: catalog.installation,
++    IDENTITY_CATALOG: bridge,
++    ...(inventoryMode ? { IDENTITY_INVENTORY_MODE: inventoryMode } : {}),
++  });
++  return h;
++}
++
++const unknownInventory = () => ({
++  kind: 'json',
++  body: driversEnvelope([...fullSeasonDriverRows(), driverRow(UNKNOWN)]),
++});
++const debutantProvider = providerDrivers(1)[0];
++const debutantInventory = () => ({
++  kind: 'json',
++  body: driversEnvelope(
++    fullSeasonDriverRows().filter((row) => row.driverId !== debutantProvider),
++  ),
++});
++const unknownRaceDriver = () => {
++  const replaced = providerDrivers(8)[7];
++  return {
++    kind: 'json',
++    body: JSON.parse(
++      JSON.stringify(resultsBody(1, 'A')).replace(
++        '"driverId":"' + replaced + '"',
++        '"driverId":"' + UNKNOWN + '"',
++      ),
++    ),
++  };
++};
++
++function expectNoPrivate(value) {
++  const text = JSON.stringify(value);
++  for (const marker of PRIVATE) expect(text, marker).not.toContain(marker);
++}
++
++async function pinRows() {
++  const state = await catalog.inspect();
++  return (state.rows.identity_run_pins ?? []).map((r) => JSON.parse(r.request));
++}
++
++it('U10 seeds and activates the reviewed synthetic R0 for an explicit installation', async () => {
++  root = await catalog.initialize();
++  wrapper = await catalog.export(root.proposal.proposedRevisionId);
++  expect((await catalog.admin('/health')).activeRevisionId).toBe(
++    root.proposal.proposedRevisionId,
++  );
++}, 120000);
++
++it('T34 strict parity: an unknown inventory-only driver still ends participants before constructors and publishes nothing', async () => {
++  const h = await harness('strict');
++  h.server.results.set(1, 'A');
++  h.server.answers.set(paths.drivers, unknownInventory);
++  const before = await documents(h);
++  const result = await h.manual(tickAfter(1, 6));
++  expect(current().inventoryPolicyVersion).toBe('strict/1');
++  expect(result.requests).toContain(paths.drivers);
++  expect(result.requests).not.toContain(paths.constructors);
++  expect(result.finalizes).toBe(0);
++  expect(await documents(h)).toEqual(before);
++  // The strict durable pin keeps its exact pre-U10 schema-1 request.
++  const strict = (await pinRows()).find((r) => r.runId === current().runId);
++  expect(strict).toMatchObject({ schemaVersion: 1 });
++  expect(strict).not.toHaveProperty('inventoryPolicy');
++  assertNoExternalNetwork();
++}, 120000);
++
++it('T23/T35 optional: the real constructors request is made, the season publishes through the guarded sequencer, and nothing private is published', async () => {
++  const strict = await harness('strict');
++  strict.server.results.set(1, 'A');
++  const baseline = await strict.manual(tickAfter(1, 6));
++
++  const h = await harness('optional-drivers');
++  h.server.results.set(1, 'A');
++  h.server.answers.set(paths.drivers, unknownInventory);
++  const result = await h.manual(tickAfter(1, 6));
++  const ctx = current();
++  expect(ctx.authority).toBe('runtime');
++  expect(ctx.inventoryPolicyVersion).toBe('optional-drivers/1');
++  expect(ctx.revisionId).toBe(root.proposal.proposedRevisionId);
++  // Exact provider accounting: the same endpoint set and order as a fully
++  // mapped strict run; the constructors request strict skipped above is real.
++  expect(result.requests).toEqual(baseline.requests);
++  const drivers = result.requests.indexOf(paths.drivers);
++  expect(result.requests[drivers + 1]).toBe(paths.constructors);
++  expect(result.reservations).toBe(baseline.reservations);
++  expect(result.finalizes).toBe(1);
++  const docs = await documents(h);
++  expectNoPrivate(docs);
++  const publicDrivers = docs.find((d) => d.documentName === 'drivers');
++  expect(publicDrivers).toBeDefined();
++  // The durable pin records the optional policy for this whole run.
++  const pin = (await pinRows()).find((r) => r.runId === ctx.runId);
++  expect(pin).toMatchObject({
++    schemaVersion: 2,
++    inventoryPolicy: 'optional-driver-inventory-v1',
++  });
++  expectNoPrivate(h.harness.logger.serialized?.() ?? '');
++  await evidence('u10-optional-inventory-only', {
++    requests: result.requests,
++    reservations: result.reservations,
++    strictReservations: baseline.reservations,
++    finalizes: result.finalizes,
++    policy: ctx.inventoryPolicyVersion,
++    pinSchema: pin.schemaVersion,
++  });
++  assertNoExternalNetwork();
++}, 180000);
++
++it('T25 optional: a curated debutant absent from the inventory is published with its pinned profile', async () => {
++  const h = await harness('optional-drivers');
++  h.server.results.set(1, 'A');
++  h.server.answers.set(paths.drivers, debutantInventory);
++  const result = await h.manual(tickAfter(1, 6));
++  expect(result.finalizes).toBe(1);
++  const id = canonicalDriver(debutantProvider);
++  const docs = await documents(h);
++  const summaries = docs.find((d) => d.documentName === 'drivers').data;
++  expect(summaries.some((s) => s.driverId === id)).toBe(true);
++  expect(docs.some((d) => d.documentName === 'driver:' + id)).toBe(true);
++  expectNoPrivate(docs);
++}, 180000);
++
++it('T24 optional: an unknown driver in a required race classification still blocks and keeps the release', async () => {
++  const h = await harness('optional-drivers');
++  h.server.results.set(1, 'A');
++  h.server.answers.set(paths.results(1), unknownRaceDriver);
++  const before = await documents(h);
++  const versionBefore = h.activeVersion();
++  const result = await h.manual(tickAfter(1, 6));
++  expect(result.finalizes).toBe(0);
++  expect(h.activeVersion()).toBe(versionBefore);
++  expect(await documents(h)).toEqual(before);
++}, 180000);
++
++it('T17 optional: an unavailable or corrupt catalog before admission sends no provider request and publishes nothing', async () => {
++  const outage = namespaceBridge(catalog);
++  outage.available = false;
++  const corrupt = {
++    idFromName: (name) => name,
++    get: () => ({ fetch: async () => new Response('{"pin":{}}') }),
++  };
++  for (const bridge of [outage, corrupt]) {
++    const h = await harness('optional-drivers', bridge);
++    h.server.results.set(1, 'A');
++    const result = await h.manual(tickAfter(1, 6));
++    expect(result.requests).toEqual([]);
++    expect(result.reservations).toBe(0);
++    expect(result.finalizes).toBe(0);
++  }
++}, 180000);
++
++it('T16 optional: mid-run activation and catalog outage after the pin keep the original profiles and policy; the next run adopts the new revision', async () => {
++  const h = await harness('optional-drivers');
++  h.server.results.set(1, 'A');
++  h.server.answers.set(paths.drivers, unknownInventory);
++  const next = await reviewedProfile(catalog, wrapper, 'Synthetic U10 Profile');
++  const baseTransport = h.server.transport;
++  let changed = false;
++  h.env.__PROVIDER_TRANSPORT = async (request) => {
++    if (!changed) {
++      changed = true;
++      await catalog.activation(next.head, next.proposal, next.validation);
++      // Configuration and catalog availability change mid-run; neither may
++      // reach the admitted run.
++      h.env.IDENTITY_INVENTORY_MODE = 'strict';
++      h.env.IDENTITY_CATALOG.available = false;
++    }
++    return baseTransport(request);
++  };
++  const a = await h.manual(tickAfter(1, 6));
++  const pinned = current();
++  expect(a.finalizes).toBe(1);
++  expect(a.requests).toContain(paths.constructors);
++  expect(pinned.revisionId).toBe(root.proposal.proposedRevisionId);
++  expect(pinned.inventoryPolicyVersion).toBe('optional-drivers/1');
++  expect(JSON.stringify(await documents(h))).not.toContain(
++    'Synthetic U10 Profile',
++  );
++
++  h.env.__PROVIDER_TRANSPORT = baseTransport;
++  h.env.IDENTITY_CATALOG.available = true;
++  h.env.IDENTITY_INVENTORY_MODE = 'optional-drivers';
++  const b = await h.manual(tickAfter(1, 7));
++  expect(b.finalizes).toBe(1);
++  const adopted = current();
++  expect(adopted.revisionId).toBe(next.proposal.proposedRevisionId);
++  expect(adopted.inventoryPolicyVersion).toBe('optional-drivers/1');
++  expect(JSON.stringify(await documents(h))).toContain('Synthetic U10 Profile');
++  await evidence('u10-optional-mid-run-activation', {
++    firstRevision: pinned.revisionId,
++    secondRevision: adopted.revisionId,
++    firstPolicy: pinned.inventoryPolicyVersion,
++    secondPolicy: adopted.inventoryPolicyVersion,
++  });
++  wrapper = await catalog.export(next.proposal.proposedRevisionId);
++}, 240000);
++
++it('T18: a retried run ID cannot be reinterpreted under another policy, and pins replay identically across workerd restart', async () => {
++  const strictRequest = catalog.pinRequest();
++  const first = await catalog.pin(strictRequest);
++  const optional = {
++    ...strictRequest,
++    schemaVersion: 2,
++    inventoryPolicy: 'optional-driver-inventory-v1',
++  };
++  const conflict = await catalog.catalog('run-pin', optional);
++  expect(conflict.status).not.toBe(200);
++  const optionalRequest = {
++    ...catalog.pinRequest(),
++    schemaVersion: 2,
++    inventoryPolicy: 'optional-driver-inventory-v1',
++  };
++  const pinned = await catalog.pin(optionalRequest);
++  const downgrade = await catalog.catalog('run-pin', {
++    ...optionalRequest,
++    schemaVersion: 1,
++    inventoryPolicy: undefined,
++  });
++  expect(downgrade.status).not.toBe(200);
++  await catalog.stop();
++  await catalog.start();
++  expect(await catalog.pin(strictRequest)).toEqual(first);
++  expect(await catalog.pin(optionalRequest)).toEqual(pinned);
++}, 180000);
++
++it('T23/T21: an optional workerd installation ingests the optional batch through the guarded path and recovers the identical receipt after restart', async () => {
++  const batchInstallation = await localInstallation(1, {
++    bindings: { IDENTITY_INVENTORY_MODE: 'optional-drivers' },
++  });
++  try {
++    const init = await batchInstallation.initialize();
++    const exported = await batchInstallation.export(
++      init.proposal.proposedRevisionId,
++    );
++    const capture = fixtureCapture();
++    capture.responses.find((r) => r.file === 'drivers.json').body =
++      new TextEncoder().encode(
++        JSON.stringify(
++          driversEnvelope([...fullSeasonDriverRows(), driverRow(UNKNOWN)]),
++        ),
++      );
++    const generate = (input, inventoryPolicy) =>
++      generateSeasonBatch({
++        ...input,
++        identityMode: 'runtime',
++        installationId: batchInstallation.installation,
++        catalogExport: new TextEncoder().encode(JSON.stringify(exported)),
++        ...(inventoryPolicy ? { inventoryPolicy } : {}),
++      });
++    const optionalBatch = await generate(
++      inputFor(capture),
++      'optional-driver-inventory-v1',
++    );
++    expect(optionalBatch.ok).toBe(true);
++    const strictBatch = await generate(inputFor());
++    expect(strictBatch.ok).toBe(true);
++    expect(
++      (await (await batchInstallation.fetch('/__test/genesis')).json()).outcome,
++    ).toBe('created');
++    const submissionOf = (batch) => ({
++      kind: 'gridview-season-batch-submission',
++      schemaVersion: 2,
++      operationId: crypto.randomUUID(),
++      season: 2026,
++      expectedActiveVersion: null,
++      reviewedManifestSha256: batch.manifest.sha256,
++      manifest: JSON.parse(batch.manifest.text),
++      artifact: JSON.parse(batch.artifact.text),
++    });
++    const refused = await batchInstallation.ingest(submissionOf(strictBatch));
++    expect(refused.value.data).toMatchObject({
++      outcome: 'refused',
++      reason: 'catalog-reference-mismatch',
++    });
++    const submission = submissionOf(optionalBatch);
++    expect((await batchInstallation.ingest(submission, true)).status).toBe(503);
++    const applied = await batchInstallation.ingest(submission);
++    expect(applied.value.data).toMatchObject({
++      outcome: 'publication',
++      publication: { status: 'applied' },
++    });
++    const publicDrivers = await (
++      await batchInstallation.fetch('/v1/seasons/2026/drivers')
++    ).json();
++    expectNoPrivate(publicDrivers);
++    await batchInstallation.stop();
++    await batchInstallation.start({
++      IDENTITY_INVENTORY_MODE: 'optional-drivers',
++    });
++    const replay = await batchInstallation.ingest(submission);
++    expect(replay.value.data).toEqual(applied.value.data);
++    const state = await batchInstallation.inspect();
++    expect(state.rows.identity_batch_receipts).toHaveLength(2);
++    expect(
++      state.rows.identity_run_pins
++        .map((r) => JSON.parse(r.request))
++        .filter((r) => r.purpose === 'season-batch')
++        .every((r) => r.schemaVersion === 2),
++    ).toBe(true);
++    // Same public content after restart (response metadata may differ).
++    expect(
++      (await (await batchInstallation.fetch('/v1/seasons/2026/drivers')).json())
++        .data,
++    ).toEqual(publicDrivers.data);
++    assertNoExternalNetwork();
++  } finally {
++    await batchInstallation.stop();
++  }
++}, 300000);
+diff --git a/services/edge-api/test/ingest/catalog-v2-optional.test.ts b/services/edge-api/test/ingest/catalog-v2-optional.test.ts
+new file mode 100644
+index 0000000..e0b1d92
+--- /dev/null
++++ b/services/edge-api/test/ingest/catalog-v2-optional.test.ts
+@@ -0,0 +1,433 @@
++/**
++ * U10: private batch-v2 `optional-driver-inventory-v1` provenance from offline
++ * generation to guarded ingest (design §9.2, ADR 0031 D4; matrix T21, T23,
++ * T25, T29, T32).
++ *
++ * Real SQLite `IdentityCatalog` (node:sqlite host), real durable batch
++ * admission and run pins, real season-batch generator over replayed recorded
++ * bodies, real guarded sequenced publisher. Synthetic identities only; the
++ * global `fetch` throws.
++ */
++
++import { afterEach, beforeAll, beforeEach, expect, it, vi } from 'vitest';
++
++import { loadCorpus } from '../../scripts/identity/corpus.mjs';
++import { generateSeasonBatch } from '../../scripts/season-batch/generate';
++import { prepareSeed } from '../../src/identity/catalog/seed';
++import { hashIdentityProjection } from '../../src/identity/discovery/keys';
++import { IdentityCatalog } from '../../src/identity/durable-object';
++import { decodeSubmission } from '../../src/ingest/submission';
++import { sqliteHost } from '../identity/catalog/sqlite-support';
++import {
++  installation,
++  setup,
++  validateAndActivate,
++} from '../identity/catalog/u4-support';
++import { profileProposal } from '../identity/catalog/u6-support';
++import {
++  driverRow,
++  driversEnvelope,
++  fullSeasonDriverRows,
++} from '../providers/jolpica/participants-support';
++import { providerDrivers } from '../providers/jolpica/results-support';
++import { ledgerFixture } from '../sync/coordinated/ledger/support';
++import { MutableClock } from '../publication/sequencer/support';
++import { fixtureCapture, inputFor } from '../season-batch/support';
++import {
++  ingestContext,
++  ingestFor,
++  reanchored,
++  SEED_VERSION,
++  type Json,
++} from './support';
++
++const UNKNOWN = 'synthetic_u10_batch_unknown';
++const OPTIONAL = 'optional-driver-inventory-v1';
++type Batch = { manifest: Json; artifact: Json; manifestSha256: string };
++
++let seed: Awaited<ReturnType<typeof prepareSeed>>;
++let host: ReturnType<typeof sqliteHost>;
++let f: Awaited<ReturnType<typeof setup>>;
++let context: Awaited<ReturnType<typeof ingestContext>>;
++let catalogBytes: Uint8Array;
++
++// Synthetic corpus preparation and SQLite setup are slow on Windows; this is
++// a test-harness hook limit, not an operational deadline.
++beforeAll(async () => {
++  seed = await prepareSeed(loadCorpus());
++}, 120000);
++beforeEach(async () => {
++  vi.stubGlobal('fetch', () => {
++    throw Error('U10 provider network forbidden');
++  });
++  host = sqliteHost();
++  f = await setup(host.storage, seed);
++  const lineage = JSON.parse(
++    await f.workflow.exportRevision(f.root.revisionId),
++  );
++  const wrapper = {
++    schemaVersion: 1,
++    format: 'gridview-identity-admin-export/1',
++    installationId: installation,
++    revision: lineage.revision,
++    decisions: lineage.decisions,
++    evidence: [],
++    lineage,
++  };
++  catalogBytes = new TextEncoder().encode(
++    JSON.stringify({
++      ...wrapper,
++      exportHash: await hashIdentityProjection(wrapper),
++    }),
++  );
++  context = await ingestContext();
++  vi.spyOn(Date, 'now').mockReturnValue(context.clock.now().getTime());
++}, 120000);
++afterEach(() => {
++  host.db.close();
++  vi.unstubAllGlobals();
++  vi.restoreAllMocks();
++});
++
++/** The recorded capture with its drivers page replaced. */
++function captureWithDrivers(rows: unknown[]) {
++  const capture = fixtureCapture();
++  const drivers = capture.responses.find((r) => r.file === 'drivers.json')!;
++  drivers.body = new TextEncoder().encode(
++    JSON.stringify(driversEnvelope(rows)),
++  );
++  return inputFor(capture);
++}
++const unknownInventory = () =>
++  captureWithDrivers([...fullSeasonDriverRows(), driverRow(UNKNOWN)]);
++/** The first results driver, absent from the provider's inventory. */
++const debutantInventory = () =>
++  captureWithDrivers(
++    fullSeasonDriverRows().filter(
++      (row) => row.driverId !== providerDrivers(1)[0],
++    ),
++  );
++
++async function generate(
++  input: ReturnType<typeof inputFor>,
++  inventoryPolicy?: string,
++  identityMode: 'runtime' | 'bundled' = 'runtime',
++) {
++  return generateSeasonBatch({
++    ...input,
++    identityMode,
++    ...(identityMode === 'runtime'
++      ? { installationId: installation, catalogExport: catalogBytes }
++      : {}),
++    ...(inventoryPolicy === undefined ? {} : { inventoryPolicy }),
++  });
++}
++
++async function batchOf(
++  input: ReturnType<typeof inputFor>,
++  inventoryPolicy?: string,
++): Promise<Batch> {
++  const result = await generate(input, inventoryPolicy);
++  if (!result.ok) throw Error(result.failure + ' ' + (result.detail ?? ''));
++  return {
++    artifact: JSON.parse(result.artifact.text),
++    manifest: JSON.parse(result.manifest.text),
++    manifestSha256: result.manifest.sha256,
++  };
++}
++
++function service(inventoryMode: 'strict' | 'optional-drivers') {
++  const ledger = ledgerFixture(
++    undefined,
++    new MutableClock(context.clock.now()),
++  ).ledger;
++  let object = new IdentityCatalog(
++    { storage: host.storage },
++    { IDENTITY_INSTALLATION_ID: installation },
++    true,
++  );
++  const calls: string[] = [];
++  const refusals: string[] = [];
++  const config = {
++    mode: 'runtime' as const,
++    installationId: installation,
++    inventoryMode,
++    namespace: {
++      idFromName: (name: string) => name,
++      get: () => ({
++        fetch: async (url: string, init?: RequestInit) => {
++          calls.push(url);
++          const response = await object.fetch(new Request(url, init));
++          // Diagnostic only: a refused admission's closed error body.
++          if (!response.ok) refusals.push(await response.clone().text());
++          return response;
++        },
++      }),
++    },
++  };
++  return {
++    calls,
++    refusals,
++    ingest: ingestFor(context, context.service, {
++      identityMode: 'runtime',
++      identity: config,
++      ledger,
++      recovery: { port: context.port, storage: context.storage },
++    }),
++    restart: () => {
++      object = new IdentityCatalog(
++        { storage: host.storage },
++        { IDENTITY_INSTALLATION_ID: installation },
++        true,
++      );
++    },
++  };
++}
++
++function submission(value: Batch, operationId = crypto.randomUUID()) {
++  const decoded = decodeSubmission({
++    kind: 'gridview-season-batch-submission',
++    schemaVersion: 2,
++    operationId,
++    season: 2026,
++    expectedActiveVersion: SEED_VERSION,
++    reviewedManifestSha256: value.manifestSha256,
++    manifest: value.manifest,
++    artifact: value.artifact,
++  });
++  if (!decoded) throw Error('decode failed');
++  return decoded;
++}
++
++async function run(s: ReturnType<typeof service>, input: unknown) {
++  const a = s.ingest.admit();
++  if (typeof a === 'string') throw Error(a);
++  return s.ingest.ingest(a, input as ReturnType<typeof submission>);
++}
++
++const pinRequests = () =>
++  (
++    host.db.prepare('SELECT request FROM identity_run_pins').all() as {
++      request: string;
++    }[]
++  ).map((r) => JSON.parse(r.request) as Json);
++
++// ---------------------------------------------------------------------------
++// Offline generation
++// ---------------------------------------------------------------------------
++
++it('refuses optional generation outside runtime authority and unknown policy labels', async () => {
++  expect(await generate(inputFor(), OPTIONAL, 'bundled')).toMatchObject({
++    ok: false,
++    failure: 'inventory-policy-invalid',
++  });
++  for (const label of ['optional', 'strict', 'optional-drivers', ' strict-v1'])
++    expect(await generate(inputFor(), label)).toMatchObject({
++      ok: false,
++      failure: 'inventory-policy-invalid',
++    });
++});
++
++it('strict generation still withholds unknown inventory and absent debutants', async () => {
++  for (const input of [unknownInventory(), debutantInventory()]) {
++    const result = await generate(input);
++    expect(result).toMatchObject({ ok: false, failure: 'assembly-withheld' });
++  }
++});
++
++it('T23: optional generation accounts the unknown row privately and binds the policy in artifact and manifest', async () => {
++  const first = await generate(unknownInventory(), OPTIONAL);
++  expect(first.ok).toBe(true);
++  if (!first.ok) return;
++  expect(await generate(unknownInventory(), OPTIONAL)).toEqual(first);
++  const artifact = JSON.parse(first.artifact.text);
++  const manifest = JSON.parse(first.manifest.text);
++  expect(artifact.identityCatalog.inventoryPolicy).toBe(OPTIONAL);
++  expect(manifest.identityCatalog).toEqual(artifact.identityCatalog);
++  // The canonical U5 export commitment is unchanged by the policy.
++  expect(artifact.identityCatalog.exportSha256).toBe(
++    JSON.parse(new TextDecoder().decode(catalogBytes)).exportHash,
++  );
++  const publicText = JSON.stringify({
++    source: artifact.source,
++    documents: artifact.documents,
++  });
++  for (const marker of [
++    'driverInventory',
++    'candidateId',
++    'observationKeyHash',
++    'inventoryPolicy',
++    UNKNOWN,
++  ])
++    expect(publicText, marker).not.toContain(marker);
++  // The verified inventory profiles are exactly the curated drivers.
++  const strict = await batchOf(inputFor());
++  expect((artifact.source.drivers as Json[]).map((d) => d.id)).toEqual(
++    ((strict.artifact.source as Json).drivers as Json[]).map((d) => d.id),
++  );
++});
++
++it('T25: optional generation supplements the curated debutant from the same export, appended after inventory', async () => {
++  const batch = await batchOf(debutantInventory(), OPTIONAL);
++  const strict = await batchOf(inputFor());
++  const ids = ((batch.artifact.source as Json).drivers as Json[]).map(
++    (d) => d.id as string,
++  );
++  const strictIds = ((strict.artifact.source as Json).drivers as Json[]).map(
++    (d) => d.id as string,
++  );
++  const debutant = strictIds.find((id) => !ids.slice(0, -1).includes(id))!;
++  expect(ids.at(-1)).toBe(debutant);
++  expect([...ids].sort()).toEqual([...strictIds].sort());
++  // Participation is unchanged: it comes from the race rows only.
++  expect((batch.artifact.source as Json).driverEntries).toEqual(
++    (strict.artifact.source as Json).driverEntries,
++  );
++});
++
++// ---------------------------------------------------------------------------
++// Guarded ingest
++// ---------------------------------------------------------------------------
++
++it('T23: an optional installation publishes the optional batch through the guarded path and replays the receipt after restart', async () => {
++  const s = service('optional-drivers');
++  const input = submission(await batchOf(unknownInventory(), OPTIONAL));
++  const first = await run(s, input);
++  expect(first).toMatchObject({
++    outcome: 'publication',
++    publication: { status: 'applied' },
++  });
++  s.restart();
++  expect(await run(s, input)).toEqual(first);
++  expect(
++    host.db.prepare('SELECT COUNT(*) n FROM identity_batch_receipts').get(),
++  ).toEqual({ n: 1 });
++  // The durable pin and receipt record the policy; strict v1 shape is not reused.
++  const pins = pinRequests();
++  expect(pins).toHaveLength(1);
++  expect(pins[0]).toMatchObject({
++    schemaVersion: 2,
++    inventoryPolicy: OPTIONAL,
++    purpose: 'season-batch',
++  });
++  const receipt = host.db
++    .prepare('SELECT request FROM identity_batch_receipts')
++    .get() as { request: string };
++  expect(JSON.parse(receipt.request)).toMatchObject({
++    schemaVersion: 2,
++    inventoryPolicy: OPTIONAL,
++  });
++});
++
++it('T25: an optional installation publishes the supplemented debutant batch', async () => {
++  const s = service('optional-drivers');
++  const result = await run(
++    s,
++    submission(await batchOf(debutantInventory(), OPTIONAL)),
++  );
++  expect(result, JSON.stringify([result, s.refusals, s.calls])).toMatchObject({
++    outcome: 'publication',
++    publication: { status: 'applied' },
++  });
++});
++
++it('discriminates strict-v1 and optional-v1 artifacts by installation policy in both directions', async () => {
++  const strictBatch = await batchOf(inputFor());
++  const optionalBatch = await batchOf(unknownInventory(), OPTIONAL);
++  expect(
++    await run(service('optional-drivers'), submission(strictBatch)),
++  ).toMatchObject({
++    outcome: 'refused',
++    stage: 'verification',
++    reason: 'catalog-reference-mismatch',
++  });
++  expect(await run(service('strict'), submission(optionalBatch))).toMatchObject(
++    {
++      outcome: 'refused',
++      stage: 'verification',
++      reason: 'catalog-reference-mismatch',
++    },
++  );
++});
++
++it('refuses a relabeled reviewed artifact unless it is re-anchored and re-reviewed as a new manifest', async () => {
++  const strictBatch = await batchOf(inputFor());
++  // Artifact label edited, manifest untouched: the reviewed digests disagree.
++  const artifactOnly = structuredClone(strictBatch);
++  (artifactOnly.artifact.identityCatalog as Json).inventoryPolicy = OPTIONAL;
++  const refusedArtifact = await run(
++    service('optional-drivers'),
++    submission(artifactOnly),
++  );
++  expect(refusedArtifact.outcome).toBe('refused');
++  // Both labels edited without updating the reviewed manifest digest.
++  const unreviewed = structuredClone(strictBatch);
++  (unreviewed.artifact.identityCatalog as Json).inventoryPolicy = OPTIONAL;
++  (unreviewed.manifest.identityCatalog as Json).inventoryPolicy = OPTIONAL;
++  const refusedManifest = await run(
++    service('optional-drivers'),
++    submission(unreviewed),
++  );
++  expect(refusedManifest.outcome).toBe('refused');
++  // A strict installation never admits the optional label, re-anchored or not.
++  const reanchoredOptional = structuredClone(strictBatch);
++  const ref = reanchoredOptional.manifest.identityCatalog as Json;
++  ref.inventoryPolicy = OPTIONAL;
++  reanchoredOptional.artifact.identityCatalog = structuredClone(ref);
++  expect(
++    await run(
++      service('strict'),
++      submission(
++        reanchored(reanchoredOptional.manifest, reanchoredOptional.artifact),
++      ),
++    ),
++  ).toMatchObject({ outcome: 'refused', reason: 'catalog-reference-mismatch' });
++});
++
++it('fails closed when one operation ID is reused under a different installation policy', async () => {
++  const strictBatch = await batchOf(inputFor());
++  const input = submission(strictBatch);
++  expect(await run(service('strict'), input)).toMatchObject({
++    outcome: 'publication',
++  });
++  // Same durable operation, now presented under the optional policy.
++  expect(await run(service('optional-drivers'), input)).toMatchObject({
++    outcome: 'refused',
++    reason: 'catalog-admission-refused',
++  });
++  expect(
++    host.db.prepare('SELECT COUNT(*) n FROM identity_batch_receipts').get(),
++  ).toEqual({ n: 1 });
++});
++
++it('never gives new v1 (legacy) ingestion an optional-policy path', async () => {
++  const legacy = await generateSeasonBatch({ ...inputFor() });
++  if (!legacy.ok) throw Error(legacy.failure);
++  const s = service('optional-drivers');
++  const input = {
++    kind: 'gridview-season-batch-submission',
++    schemaVersion: 1,
++    season: 2026,
++    expectedActiveVersion: SEED_VERSION,
++    reviewedManifestSha256: legacy.manifest.sha256,
++    manifest: JSON.parse(legacy.manifest.text),
++    artifact: JSON.parse(legacy.artifact.text),
++  };
++  const decoded = decodeSubmission(input);
++  expect(decoded).not.toBeNull();
++  expect(await run(s, decoded)).toMatchObject({
++    outcome: 'refused',
++    reason: 'runtime-batch-requires-u7',
++  });
++  // Refused before any catalog admission or pin.
++  expect(s.calls).toEqual([]);
++});
++
++it('refuses a stale-revision optional batch after a later activation', async () => {
++  const optionalBatch = await batchOf(unknownInventory(), OPTIONAL);
++  const revision = await profileProposal(f);
++  await validateAndActivate(f, revision.revisionId);
++  expect(
++    await run(service('optional-drivers'), submission(optionalBatch)),
++  ).toMatchObject({ outcome: 'refused', reason: 'catalog-reference-mismatch' });
++});
+diff --git a/services/edge-api/test/providers/coordination/identity-closure-publication.test.ts b/services/edge-api/test/providers/coordination/identity-closure-publication.test.ts
+new file mode 100644
+index 0000000..03179c0
+--- /dev/null
++++ b/services/edge-api/test/providers/coordination/identity-closure-publication.test.ts
+@@ -0,0 +1,279 @@
++/**
++ * U10: complete guarded publication under the explicit optional-driver
++ * inventory policy (design §8.4, ADR 0030 D3-D4; matrix T23, T24, T25, T30,
++ * T31). Real optional-mode coordinator, assembly and closure, generator, and
++ * the real `SequencedPublicationService` over both sequencer transports; the
++ * predecessor is a guard only. Synthetic data; no port reaches a network.
++ */
++
++import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
++
++import type { SeasonDriverSummary } from '../../../src/contract/types';
++import { CoordinatedSeasonPublication } from '../../../src/providers/coordination';
++import type { SeasonIdentityContext } from '../../../src/providers/coordination/season-identity-closure';
++import { SequencedPublicationService } from '../../../src/publication/sequenced/service';
++import type {
++  PrepareOutcome,
++  SeasonPublicationSequencerPort,
++} from '../../../src/publication/sequencer';
++import { runtimeSnapshotValidator } from '../../../src/validation/snapshot-validator';
++import {
++  SEED_VERSION,
++  portWith,
++  sequencerTransports,
++  type SequencerTransport,
++} from '../../publication/sequenced/support';
++import { FIXED_NOW, SEASON, metadataFor, publicationHarness } from './support';
++import {
++  FIRST_AT,
++  SECOND_AT,
++  policy,
++  splitSeason,
++  withRows,
++  profilesOf,
++  coordinateOptional,
++  identityFor,
++  without,
++  expectNoPrivateLeak,
++  resultOf,
++  strictAssembled,
++  publishOptional,
++  storedDocuments,
++  expectUnchanged,
++} from './identity-closure-support';
++
++beforeEach(() => {
++  vi.stubGlobal(
++    'fetch',
++    vi.fn(() => {
++      throw new Error('U10 network forbidden');
++    }),
++  );
++});
++afterEach(() => vi.unstubAllGlobals());
++
++// ---------------------------------------------------------------------------
++// Complete guarded publication (T23, T25, T30, T31)
++// ---------------------------------------------------------------------------
++
++describe.each(sequencerTransports)(
++  'U10 optional-policy guarded publication over the %s sequencer transport',
++  (transport: SequencerTransport) => {
++    async function harnessFor(predecessor: readonly number[]) {
++      return publicationHarness({
++        transport,
++        seedSource: await strictAssembled(await splitSeason(predecessor)),
++      });
++    }
++
++    it('T23 positive: commits a complete season with unknown inventory-only drivers and no private field', async () => {
++      const harness = await harnessFor([1, 11, 12]);
++      const result = resultOf(
++        await publishOptional(harness, await splitSeason()),
++      );
++      expect(result).toMatchObject({
++        status: 'applied',
++        previousVersion: SEED_VERSION,
++        reason: null,
++      });
++      expect(harness.publishCalls).toBe(1);
++      expect(harness.legacyPublishCalls).toBe(0);
++      expect(harness.activeVersion()).toBe(result.version);
++      const documents = await storedDocuments(harness, result.version);
++      expect(documents.length).toBeGreaterThan(0);
++      await expectNoPrivateLeak(documents);
++      await expectNoPrivateLeak(harness.handed[0]!.set);
++      expect(harness.logger.serialized()).not.toContain('driverInventory');
++    });
++
++    it('T25 positive: publishes the supplemented debutant profile with its result-derived spans', async () => {
++      const harness = await harnessFor([1, 11, 12]);
++      const source = await splitSeason();
++      const result = resultOf(
++        await publishOptional(harness, source, {
++          inventory: without(source, 'yuki-tsunoda'),
++        }),
++      );
++      expect(result.status).toBe('applied');
++      const drivers = (await harness.activeDocument('drivers'))!
++        .data as SeasonDriverSummary[];
++      expect(drivers.some((d) => d.driverId === 'yuki-tsunoda')).toBe(true);
++      const profileDoc = await harness.activeDocument(
++        'driver:yuki-tsunoda' as never,
++      );
++      expect(profileDoc).not.toBeNull();
++    });
++
++    it('T24/T25 negative: an unknown debutant withholds before publication and keeps the release', async () => {
++      const harness = await harnessFor([1, 11, 12]);
++      const before = await storedDocuments(harness, SEED_VERSION);
++      const outcome = await publishOptional(harness, await splitSeason(), {
++        failing: (kind, round) =>
++          kind === 'session-classification' && round === 13,
++      });
++      expect(outcome).toMatchObject({
++        outcome: 'withheld',
++        gap: 'resource-unavailable',
++      });
++      expect(harness.publishCalls).toBe(0);
++      await expectUnchanged(harness, SEED_VERSION, before);
++    });
++
++    it('missing pinned profile withholds as inconsistent-references with zero publication calls', async () => {
++      const harness = await harnessFor([1, 11, 12]);
++      const before = await storedDocuments(harness, SEED_VERSION);
++      const source = await splitSeason();
++      const outcome = await publishOptional(
++        harness,
++        source,
++        { inventory: without(source, 'yuki-tsunoda') },
++        FIRST_AT,
++        {
++          policy,
++          profiles: profilesOf(source.drivers, { missing: ['yuki-tsunoda'] }),
++        },
++      );
++      expect(outcome).toMatchObject({
++        outcome: 'withheld',
++        gap: 'inconsistent-references',
++        relations: ['required-driver-profile'],
++      });
++      expect(harness.publishCalls).toBe(0);
++      await expectUnchanged(harness, SEED_VERSION, before);
++    });
++
++    it('T30 D14: an optional candidate missing a published classified round is rejected', async () => {
++      const harness = await harnessFor([1, 11, 12, 13]);
++      const before = await storedDocuments(harness, SEED_VERSION);
++      const result = resultOf(
++        await publishOptional(harness, await splitSeason([1, 11, 12])),
++      );
++      expect(result).toMatchObject({
++        status: 'rejected',
++        reason: 'guard-round-coverage-regression',
++      });
++      await expectUnchanged(harness, SEED_VERSION, before);
++    });
++
++    it('T30 D15: a removed participation fact or replaced constructor is rejected', async () => {
++      for (const [candidate, reason] of [
++        [
++          withRows(await splitSeason(), 12, (rows) =>
++            rows.filter((r) => r.driverId !== 'yuki-tsunoda'),
++          ),
++          'guard-participation-fact-removed',
++        ],
++        [
++          withRows(await splitSeason(), 13, (rows) =>
++            rows.map((r) =>
++              r.driverId === 'liam-lawson'
++                ? { ...r, constructorId: 'racing-bulls' }
++                : r,
++            ),
++          ),
++          'guard-constructor-replaced',
++        ],
++      ] as const) {
++        const harness = await harnessFor([1, 11, 12, 13]);
++        const before = await storedDocuments(harness, SEED_VERSION);
++        const result = resultOf(await publishOptional(harness, candidate));
++        expect(result).toMatchObject({ status: 'rejected', reason });
++        await expectUnchanged(harness, SEED_VERSION, before);
++      }
++    });
++
++    it('T31: a narrower optional candidate never replaces a wider committed release', async () => {
++      const harness = await harnessFor([1, 11, 12]);
++      const wide = resultOf(
++        await publishOptional(harness, await splitSeason()),
++      );
++      expect(wide.status).toBe('applied');
++      const before = await storedDocuments(harness, wide.version);
++      const narrow = resultOf(
++        await publishOptional(
++          harness,
++          await splitSeason([1, 11, 12]),
++          {},
++          SECOND_AT,
++        ),
++      );
++      expect(narrow).toMatchObject({
++        status: 'rejected',
++        reason: 'guard-round-coverage-regression',
++        previousVersion: wide.version,
++      });
++      await expectUnchanged(harness, wide.version, before);
++    });
++
++    it('T31 D16: a loser preparing after the winner committed is refused by expected-predecessor CAS', async () => {
++      const harness = await harnessFor([1, 11, 12]);
++      const { context } = harness;
++      let hold: (() => void) | null = null;
++      let arrived!: () => void;
++      const narrowArrived = new Promise<void>((r) => (arrived = r));
++      const outcomes: PrepareOutcome[] = [];
++      const port: SeasonPublicationSequencerPort = portWith(context.port, {
++        prepare: async (request) => {
++          if (request.sourceOrderingInput === SECOND_AT) {
++            await new Promise<void>((release) => {
++              hold = release;
++              arrived();
++            });
++          }
++          const outcome = await context.port.prepare(request);
++          outcomes.push(outcome);
++          return outcome;
++        },
++      });
++      const service = new SequencedPublicationService({
++        port,
++        fallback: context.legacy,
++        storage: context.storage,
++        validator: runtimeSnapshotValidator,
++        purger: context.purger,
++        logger: context.logger,
++        clock: context.clock,
++      });
++      const bridge = (identity: SeasonIdentityContext) =>
++        new CoordinatedSeasonPublication({
++          commands: service,
++          logger: harness.logger,
++          identity,
++        });
++      const narrowSource = await splitSeason([1, 11, 12]);
++      const wideSource = await splitSeason();
++      // The narrower run reads the seed predecessor, then waits at prepare.
++      const narrow = bridge(identityFor(narrowSource)).publish(
++        await coordinateOptional(narrowSource),
++        { ...metadataFor(narrowSource), sourceUpdatedAt: SECOND_AT },
++        FIXED_NOW,
++        'narrow',
++      );
++      await narrowArrived;
++      const wide = resultOf(
++        await bridge(identityFor(wideSource)).publish(
++          await coordinateOptional(wideSource),
++          { ...metadataFor(wideSource), sourceUpdatedAt: FIRST_AT },
++          FIXED_NOW,
++          'wide',
++        ),
++      );
++      expect(wide.status).toBe('applied');
++      hold!();
++      const loser = resultOf(await narrow);
++      // The established D16 answer: a failed prepare, nothing written.
++      expect(loser).toMatchObject({
++        status: 'failed',
++        reason: 'guard-predecessor-stale',
++      });
++      expect(outcomes.at(-1)).toMatchObject({
++        outcome: 'rejected',
++        reason: 'stale-predecessor',
++      });
++      expect(harness.activeVersion()).toBe(wide.version);
++      expect(await harness.storage.listVersions(SEASON)).toEqual(
++        [SEED_VERSION, wide.version].sort(),
++      );
++    });
++  },
++);
+diff --git a/services/edge-api/test/providers/coordination/identity-closure-support.ts b/services/edge-api/test/providers/coordination/identity-closure-support.ts
+new file mode 100644
+index 0000000..395b997
+--- /dev/null
++++ b/services/edge-api/test/providers/coordination/identity-closure-support.ts
+@@ -0,0 +1,339 @@
++/**
++ * U10 identity-closure test fixtures, shared by `identity-closure.test.ts`
++ * (pure closure and assembly) and `identity-closure-publication.test.ts`
++ * (complete guarded publication). Synthetic data only.
++ */
++
++import { expect } from 'vitest';
++
++import type { Driver, RaceResult } from '../../../src/contract/types';
++import { identityHash } from '../../../src/identity/discovery/keys';
++import {
++  driverInventoryProjectionDigest,
++  optionalDriverInventoryPolicy,
++  type DriverInventory,
++  type DriverInventoryPolicy,
++} from '../../../src/identity/inventory/model';
++import { CapturingLogger } from '../../../src/logging/logger';
++import {
++  CoordinatedSeasonPublication,
++  MultiSourceCoordinator,
++  assembleSeasonSource,
++  type CoordinatedPublicationOutcome,
++  type CoordinationRun,
++  type ProviderResourceOutcome,
++} from '../../../src/providers/coordination';
++import type {
++  PinnedDriverProfiles,
++  SeasonIdentityContext,
++} from '../../../src/providers/coordination/season-identity-closure';
++import type { ProviderSeasonSource } from '../../../src/providers/formula-one-provider';
++import type { PublicationResult } from '../../../src/publication/publisher';
++import { splitSeasonFixture } from './split-participation-support';
++import {
++  FIXED_NOW,
++  FakePort,
++  SEASON,
++  attempt,
++  fullPlan,
++  metadataFor,
++  payloadFor,
++  seasonFixture,
++  type PublicationHarness,
++} from './support';
++
++export const CATALOG = `sha256:${'c'.repeat(64)}` as const;
++export const OTHER_CATALOG = `sha256:${'d'.repeat(64)}` as const;
++export const FIRST_AT = '2026-07-18T12:00:00.000Z';
++export const SECOND_AT = '2026-07-18T13:00:00.000Z';
++export const UNKNOWN_LABELS = [
++  'synthetic_u10_unknown_a',
++  'synthetic_u10_unknown_b',
++];
++/** The run's single admitted optional policy, bound to the synthetic catalog. */
++export const policy: DriverInventoryPolicy =
++  optionalDriverInventoryPolicy(CATALOG);
++
++// ---------------------------------------------------------------------------
++// Fixtures
++// ---------------------------------------------------------------------------
++
++/** Every Jolpica profile projection carries explicit null media. */
++export function withNullMedia(
++  source: ProviderSeasonSource,
++): ProviderSeasonSource {
++  return {
++    ...source,
++    drivers: source.drivers.map((d) => ({ ...d, media: null })),
++  };
++}
++
++/** The split season with a final race classification at `classified` only. */
++export async function splitSeason(
++  classified: readonly number[] = [1, 11, 12, 13],
++): Promise<ProviderSeasonSource> {
++  const split = withNullMedia(await splitSeasonFixture());
++  const mock = await seasonFixture();
++  const kept = new Set(classified);
++  return {
++    ...split,
++    calendar: split.calendar.map((event, index) =>
++      kept.has(event.round)
++        ? event
++        : { ...event, status: mock.calendar[index]!.status, hasResults: false },
++    ),
++    results: split.results.map((result) =>
++      kept.has(result.round)
++        ? result
++        : { ...result, status: 'unavailable' as const, entries: [] },
++    ),
++  };
++}
++
++export function withRows(
++  source: ProviderSeasonSource,
++  round: number,
++  map: (entries: RaceResult['entries']) => RaceResult['entries'],
++): ProviderSeasonSource {
++  return {
++    ...source,
++    results: source.results.map((r) =>
++      r.round === round ? { ...r, entries: map(r.entries) } : r,
++    ),
++  };
++}
++
++/** The pinned profile view of a synthetic catalog holding `drivers`. */
++export function profilesOf(
++  drivers: readonly Driver[],
++  options: {
++    readonly catalogHash?: string;
++    readonly unbound?: readonly string[];
++    readonly missing?: readonly string[];
++    readonly override?: Readonly<Record<string, Omit<Driver, 'media'>>>;
++  } = {},
++): PinnedDriverProfiles & { readonly lookups: string[] } {
++  const lookups: string[] = [];
++  const byId = new Map(
++    drivers.map((d) => {
++      const { media, ...profile } = d;
++      void media;
++      return [d.id, profile];
++    }),
++  );
++  return {
++    lookups,
++    catalogHash: options.catalogHash ?? CATALOG,
++    driverById(id) {
++      lookups.push(id);
++      if (options.missing?.includes(id)) return null;
++      const profile = options.override?.[id] ?? byId.get(id);
++      return profile === undefined ? null : { ...profile };
++    },
++    isVerifiedSeasonDriver: (id) =>
++      byId.has(id) && !(options.unbound ?? []).includes(id),
++  };
++}
++
++export async function accountingFor(
++  inventory: readonly Driver[],
++  unknown: readonly string[] = UNKNOWN_LABELS,
++  catalogHash: `sha256:${string}` = CATALOG,
++): Promise<DriverInventory> {
++  const resolved = await Promise.all(
++    inventory.map(async (d) => ({
++      driverId: d.id,
++      observationKeyHash: await identityHash('u10-observation:' + d.id),
++    })),
++  );
++  const candidates = await Promise.all(
++    unknown.map((label) => identityHash('u10-candidate:' + label)),
++  );
++  const unresolved = [...candidates]
++    .sort()
++    .map((candidateId) => ({ candidateId, reason: 'unmapped' as const }));
++  const projection = {
++    policyVersion: 1 as const,
++    catalogHash,
++    providerRowCount: resolved.length + unresolved.length,
++    resolved,
++    unresolved,
++  };
++  return {
++    ...projection,
++    projectionDigest: await driverInventoryProjectionDigest(projection),
++  };
++}
++
++export interface OptionalPortOptions {
++  /** The verified inventory profiles; defaults to every source driver. */
++  readonly inventory?: readonly Driver[];
++  readonly accounting?: DriverInventory | null;
++  /** Answer `failed` instead for these resources. */
++  readonly failing?: (kind: string, round?: number) => boolean;
++  readonly participants?: (payload: Record<string, unknown>) => unknown;
++}
++
++/** A Jolpica port answering an optional-policy participants contribution. */
++export async function optionalPort(
++  source: ProviderSeasonSource,
++  options: OptionalPortOptions = {},
++): Promise<FakePort> {
++  const inventory = options.inventory ?? source.drivers;
++  const accounting =
++    options.accounting === undefined
++      ? await accountingFor(inventory)
++      : options.accounting;
++  let sequence = 0;
++  return new FakePort('jolpica', (request) => {
++    sequence += 1;
++    const resource = request.resource;
++    const round = 'round' in resource ? resource.round : undefined;
++    if (options.failing?.(resource.kind, round)) {
++      // Exactly what a Jolpica port answers for an unmapped required row:
++      // the whole resource fails; no row is filtered out.
++      return {
++        outcome: 'mapping-failure',
++        attempts: [attempt(`jolpica-${sequence}`)],
++      } as ProviderResourceOutcome;
++    }
++    let payload: unknown = payloadFor(source, resource);
++    if (resource.kind === 'season-participants') {
++      const base: Record<string, unknown> = {
++        kind: 'season-participants',
++        drivers: inventory,
++        constructors: source.constructors,
++        driverEntries: [],
++        constructorEntries: source.constructorEntries,
++        ...(accounting === null ? {} : { driverInventory: accounting }),
++      };
++      payload = options.participants ? options.participants(base) : base;
++    }
++    return {
++      outcome: 'candidate',
++      // The real optional participants port makes two requests.
++      attempts:
++        resource.kind === 'season-participants'
++          ? [
++              attempt(`jolpica-${sequence}-drivers`),
++              attempt(`jolpica-${sequence}-constructors`),
++            ]
++          : [attempt(`jolpica-${sequence}`)],
++      payload,
++    } as ProviderResourceOutcome;
++  });
++}
++
++export async function coordinateOptional(
++  source: ProviderSeasonSource,
++  options: OptionalPortOptions = {},
++  inventoryPolicy: DriverInventoryPolicy = policy,
++): Promise<CoordinationRun> {
++  return new MultiSourceCoordinator({
++    ports: [await optionalPort(source, options)],
++    logger: new CapturingLogger(),
++    inventoryPolicy,
++  }).coordinate({ plan: fullPlan(source) });
++}
++
++export function identityFor(
++  source: ProviderSeasonSource,
++  overrides: Partial<SeasonIdentityContext> = {},
++): SeasonIdentityContext {
++  return {
++    policy,
++    profiles: profilesOf(source.drivers),
++    ...overrides,
++  };
++}
++
++export function without(
++  source: ProviderSeasonSource,
++  ...ids: string[]
++): Driver[] {
++  return source.drivers.filter((d) => !ids.includes(d.id));
++}
++
++export const PRIVATE_MARKERS = [
++  'driverInventory',
++  'candidateId',
++  'observationKeyHash',
++  'projectionDigest',
++  'unmapped',
++  CATALOG,
++  'sha256:',
++  ...UNKNOWN_LABELS,
++];
++
++export async function expectNoPrivateLeak(value: unknown): Promise<void> {
++  const serialized = JSON.stringify(value);
++  for (const marker of PRIVATE_MARKERS)
++    expect(serialized, marker).not.toContain(marker);
++  for (const label of UNKNOWN_LABELS) {
++    const candidate = await identityHash('u10-candidate:' + label);
++    expect(serialized).not.toContain(candidate.slice('sha256:'.length));
++  }
++}
++
++export function resultOf(
++  outcome: CoordinatedPublicationOutcome,
++): PublicationResult {
++  expect(outcome.outcome).toBe('published');
++  if (outcome.outcome !== 'published') throw new Error('unreachable');
++  return outcome.result;
++}
++
++export async function strictAssembled(
++  source: ProviderSeasonSource,
++): Promise<ProviderSeasonSource> {
++  const assembly = assembleSeasonSource(
++    await new MultiSourceCoordinator({
++      ports: [await optionalPort(source, { accounting: null })],
++      logger: new CapturingLogger(),
++    }).coordinate({ plan: fullPlan(source) }),
++    metadataFor(source),
++  );
++  if (!assembly.complete) throw new Error(`no seed: ${assembly.gap}`);
++  return assembly.source;
++}
++
++export async function publishOptional(
++  harness: PublicationHarness,
++  source: ProviderSeasonSource,
++  options: OptionalPortOptions = {},
++  at = FIRST_AT,
++  identity: SeasonIdentityContext = identityFor(source),
++): Promise<CoordinatedPublicationOutcome> {
++  return new CoordinatedSeasonPublication({
++    commands: harness.commands,
++    logger: harness.logger,
++    identity,
++  }).publish(
++    await coordinateOptional(source, options),
++    { ...metadataFor(source), sourceUpdatedAt: at },
++    FIXED_NOW,
++    'caller-version',
++  );
++}
++
++export async function storedDocuments(
++  harness: PublicationHarness,
++  version: string,
++) {
++  const names =
++    (await harness.storage.readVersionInventory(SEASON, version)) ?? [];
++  return Promise.all(
++    [...names].map((n) =>
++      harness.storage.readVersionedDocument(SEASON, version, n),
++    ),
++  );
++}
++
++export async function expectUnchanged(
++  harness: PublicationHarness,
++  version: string,
++  before: unknown,
++): Promise<void> {
++  expect(harness.activeVersion()).toBe(version);
++  expect(await storedDocuments(harness, version)).toEqual(before);
++}
+diff --git a/services/edge-api/test/providers/coordination/identity-closure.test.ts b/services/edge-api/test/providers/coordination/identity-closure.test.ts
+new file mode 100644
+index 0000000..148d32b
+--- /dev/null
++++ b/services/edge-api/test/providers/coordination/identity-closure.test.ts
+@@ -0,0 +1,682 @@
++/**
++ * U10: required driver identity closure and the season-assembly consumption
++ * boundary under the explicit optional-driver inventory policy (design
++ * §8.2-8.4, ADR 0030; matrix T23-T29, T33 leak checks). The complete guarded
++ * publication cases (T23, T25, T30, T31) are in
++ * `identity-closure-publication.test.ts`; shared fixtures are in
++ * `identity-closure-support.ts`.
++ *
++ * Every case runs production code: the pure closure, the real optional-mode
++ * `MultiSourceCoordinator` (closed accounting validation and digest recomputed
++ * on its detached snapshot), `assembleSeasonSource`, the unchanged
++ * `validateSeasonReferences`, `generateSnapshotSet`, `CoordinatedSeasonPublication`
++ * and the real `SequencedPublicationService` over both sequencer transports.
++ *
++ * Synthetic data only: the split-participation season, synthetic catalog
++ * hashes and synthetic candidate IDs. No port reaches a network.
++ */
++
++import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
++
++import type {
++  ConstructorSeasonEntry,
++  Driver,
++  DriverSeasonEntry,
++  DriverStanding,
++  RaceResult,
++} from '../../../src/contract/types';
++import { strictInventoryPolicy } from '../../../src/identity/inventory/model';
++import { CapturingLogger } from '../../../src/logging/logger';
++import {
++  MultiSourceCoordinator,
++  assembleSeasonSource,
++  type CoordinationRun,
++} from '../../../src/providers/coordination';
++import {
++  closeSeasonDriverIdentities,
++  identityClosureProblems,
++  requiredDriverIds,
++  type PinnedDriverProfiles,
++} from '../../../src/providers/coordination/season-identity-closure';
++import { seasonRelations } from '../../../src/providers/coordination/season-integrity';
++import type { ProviderSeasonSource } from '../../../src/providers/formula-one-provider';
++import { fullPlan, metadataFor } from './support';
++import {
++  OTHER_CATALOG,
++  UNKNOWN_LABELS,
++  policy,
++  splitSeason,
++  withRows,
++  profilesOf,
++  accountingFor,
++  optionalPort,
++  coordinateOptional,
++  identityFor,
++  without,
++  expectNoPrivateLeak,
++  type OptionalPortOptions,
++} from './identity-closure-support';
++
++beforeEach(() => {
++  vi.stubGlobal(
++    'fetch',
++    vi.fn(() => {
++      throw new Error('U10 network forbidden');
++    }),
++  );
++});
++afterEach(() => vi.unstubAllGlobals());
++
++// ---------------------------------------------------------------------------
++// 1. Pure closure (design §8.2)
++// ---------------------------------------------------------------------------
++
++function closureInput(over: {
++  inventory?: Driver[];
++  results?: RaceResult[];
++  standings?: DriverStanding[];
++  entries?: DriverSeasonEntry[];
++  lineups?: ConstructorSeasonEntry[];
++  profiles?: PinnedDriverProfiles;
++}) {
++  return {
++    inventoryDrivers: over.inventory ?? [],
++    results: over.results ?? [],
++    driverStandings: over.standings ?? [],
++    driverEntries: over.entries ?? [],
++    constructorEntries: over.lineups ?? [],
++    profiles: over.profiles ?? profilesOf([]),
++  };
++}
++
++const result = (drivers: string[], fastest: string | null = null): RaceResult =>
++  ({
++    entries: drivers.map((driverId) => ({ driverId })),
++    fastestLap:
++      fastest === null ? null : { driverId: fastest, timeMillis: 1, lap: 1 },
++  }) as unknown as RaceResult;
++
++describe('U10 pure required-identity closure', () => {
++  async function realProfile(): Promise<Driver> {
++    // A complete, contract-valid profile from the curated fixture.
++    return (await splitSeason()).drivers.find((d) => d.id === 'paul-aron')!;
++  }
++
++  it('computes the exact required set from all five reference sources', () => {
++    const required = requiredDriverIds({
++      results: [result(['race-a', 'race-b'], 'fast-c'), result([], null)],
++      driverStandings: [{ driverId: 'standing-d' } as DriverStanding],
++      driverEntries: [{ driverId: 'span-e' } as DriverSeasonEntry],
++      constructorEntries: [
++        { driverLineup: ['lineup-f'] } as ConstructorSeasonEntry,
++        { driverLineup: null } as ConstructorSeasonEntry,
++      ],
++    });
++    expect([...required].sort()).toEqual([
++      'fast-c',
++      'lineup-f',
++      'race-a',
++      'race-b',
++      'span-e',
++      'standing-d',
++    ]);
++  });
++
++  it.each([
++    ['race classification', { results: [result(['needed'])] }],
++    ['fastest lap', { results: [result([], 'needed')] }],
++    ['driver standing', { standings: [{ driverId: 'needed' }] }],
++    ['derived span', { entries: [{ driverId: 'needed' }] }],
++    ['constructor lineup', { lineups: [{ driverLineup: ['needed'] }] }],
++  ])('supplements a profile required only by a %s', async (_, refs) => {
++    const base = await realProfile();
++    const needed = { ...base, id: 'needed' };
++    const closure = closeSeasonDriverIdentities(
++      closureInput({
++        ...(refs as object),
++        profiles: profilesOf([needed]),
++      }),
++    );
++    expect(closure).toEqual({
++      ok: true,
++      drivers: [needed],
++      supplemented: ['needed'],
++    });
++  });
++
++  it('keeps verified inventory order, appends in exact canonical-ID order and adds nothing unrequired', async () => {
++    const base = await realProfile();
++    const p = (id: string) => ({ ...base, id });
++    const catalog = [
++      p('zeta'),
++      p('beta'),
++      p('alpha-driver'),
++      p('alpha-2-driver'),
++      p('unrequired-global'),
++    ];
++    const closure = closeSeasonDriverIdentities(
++      closureInput({
++        inventory: [p('zeta'), p('beta')],
++        results: [result(['alpha-driver', 'beta', 'alpha-2-driver'])],
++        profiles: profilesOf(catalog),
++      }),
++    );
++    expect(closure.ok && closure.drivers.map((d) => d.id)).toEqual([
++      'zeta',
++      'beta',
++      'alpha-2-driver',
++      'alpha-driver',
++    ]);
++    expect(closure.ok && closure.supplemented).toEqual([
++      'alpha-2-driver',
++      'alpha-driver',
++    ]);
++  });
++
++  it('is deterministic and leaves every input unmodified', async () => {
++    const base = await realProfile();
++    const input = closureInput({
++      inventory: [{ ...base, id: 'kept' }],
++      results: [result(['added'])],
++      profiles: profilesOf([
++        { ...base, id: 'kept' },
++        { ...base, id: 'added' },
++      ]),
++    });
++    const before = structuredClone({ ...input, profiles: null });
++    const first = closeSeasonDriverIdentities(input);
++    const second = closeSeasonDriverIdentities(input);
++    expect(second).toEqual(first);
++    expect({ ...input, profiles: null }).toEqual(before);
++    // Profiles only: no span, team or entry is ever returned.
++    expect(Object.keys(first).sort()).toEqual([
++      'drivers',
++      'ok',
++      'supplemented',
++    ]);
++  });
++
++  it.each([
++    ['missing-profile', { missing: ['needed'] }],
++    ['unbound-profile', { unbound: ['needed'] }],
++  ] as const)('refuses a required identity as %s', async (problem, opts) => {
++    const base = await realProfile();
++    expect(
++      closeSeasonDriverIdentities(
++        closureInput({
++          results: [result(['needed'])],
++          profiles: profilesOf([{ ...base, id: 'needed' }], opts),
++        }),
++      ),
++    ).toEqual({ ok: false, problem });
++  });
++
++  it('refuses a contradictory or malformed pinned profile and never synthesizes one', async () => {
++    const base = await realProfile();
++    const { media, ...rest } = base;
++    void media;
++    const contradictory = profilesOf([{ ...base, id: 'needed' }], {
++      override: { needed: { ...rest, id: 'someone-else' } },
++    });
++    expect(
++      closeSeasonDriverIdentities(
++        closureInput({
++          results: [result(['needed'])],
++          profiles: contradictory,
++        }),
++      ),
++    ).toEqual({ ok: false, problem: 'contradictory-profile' });
++    const malformed = profilesOf([{ ...base, id: 'needed' }], {
++      override: {
++        needed: {
++          ...rest,
++          id: 'needed',
++          permanentNumber: 'not-a-number' as unknown as number,
++        },
++      },
++    });
++    expect(
++      closeSeasonDriverIdentities(
++        closureInput({ results: [result(['needed'])], profiles: malformed }),
++      ),
++    ).toEqual({ ok: false, problem: 'invalid-profile' });
++    // Nothing is made up from the reference itself.
++    expect(
++      closeSeasonDriverIdentities(
++        closureInput({ results: [result(['no-such-driver'])] }),
++      ),
++    ).toEqual({ ok: false, problem: 'missing-profile' });
++  });
++
++  it('refuses duplicate inventory identities and inventory profiles that disagree with the pin', async () => {
++    const base = await realProfile();
++    const a = { ...base, id: 'dup' };
++    expect(
++      closeSeasonDriverIdentities(
++        closureInput({ inventory: [a, a], profiles: profilesOf([a]) }),
++      ),
++    ).toEqual({ ok: false, problem: 'duplicate-inventory-driver' });
++    expect(
++      closeSeasonDriverIdentities(
++        closureInput({
++          inventory: [{ ...a, fullName: 'Edited after the pin' }],
++          profiles: profilesOf([a]),
++        }),
++      ),
++    ).toEqual({ ok: false, problem: 'inventory-profile-mismatch' });
++  });
++
++  it('keeps its problem vocabulary closed and its relations appended after the established ones', () => {
++    expect(identityClosureProblems).toHaveLength(6);
++    expect(seasonRelations.slice(-2)).toEqual([
++      'driver-inventory-context',
++      'required-driver-profile',
++    ]);
++    expect(seasonRelations.indexOf('duplicate-identity')).toBe(
++      seasonRelations.length - 3,
++    );
++  });
++});
++
++// ---------------------------------------------------------------------------
++// 2. Assembly boundary (selected resources -> closure -> public source)
++// ---------------------------------------------------------------------------
++
++describe('U10 season assembly consumes private accounting before any public source exists', () => {
++  it('T23: assembles an otherwise complete season with unknown inventory-only drivers, inventing nothing', async () => {
++    const source = await splitSeason();
++    const run = await coordinateOptional(source);
++    expect(run.status).toBe('completed');
++    const assembly = assembleSeasonSource(
++      run,
++      metadataFor(source),
++      identityFor(source),
++    );
++    expect(assembly.complete).toBe(true);
++    if (!assembly.complete) return;
++    expect(assembly.source.drivers.map((d) => d.id)).toEqual(
++      source.drivers.map((d) => d.id),
++    );
++    // Spans come from race rows only: exactly the classified drivers.
++    expect(
++      [...new Set(assembly.source.driverEntries.map((e) => e.driverId))].sort(),
++    ).toEqual([
++      'isack-hadjar',
++      'liam-lawson',
++      'max-verstappen',
++      'yuki-tsunoda',
++    ]);
++    expect(Object.keys(assembly.source).sort()).toEqual(
++      Object.keys(source).sort(),
++    );
++    await expectNoPrivateLeak(assembly.source);
++  });
++
++  it('T25: supplements a curated debutant absent from the inventory, after the inventory, with participation from results only', async () => {
++    const source = await splitSeason();
++    const inventory = without(source, 'yuki-tsunoda');
++    const run = await coordinateOptional(source, { inventory });
++    const assembly = assembleSeasonSource(
++      run,
++      metadataFor(source),
++      identityFor(source),
++    );
++    expect(assembly.complete).toBe(true);
++    if (!assembly.complete) return;
++    const ids = assembly.source.drivers.map((d) => d.id);
++    expect(ids.slice(0, inventory.length)).toEqual(inventory.map((d) => d.id));
++    expect(ids.slice(inventory.length)).toEqual(['yuki-tsunoda']);
++    expect(assembly.source.drivers.at(-1)).toEqual(
++      source.drivers.find((d) => d.id === 'yuki-tsunoda'),
++    );
++    // The split spans of the strict assembly are reproduced exactly.
++    const strict = assembleSeasonSource(
++      await new MultiSourceCoordinator({
++        ports: [await optionalPort(source, { accounting: null })],
++        logger: new CapturingLogger(),
++      }).coordinate({ plan: fullPlan(source) }),
++      metadataFor(source),
++    );
++    expect(strict.complete).toBe(true);
++    if (!strict.complete) return;
++    expect(assembly.source.driverEntries).toEqual(strict.source.driverEntries);
++  });
++
++  it('T25 strict: the same debutant still withholds a strict season', async () => {
++    const source = await splitSeason();
++    const run = await new MultiSourceCoordinator({
++      ports: [
++        await optionalPort(source, {
++          inventory: without(source, 'yuki-tsunoda'),
++          accounting: null,
++        }),
++      ],
++      logger: new CapturingLogger(),
++    }).coordinate({ plan: fullPlan(source) });
++    const assembly = assembleSeasonSource(run, metadataFor(source), {
++      policy: strictInventoryPolicy,
++      profiles: profilesOf(source.drivers),
++    });
++    expect(assembly).toMatchObject({
++      complete: false,
++      gap: 'inconsistent-references',
++    });
++    expect(!assembly.complete && assembly.relations).toContain(
++      'result-entry-driver',
++    );
++  });
++
++  it('closes a standings-only and lineup-only identity with a profile and no span (T26/T27)', async () => {
++    const source = await splitSeason();
++    // Russell: standings and Mercedes lineup only. Doohan: lineup only.
++    const inventory = without(source, 'george-russell', 'jack-doohan');
++    const assembly = assembleSeasonSource(
++      await coordinateOptional(source, { inventory }),
++      metadataFor(source),
++      identityFor(source),
++    );
++    expect(assembly.complete).toBe(true);
++    if (!assembly.complete) return;
++    expect(assembly.source.drivers.slice(-2).map((d) => d.id)).toEqual([
++      'george-russell',
++      'jack-doohan',
++    ]);
++    const spans = assembly.source.driverEntries.map((e) => e.driverId);
++    expect(spans).not.toContain('george-russell');
++    expect(spans).not.toContain('jack-doohan');
++  });
++
++  it('T26: an inventory-only (FP1-style) verified identity keeps a profile but gets no span or team', async () => {
++    const source = await splitSeason();
++    const assembly = assembleSeasonSource(
++      await coordinateOptional(source),
++      metadataFor(source),
++      identityFor(source),
++    );
++    expect(assembly.complete).toBe(true);
++    if (!assembly.complete) return;
++    expect(assembly.source.drivers.map((d) => d.id)).toContain('paul-aron');
++    expect(
++      assembly.source.driverEntries.filter((e) => e.driverId === 'paul-aron'),
++    ).toEqual([]);
++    expect(
++      assembly.source.constructorEntries.some((c) =>
++        (c.driverLineup ?? []).includes('paul-aron'),
++      ),
++    ).toBe(false);
++  });
++
++  it('T27: keeps returning-driver and transfer splits and the null multi-constructor standing', async () => {
++    const source = await splitSeason();
++    const multi: ProviderSeasonSource = {
++      ...source,
++      driverStandings: source.driverStandings.map((s) =>
++        s.driverId === 'lando-norris' ? { ...s, constructorId: null } : s,
++      ),
++    };
++    const assembly = assembleSeasonSource(
++      await coordinateOptional(multi, {
++        inventory: without(multi, 'liam-lawson'),
++      }),
++      metadataFor(multi),
++      identityFor(multi),
++    );
++    expect(assembly.complete).toBe(true);
++    if (!assembly.complete) return;
++    const lawson = assembly.source.driverEntries
++      .filter((e) => e.driverId === 'liam-lawson')
++      .map(({ constructorId, startRound, endRound }) => ({
++        constructorId,
++        startRound,
++        endRound,
++      }));
++    expect(lawson.length).toBeGreaterThan(1);
++    expect(new Set(lawson.map((s) => s.constructorId)).size).toBeGreaterThan(1);
++    expect(
++      assembly.source.driverStandings.find((s) => s.driverId === 'lando-norris')
++        ?.constructorId,
++    ).toBeNull();
++  });
++
++  it('refuses a required identity whose pinned profile is missing or unbound (inconsistent-references)', async () => {
++    const source = await splitSeason();
++    const run = await coordinateOptional(source, {
++      inventory: without(source, 'yuki-tsunoda'),
++    });
++    for (const opts of [
++      { missing: ['yuki-tsunoda'] },
++      { unbound: ['yuki-tsunoda'] },
++    ]) {
++      expect(
++        assembleSeasonSource(run, metadataFor(source), {
++          policy,
++          profiles: profilesOf(source.drivers, opts),
++        }),
++      ).toEqual({
++        complete: false,
++        gap: 'inconsistent-references',
++        missing: [],
++        relations: ['required-driver-profile'],
++      });
++    }
++  });
++
++  it('binds payload, policy and pinned catalog together and refuses every disagreement', async () => {
++    const source = await splitSeason();
++    const optionalRun = await coordinateOptional(source);
++    const strictRun = await new MultiSourceCoordinator({
++      ports: [await optionalPort(source, { accounting: null })],
++      logger: new CapturingLogger(),
++    }).coordinate({ plan: fullPlan(source) });
++    const refusal = {
++      complete: false,
++      gap: 'inconsistent-references',
++      missing: [],
++      relations: ['driver-inventory-context'],
++    };
++    // Accounting under a strict policy.
++    expect(
++      assembleSeasonSource(optionalRun, metadataFor(source), {
++        policy: strictInventoryPolicy,
++        profiles: profilesOf(source.drivers),
++      }),
++    ).toEqual(refusal);
++    // No accounting under the optional policy.
++    expect(
++      assembleSeasonSource(strictRun, metadataFor(source), identityFor(source)),
++    ).toEqual(refusal);
++    // Pinned profiles of another catalog.
++    expect(
++      assembleSeasonSource(optionalRun, metadataFor(source), {
++        policy,
++        profiles: profilesOf(source.drivers, { catalogHash: OTHER_CATALOG }),
++      }),
++    ).toEqual(refusal);
++    // An inventory profile edited relative to the pinned profile.
++    expect(
++      assembleSeasonSource(optionalRun, metadataFor(source), {
++        policy,
++        profiles: profilesOf(source.drivers, {
++          override: {
++            'paul-aron': {
++              ...profilesOf(source.drivers).driverById('paul-aron')!,
++              fullName: 'Changed In Catalog',
++            },
++          },
++        }),
++      }),
++    ).toEqual(refusal);
++    // Pre-U10 callers (no identity inputs) keep the exact U9 refusal.
++    expect(assembleSeasonSource(optionalRun, metadataFor(source))).toEqual({
++      complete: false,
++      gap: 'inconsistent-references',
++      missing: [],
++      relations: [],
++    });
++  });
++
++  it('T29: refuses forged accounting that reaches the boundary without the coordinator', async () => {
++    const source = await splitSeason();
++    const run = await coordinateOptional(source);
++    const tamper = (edit: (inventory: Record<string, unknown>) => void) =>
++      ({
++        ...run,
++        resources: run.resources.map((r) => {
++          if (
++            r.resource.kind !== 'season-participants' ||
++            r.selection.outcome !== 'selected'
++          )
++            return r;
++          const payload = structuredClone(r.selection.payload) as unknown as {
++            driverInventory: Record<string, unknown>;
++          };
++          edit(payload.driverInventory);
++          return { ...r, selection: { ...r.selection, payload } };
++        }),
++      }) as CoordinationRun;
++    const forgeries: ((i: Record<string, unknown>) => void)[] = [
++      (i) => (i.providerRowCount = Number(i.providerRowCount) + 1),
++      (i) => (i.catalogHash = OTHER_CATALOG),
++      (i) => (i.policyVersion = 2),
++      (i) => {
++        const u = i.unresolved as unknown[];
++        u.push(u[0]);
++        i.providerRowCount = Number(i.providerRowCount) + 1;
++      },
++      (i) => (i.unresolved as unknown[]).reverse(),
++      (i) => (i.resolved as unknown[]).reverse(),
++      (i) => ((i.unresolved as { reason: string }[])[0]!.reason = 'ambiguous'),
++      (i) => (i.extra = true),
++    ];
++    for (const forge of forgeries) {
++      expect(
++        assembleSeasonSource(
++          tamper(forge),
++          metadataFor(source),
++          identityFor(source),
++        ),
++      ).toMatchObject({
++        complete: false,
++        relations: ['driver-inventory-context'],
++      });
++    }
++  });
++
++  it('T29: the coordinator refuses a forged digest, catalog or mutated detached payload as invalid-payload', async () => {
++    const source = await splitSeason();
++    const valid = await accountingFor(source.drivers);
++    const cases: OptionalPortOptions[] = [
++      {
++        accounting: {
++          ...valid,
++          projectionDigest: `sha256:${'e'.repeat(64)}`,
++        },
++      },
++      // Self-consistent, resealed for another catalog: still refused.
++      {
++        accounting: await accountingFor(
++          source.drivers,
++          UNKNOWN_LABELS,
++          OTHER_CATALOG,
++        ),
++      },
++      { accounting: { ...valid, unresolved: [] } },
++    ];
++    for (const options of cases) {
++      const run = await coordinateOptional(source, options);
++      const participants = run.resources.find(
++        (r) => r.resource.kind === 'season-participants',
++      )!;
++      expect(participants.selection.outcome).not.toBe('selected');
++      expect(
++        assembleSeasonSource(run, metadataFor(source), identityFor(source)),
++      ).toMatchObject({ complete: false, gap: 'resource-unavailable' });
++    }
++  });
++
++  it('T24: an unmapped required race or standings identity fails its whole resource under the optional policy', async () => {
++    const source = await splitSeason();
++    for (const failing of [
++      (kind: string, round?: number) =>
++        kind === 'session-classification' && round === 12,
++      (kind: string) => kind === 'driver-standings',
++    ]) {
++      const run = await coordinateOptional(source, { failing });
++      const assembly = assembleSeasonSource(
++        run,
++        metadataFor(source),
++        identityFor(source),
++      );
++      expect(assembly).toMatchObject({
++        complete: false,
++        gap: 'resource-unavailable',
++      });
++    }
++  });
++
++  it('T28: the driver closure never masks an unknown constructor, missing constructor profile or bad lineup', async () => {
++    const source = await splitSeason();
++    const unknownTeam = withRows(source, 12, (rows) =>
++      rows.map((row, i) =>
++        i === 0 ? { ...row, constructorId: 'synthetic-unknown-team' } : row,
++      ),
++    );
++    const a = assembleSeasonSource(
++      await coordinateOptional(unknownTeam),
++      metadataFor(unknownTeam),
++      identityFor(unknownTeam),
++    );
++    expect(!a.complete && a.relations).toContain('result-entry-constructor');
++
++    const missingConstructor = await coordinateOptional(source, {
++      participants: (p) => ({
++        ...p,
++        constructors: (p.constructors as { id: string }[]).filter(
++          (c) => c.id !== 'mclaren',
++        ),
++      }),
++    });
++    const b = assembleSeasonSource(
++      missingConstructor,
++      metadataFor(source),
++      identityFor(source),
++    );
++    expect(b.complete).toBe(false);
++    expect(!b.complete && b.gap).toBe('inconsistent-references');
++
++    const badLineup = await coordinateOptional(source, {
++      participants: (p) => ({
++        ...p,
++        constructorEntries: (
++          p.constructorEntries as ConstructorSeasonEntry[]
++        ).map((c) =>
++          c.constructorId === 'sauber'
++            ? { ...c, driverLineup: ['synthetic-unprofiled-driver'] }
++            : c,
++        ),
++      }),
++    });
++    expect(
++      assembleSeasonSource(badLineup, metadataFor(source), identityFor(source)),
++    ).toMatchObject({
++      complete: false,
++      relations: ['required-driver-profile'],
++    });
++  });
++
++  it('strict parity: a strict identity context changes nothing for a strict payload', async () => {
++    const source = await splitSeason();
++    const run = await new MultiSourceCoordinator({
++      ports: [await optionalPort(source, { accounting: null })],
++      logger: new CapturingLogger(),
++    }).coordinate({ plan: fullPlan(source) });
++    const profiles = profilesOf(source.drivers);
++    const withContext = assembleSeasonSource(run, metadataFor(source), {
++      policy: strictInventoryPolicy,
++      profiles,
++    });
++    expect(withContext).toEqual(assembleSeasonSource(run, metadataFor(source)));
++    // The strict path never consults the pinned profiles.
++    expect(profiles.lookups).toEqual([]);
++  });
++});

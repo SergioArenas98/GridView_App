@@ -1,0 +1,44 @@
+# REVIEW ARTIFACT ONLY. NOT APPLIED / NOT EXECUTED / FUTURE APPROVAL REQUIRED.
+# This is a proposed additive diff against the U8 worktree's wrangler.toml.
+# Placeholders are deliberately non-runnable. Do not deploy this file.
+# Record the actual independently allocated UUIDs and review them before U11.
+# Do not change top-level exports/vars, env.production, crons, provider transport,
+# existing secrets, KV IDs, publication authority or any existing binding.
+--- services/edge-api/wrangler.toml (U8 preserved baseline)
++++ services/edge-api/wrangler.toml (future reviewed staging/E2E preparation)
+@@ [env.staging.vars]
++IDENTITY_INSTALLATION_ID = "<owner-approved-staging-uuid-v4>"
++IDENTITY_DISCOVERY_MODE = "off"
++IDENTITY_CATALOG_MODE = "bundled"
++IDENTITY_ADMIN_MODE = "off"
+@@ after [env.staging.exports.ReconciliationLedger] (retain all three existing exports)
++[env.staging.exports.IdentityCatalog]
++type = "durable-object"
++storage = "sqlite"
++
++[[env.staging.durable_objects.bindings]]
++name = "IDENTITY_CATALOG"
++class_name = "IdentityCatalog"
+@@ [env.e2e.vars]
++IDENTITY_INSTALLATION_ID = "<different-owner-approved-e2e-uuid-v4>"
++IDENTITY_DISCOVERY_MODE = "off"
++IDENTITY_CATALOG_MODE = "bundled"
++IDENTITY_ADMIN_MODE = "off"
+@@ after [env.e2e.exports.ReconciliationLedger] (retain all three existing exports)
++[env.e2e.exports.IdentityCatalog]
++type = "durable-object"
++storage = "sqlite"
++
++[[env.e2e.durable_objects.bindings]]
++name = "IDENTITY_CATALOG"
++class_name = "IdentityCatalog"
+# Each environment's later individually approved admin-enablement change:
+# 1. Securely provision its own IDENTITY_REVIEWER_CREDENTIALS secret.
+# 2. Append that name to its existing secrets.required array; retain every entry.
+# 3. Set IDENTITY_ADMIN_MODE="read-only" for individual inspection, then
+#    "review" only for approved import/review/validate/activate operations.
+# Each later mode change is separately reviewed: shadow, compare, runtime.
+# Strict inventory is enforced by the implemented strict/1 context. The design's
+# IDENTITY_INVENTORY_MODE is not implemented in U8; do not add it as a live var.
+# Never set IDENTITY_BATCH_V1_COMPATIBILITY_INSTALLATION_ID by default.
+# No script_name cross-Worker binding; no [[migrations]]; no namespace IDs guessed.

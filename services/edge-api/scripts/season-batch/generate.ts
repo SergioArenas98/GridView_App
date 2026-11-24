@@ -35,6 +35,8 @@
  */
 
 import dataSources from '../../../../content/attribution/data-sources.json';
+import { verifyCatalogFile } from '../identity/catalog-file';
+import type { CatalogReference } from '../../src/ingest/catalog-reference';
 import {
   artifactFile,
   artifactKind,
@@ -46,6 +48,11 @@ import {
 import { CapturingLogger } from '../../src/logging/logger';
 import { assembleSeasonSource } from '../../src/providers/coordination/season-assembly';
 import { MultiSourceCoordinator } from '../../src/providers/coordination/coordinator';
+import { pinnedDriverProfiles } from '../../src/identity/catalog/closure-profiles';
+import {
+  inventoryPolicyForContext,
+  inventoryPolicyVersionFor,
+} from '../../src/identity/inventory/model';
 import type { CoordinationRun } from '../../src/providers/coordination/outcome';
 import type {
   CoordinatedPayload,
@@ -70,6 +77,10 @@ import {
 } from '../../src/snapshots/generator';
 import { calendarAnchorsOf } from '../../src/sync/coordinated/observation/revisions';
 import { curatedSeasonMetadata } from '../../src/sync/coordinated/outcome/metadata';
+import {
+  bundledRunContext,
+  type IdentityRunContext,
+} from '../../src/identity/catalog/run-context';
 import { isBatchCaptureEligible } from '../../src/sync/coordinated/policy/cadence';
 import { runtimeSnapshotValidator } from '../../src/validation/snapshot-validator';
 import {
@@ -102,6 +113,11 @@ const gitCommitPattern = /^[0-9a-f]{40}$/;
 
 /** Every reason a capture is refused. Closed; safe to print. */
 export const seasonBatchFailures = [
+  'identity-mode-invalid',
+  'runtime-batch-requires-u7',
+  'catalog-export-invalid',
+  'catalog-export-mode-mismatch',
+  'inventory-policy-invalid',
   'invalid-provenance',
   'capture-malformed',
   'capture-body-missing',
@@ -134,6 +150,16 @@ export interface SeasonBatchProvenance {
 }
 
 export interface SeasonBatchInput {
+  /** Bundled/compare authority emits v1; verified runtime authority emits v2. */
+  readonly identityMode?: 'bundled' | 'compare' | 'runtime';
+  readonly catalogExport?: Uint8Array;
+  readonly installationId?: string;
+  /**
+   * U10: the explicit private batch-v2 inventory policy. Absent is
+   * `strict-v1`. `optional-driver-inventory-v1` requires runtime authority
+   * with a verified catalog export, and then governs the whole generation.
+   */
+  readonly inventoryPolicy?: string;
   /** The parsed `capture.json`, still untrusted. */
   readonly capture: unknown;
   /** Each body file named by the capture, by file name. */
@@ -254,7 +280,10 @@ interface Coordinated {
 async function coordinate(
   manifest: CaptureManifest,
   recordings: readonly RecordedResponse[],
+  context: IdentityRunContext,
 ): Promise<Coordinated | Refusal> {
+  // One policy for the whole generation, from the verified context only.
+  const inventoryPolicy = inventoryPolicyForContext(context);
   const logger = new CapturingLogger();
   const replay = replayTransport(recordings);
   const instant = Date.parse(manifest.observedAt);
@@ -265,16 +294,41 @@ async function coordinate(
     now: () => new Date(instant),
   });
   const port = new JolpicaResourcePort({
-    calendar: new JolpicaCalendarPort({ client, logger }),
-    circuits: new JolpicaCircuitsPort({ client, logger }),
-    participants: new JolpicaParticipantsPort({ client, logger }),
-    results: new JolpicaResultsPort({ client, logger }),
-    standings: new JolpicaStandingsPort({ client, logger }),
+    calendar: new JolpicaCalendarPort({
+      client,
+      logger,
+      registry: context.registry,
+      eventNames: context.events,
+    }),
+    circuits: new JolpicaCircuitsPort({
+      client,
+      logger,
+      registry: context.registry,
+      circuits: context.circuits,
+    }),
+    participants: new JolpicaParticipantsPort({
+      client,
+      logger,
+      registry: context.registry,
+      participants: context.participants,
+      inventoryPolicy,
+    }),
+    results: new JolpicaResultsPort({
+      client,
+      logger,
+      registry: context.registry,
+    }),
+    standings: new JolpicaStandingsPort({
+      client,
+      logger,
+      registry: context.registry,
+    }),
   });
   const coordinator = new MultiSourceCoordinator({
     ports: [port],
     logger,
     maxConcurrentOperations: 1,
+    inventoryPolicy,
   });
   const run = await coordinator.coordinate({
     plan: { season: manifest.season, resources: planFor(manifest) },
@@ -369,6 +423,21 @@ async function fileOf(name: string, value: unknown): Promise<SeasonBatchFile> {
 export async function generateSeasonBatch(
   input: SeasonBatchInput,
 ): Promise<SeasonBatchResult> {
+  if (
+    input.identityMode !== undefined &&
+    !['bundled', 'compare', 'runtime'].includes(input.identityMode)
+  )
+    return refuse('identity-mode-invalid');
+  if (input.identityMode === 'runtime' && !input.catalogExport)
+    return refuse('runtime-batch-requires-u7');
+  const policyVersion = inventoryPolicyVersionFor(
+    input.inventoryPolicy ?? 'strict-v1',
+  );
+  if (
+    policyVersion === null ||
+    (policyVersion === 'optional-drivers/1' && input.identityMode !== 'runtime')
+  )
+    return refuse('inventory-policy-invalid');
   if (!gitCommitPattern.test(input.provenance.gitCommit)) {
     return refuse('invalid-provenance');
   }
@@ -376,20 +445,50 @@ export async function generateSeasonBatch(
   if (!decoded.ok) return refuse('capture-malformed', decoded.reason);
   const manifest = decoded.manifest;
 
+  let runtime: Awaited<ReturnType<typeof verifyCatalogFile>> | undefined;
+  if (input.identityMode === 'runtime') {
+    try {
+      runtime = await verifyCatalogFile(input.catalogExport!, {
+        installationId: input.installationId ?? '',
+        season: manifest.season,
+        inventoryPolicy: policyVersion,
+      });
+    } catch {
+      return refuse('catalog-export-invalid');
+    }
+  } else if (input.catalogExport !== undefined) {
+    // Compare remains explicitly bundled diagnostic authority, never v2 authority.
+    return refuse('catalog-export-mode-mismatch');
+  }
+
   const recordings = await verifiedRecordings(manifest, input.bodies);
   if (!Array.isArray(recordings)) return recordings;
 
-  const coordinated = await coordinate(manifest, recordings);
+  const metadata = runtime
+    ? runtime.context.seasonMetadata
+    : curatedSeasonMetadata(manifest.season);
+  if (metadata === null) return refuse('metadata-unavailable');
+
+  const context =
+    runtime?.context ??
+    (await bundledRunContext({
+      runId: crypto.randomUUID(),
+      season: manifest.season,
+    }));
+  const coordinated = await coordinate(manifest, recordings, context);
   if ('ok' in coordinated) return coordinated;
   const { run } = coordinated;
 
-  const metadata = curatedSeasonMetadata(manifest.season);
-  if (metadata === null) return refuse('metadata-unavailable');
   const release = {
     ...metadata,
     sourceUpdatedAt: manifest.observedAt,
   };
-  const assembly = assembleSeasonSource(run, release);
+  // The same closure boundary the Worker's guarded publication uses, over
+  // the same verified context's pinned profiles and single policy.
+  const assembly = assembleSeasonSource(run, release, {
+    policy: inventoryPolicyForContext(context),
+    profiles: pinnedDriverProfiles(context),
+  });
   if (!assembly.complete) return refuse('assembly-withheld', assembly.gap);
   // After assembly, so a resource that failed part-way - and therefore never
   // asked for its remaining recordings - is reported as the failure it is.
@@ -414,12 +513,19 @@ export async function generateSeasonBatch(
   if (guard.kind !== 'valid') return refuse('participation-guard-invalid');
 
   try {
-    return await outputs(input.provenance, manifest, assembly.source, set, {
-      version,
-      calendarRounds: assembly.source.calendar.length,
-      classifiedRounds: guard.guard.classifiedRounds,
-      participationFacts: guard.guard.facts.length,
-    });
+    return await outputs(
+      input.provenance,
+      manifest,
+      assembly.source,
+      set,
+      {
+        version,
+        calendarRounds: assembly.source.calendar.length,
+        classifiedRounds: guard.guard.classifiedRounds,
+        participationFacts: guard.guard.facts.length,
+      },
+      runtime?.reference,
+    );
   } catch (error) {
     if (error instanceof CanonicalJsonError) {
       return refuse('artifact-not-canonical');
@@ -439,6 +545,7 @@ async function outputs(
     readonly classifiedRounds: readonly number[];
     readonly participationFacts: number;
   },
+  reference?: CatalogReference,
 ): Promise<SeasonBatchResult> {
   const documents = [...set.documents]
     .map((document) => ({
@@ -451,7 +558,8 @@ async function outputs(
 
   const artifact = await fileOf(artifactFile, {
     kind: artifactKind,
-    schemaVersion: seasonBatchSchemaVersion,
+    schemaVersion: reference ? 2 : seasonBatchSchemaVersion,
+    ...(reference ? { identityCatalog: reference } : {}),
     season: manifest.season,
     observedAt: manifest.observedAt,
     release: {
@@ -495,13 +603,14 @@ async function outputs(
 
   const manifestFileContent = await fileOf(manifestFile, {
     kind: manifestKind,
-    schemaVersion: seasonBatchSchemaVersion,
+    schemaVersion: reference ? 2 : seasonBatchSchemaVersion,
+    ...(reference ? { identityCatalog: reference } : {}),
     season: manifest.season,
     use: 'review-only',
     review: { status: 'unreviewed' },
     generator: {
       name: 'gridview-season-batch',
-      schemaVersion: seasonBatchSchemaVersion,
+      schemaVersion: reference ? 2 : seasonBatchSchemaVersion,
       gitCommit: provenance.gitCommit,
       treeClean: provenance.treeClean,
     },

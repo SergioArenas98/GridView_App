@@ -66,6 +66,11 @@ export function internalRouteTemplate(
   pathname: string,
   status: number,
 ): string {
+  if (
+    pathname === '/internal/admin/identity' ||
+    pathname.startsWith('/internal/admin/identity/')
+  )
+    return '/internal/admin/identity/*';
   return environment === 'production' && (status === 401 || status === 404)
     ? '/internal/*'
     : pathname;

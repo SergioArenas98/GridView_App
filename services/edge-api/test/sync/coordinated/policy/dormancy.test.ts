@@ -54,6 +54,7 @@ describe('the reconciliation policy is wired through one entry, unbound', () => 
       'sync/coordinated/run.ts',
     ]);
     expect(importersOf('sync/coordinated/outcome/')).toEqual([
+      'identity/catalog/run-context.ts',
       'ingest/batch-verification.ts',
       'ingest/service.ts',
       'sync/coordinated/observation/observe.ts',

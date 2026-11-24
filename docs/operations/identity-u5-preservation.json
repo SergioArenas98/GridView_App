@@ -1,0 +1,357 @@
+{
+  "format": "gridview-identity-u5-preservation/1",
+  "recordedAt": "2026-11-15T10:40:31.817970+00:00",
+  "baseline": "identity-u5-baseline.json",
+  "baselineSha256": "d056f70734814228df2997764edd1f1ad72878b9dff5641165622ed2c9231631",
+  "head": "027da5da59bf6b8c75a3fc432ef4fdc691772528",
+  "branch": "feat/jolpica-egress-proxy",
+  "indexPreserved": true,
+  "indexDiffSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "baselineFiles": 1432,
+  "unchangedFiles": 1414,
+  "missing": [],
+  "modified": [
+    {
+      "path": "services/edge-api/package.json",
+      "beforeSha256": "62053574812e3ac57f46190124e7e930f09ea7188651e22b1c4bd046147e8db1",
+      "afterSha256": "df55fb10b89be8760714ed0a00da74738986ae315b29617f9471ae5efe0786c0",
+      "beforeBytes": 2206,
+      "afterBytes": 2255
+    },
+    {
+      "path": "services/edge-api/src/admin/router.ts",
+      "beforeSha256": "c53ff82525fbed2e57c63e7b20b5eac041e9455f9b631bceca981b049963ce76",
+      "afterSha256": "648aff599f9d528183fa6d4bd298341c1657367aa7990c6d9857e02266b68a38",
+      "beforeBytes": 13274,
+      "afterBytes": 13333
+    },
+    {
+      "path": "services/edge-api/src/config/environment.ts",
+      "beforeSha256": "6e979c53dc0e06f708596ee3e99ad8954a90455876d382e7a11158f66cb07418",
+      "afterSha256": "6fcafb21592aa76013dd36e67a4bfe6df89d4b2afa3b8e9f8b660ba86afe8ce5",
+      "beforeBytes": 16955,
+      "afterBytes": 17082
+    },
+    {
+      "path": "services/edge-api/src/identity/catalog/correction-store.ts",
+      "beforeSha256": "5d8600e6ab9d7484d1ef646dec2467eeb71f016712c3ddd9c20fe747d5725ab3",
+      "afterSha256": "7b50257e1951ac98b708d7549c3cee1dd16ed481ae885f0c12f97ce0c81f5f26",
+      "beforeBytes": 5542,
+      "afterBytes": 5647
+    },
+    {
+      "path": "services/edge-api/src/identity/catalog/evidence-store.ts",
+      "beforeSha256": "c359a2309b03cd0e201005cc45b8100e1c5138f8e868e03474770c2359220b62",
+      "afterSha256": "8ddcb8213d0ed6eec20b6f8768146155b176564035c2ef4807cf9a944854498e",
+      "beforeBytes": 7282,
+      "afterBytes": 7294
+    },
+    {
+      "path": "services/edge-api/src/identity/catalog/repository.ts",
+      "beforeSha256": "2cf5a3090ecdb1ae11742b3b1b08a995185fa45396026cf3e97d672e8bf09c5a",
+      "afterSha256": "0351323333eee1ef0db992534b46a5920554b584952094113552da903df3a391",
+      "beforeBytes": 14764,
+      "afterBytes": 15800
+    },
+    {
+      "path": "services/edge-api/src/identity/catalog/review.ts",
+      "beforeSha256": "8efb5c86d8ca302aa2ac1f7d2678043bf81d79886008818ac1040792aea27af9",
+      "afterSha256": "9efae43b8c94073a781bcc3094573be31d2d2860b777d7523f8ae7dc5217f814",
+      "beforeBytes": 13003,
+      "afterBytes": 13058
+    },
+    {
+      "path": "services/edge-api/src/identity/catalog/revision-export.ts",
+      "beforeSha256": "99be924d8e55177e5194b786e62fcda6587cf66fd7d28c6ffd79040b996f6112",
+      "afterSha256": "04c4051af3869f8e56c463bdbe0d32444474a0e731dbcdeabba395980788c3e0",
+      "beforeBytes": 6815,
+      "afterBytes": 7277
+    },
+    {
+      "path": "services/edge-api/src/identity/catalog/revision-store.ts",
+      "beforeSha256": "f4fb5914a07a40228003e93462f21aaaae65b6edac096e7fe21bb36118fdc579",
+      "afterSha256": "0559df0d8373bbfe130fdd1c1da158e265a10e685111bbdd0a904557cfa8ffd5",
+      "beforeBytes": 12373,
+      "afterBytes": 12791
+    },
+    {
+      "path": "services/edge-api/src/identity/catalog/revision.ts",
+      "beforeSha256": "40f0a371729cccd9f9c36761f9cce62f17a938d5a96e7414f3eb255209e6794a",
+      "afterSha256": "79e9404c9bdcb517e4f09efb827fd69eb48207b827aeea20b2a6e231dccfa0dc",
+      "beforeBytes": 8609,
+      "afterBytes": 8756
+    },
+    {
+      "path": "services/edge-api/src/identity/catalog/workflow.ts",
+      "beforeSha256": "98bc41be11e15f2dcebc9d1212ee68fa9a06b39bf3ff7dd92bf65ac88f5e32ae",
+      "afterSha256": "6bb75881554d198f011e5ee84cb12dcddc132aed2ea199b9fabbc21f5ff46f18",
+      "beforeBytes": 20954,
+      "afterBytes": 21160
+    },
+    {
+      "path": "services/edge-api/src/identity/durable-object.ts",
+      "beforeSha256": "74a96509279451be6329dc0ab8119730fff93e985d88a5d647c290a69d8dc5bd",
+      "afterSha256": "c89dd045524ad6ca8b66775084790756341357a271157fc1230f9295b5b04a71",
+      "beforeBytes": 3394,
+      "afterBytes": 3795
+    },
+    {
+      "path": "services/edge-api/src/identity/storage-accounting.ts",
+      "beforeSha256": "1c24cf0458b4f3daa43698d37299830617a7a2d418535402eced14842e99274c",
+      "afterSha256": "bfffe7ebb8f04c110c6dd8cb36d89bf8bbe685ce1a2320a577c786a57c175575",
+      "beforeBytes": 1531,
+      "afterBytes": 2492
+    },
+    {
+      "path": "services/edge-api/src/index.ts",
+      "beforeSha256": "6a34cea499ebb6ea09cf30fa02fb61631a7bdadcbae647ce5a3417845ec071e2",
+      "afterSha256": "0f846d01dd4dea0e71feac00d2a30ebf3cfa42625896228f1d399ab760532291",
+      "beforeBytes": 25567,
+      "afterBytes": 25764
+    },
+    {
+      "path": "services/edge-api/src/logging/request-log.ts",
+      "beforeSha256": "2ea16bb6230f1eb40a52b0dd43b935f67f480c5498517738c02351d6f60a5d45",
+      "afterSha256": "748d72fb3c8a0fd6fe94b3f84b64c7f3b8d123d9f5828fef6d9173385aa41e34",
+      "beforeBytes": 3245,
+      "afterBytes": 3397
+    },
+    {
+      "path": "services/edge-api/test/identity/catalog/parity.test.ts",
+      "beforeSha256": "5bddfe7d56834a6078f331640af932eb4f657eb7b6d641a4ddf0c543ab08ba5c",
+      "afterSha256": "d4f0ad689d4c39624ae7b932a602e7cd950c55cb4c531732bd0ea19040532724",
+      "beforeBytes": 9353,
+      "afterBytes": 9396
+    },
+    {
+      "path": "services/edge-api/test/providers/provider-neutrality.test.ts",
+      "beforeSha256": "2c998d836cacc1a6158d429bfc36df174fb6b5ecb098767f83bfec49b1f50f27",
+      "afterSha256": "a4bc66f254b58a34c52ad5163eda44cd94fcc36da402d506b16bed6fd17ea37e",
+      "beforeBytes": 43002,
+      "afterBytes": 43309
+    },
+    {
+      "path": "services/edge-api/tsconfig.json",
+      "beforeSha256": "056ac800017f5363d5513dd6a9af390d7cd3797c357233d857daea6dcdc03f78",
+      "afterSha256": "2d2b3532808c1d2f86f8b432f24841cc076812fef2ebc771b228f48f104d80f9",
+      "beforeBytes": 813,
+      "afterBytes": 833
+    }
+  ],
+  "added": [
+    {
+      "path": "docs/operations/GridView_Identity_Admin_U5_Guide.md",
+      "sha256": "055281462411f038721cb83a8943c1f933016e9a0192ce04da3a1e9e23d07d06",
+      "bytes": 15504
+    },
+    {
+      "path": "docs/operations/GridView_Identity_Catalog_U5.md",
+      "sha256": "0644c51501ca76beef4beb6de2ac8b504f45b5c7f79baa786d50760c32f03ba4",
+      "bytes": 31857
+    },
+    {
+      "path": "docs/operations/identity-u5-baseline.json",
+      "sha256": "d056f70734814228df2997764edd1f1ad72878b9dff5641165622ed2c9231631",
+      "bytes": 308562
+    },
+    {
+      "path": "docs/operations/identity-u5-examples/README.md",
+      "sha256": "c32c3010c43730cd947ae655067cc8803bfff07c05e30f3a3c1073c649afcfae",
+      "bytes": 1967
+    },
+    {
+      "path": "docs/operations/identity-u5-examples/abandon.json",
+      "sha256": "23f45f7cbe6fd091d3b306d6be4e78d7b922a281feac404196d41ff7277b962e",
+      "bytes": 454
+    },
+    {
+      "path": "docs/operations/identity-u5-examples/acknowledge.json",
+      "sha256": "c31bab5cedd3e37c365dd8d8da3042f0e3f9b93f5c2f8b94f9ea17ff7b53f0a9",
+      "bytes": 393
+    },
+    {
+      "path": "docs/operations/identity-u5-examples/activation.json",
+      "sha256": "44ea41bfdb33f60c64e13e6b44f159cb786d20fa0ff1ae9fa9c621a6b0a1557f",
+      "bytes": 557
+    },
+    {
+      "path": "docs/operations/identity-u5-examples/approve-existing.json",
+      "sha256": "d5b1576e90dc40eddd890b1de648319adc93fe3c736793df69b773ad50363cef",
+      "bytes": 995
+    },
+    {
+      "path": "docs/operations/identity-u5-examples/approve-new.json",
+      "sha256": "4d34e0850c9153f6208c297453d7ac5de433e02411f838852ec2991e1b0fd1ed",
+      "bytes": 1717
+    },
+    {
+      "path": "docs/operations/identity-u5-examples/approve-profile.json",
+      "sha256": "c49c80a1b2e9d61b07916d544df52c9bd060c63fab46bd402423394510ec2de1",
+      "bytes": 1100
+    },
+    {
+      "path": "docs/operations/identity-u5-examples/correction.json",
+      "sha256": "6dc8dce5e271000a6bf02ea5182b15f7df8ae42cdb69a44104e53e02d3c74411",
+      "bytes": 987
+    },
+    {
+      "path": "docs/operations/identity-u5-examples/evidence-existing.json",
+      "sha256": "35633a887e23b42bc645ed3db999412b7159012dd3c8b31b2fe42b503a576a45",
+      "bytes": 1416
+    },
+    {
+      "path": "docs/operations/identity-u5-examples/evidence-new.json",
+      "sha256": "31564d694ddeae4d6e92e0fa723a6df736c1988bb234511ee2865abf7e50addf",
+      "bytes": 1410
+    },
+    {
+      "path": "docs/operations/identity-u5-examples/pause-admission.json",
+      "sha256": "16203e1edaaad27dfbf4a7a1c8da1b8f5d1a61ab8df7d95d05c6ed5785e43851",
+      "bytes": 421
+    },
+    {
+      "path": "docs/operations/identity-u5-examples/quarantine.json",
+      "sha256": "6fa23a7f17ca7c752e440e69fb311efc293274a986e5b5c4fecb86598482e27a",
+      "bytes": 587
+    },
+    {
+      "path": "docs/operations/identity-u5-examples/reject.json",
+      "sha256": "20c14cc8666c14d164e35abd4ab160240d71c3148c14eab609631fc1a1562f19",
+      "bytes": 590
+    },
+    {
+      "path": "docs/operations/identity-u5-examples/reopen.json",
+      "sha256": "b574db1710479c83035269eac372b859c0ca66becd36071976a049b4451fff54",
+      "bytes": 579
+    },
+    {
+      "path": "docs/operations/identity-u5-examples/validation.json",
+      "sha256": "1e8ca1f19b40faab57766e3c0570de2904d6a35aed8fe90453e38042e5f18e20",
+      "bytes": 522
+    },
+    {
+      "path": "docs/operations/identity-u5-preservation.json",
+      "sha256": null,
+      "bytes": null
+    },
+    {
+      "path": "services/edge-api/scripts/identity/cli.mjs",
+      "sha256": "b8ca4b8527635bac49e0f5da9b14e2fdb59f39154ca850b2c36a9023e0b261ad",
+      "bytes": 18748
+    },
+    {
+      "path": "services/edge-api/scripts/identity/client.mjs",
+      "sha256": "4719b0ac61fb5dc9932e89ccf3c2d25fe21102daf3be549aa415f1e6d7f3feca",
+      "bytes": 6484
+    },
+    {
+      "path": "services/edge-api/scripts/identity/validation.ts",
+      "sha256": "557b3cb72fd65d372c65388fb2951f6cfa8024e48db5862307bea1e1594ea11d",
+      "bytes": 1655
+    },
+    {
+      "path": "services/edge-api/scripts/identity/validator.mjs",
+      "sha256": "d92148edb773741fdbf77e2813b973f3ccd2073c5e16024a071e5787de3f2626",
+      "bytes": 1347
+    },
+    {
+      "path": "services/edge-api/src/admin/identity/auth.ts",
+      "sha256": "7dbc3c09af101ff81de7d4a3fa707efd98f7adb24de6c2e5dadb60f457880e4a",
+      "bytes": 4295
+    },
+    {
+      "path": "services/edge-api/src/admin/identity/guards.d.mts",
+      "sha256": "5aa6981c00ca2eb31285099d33f86946d7dd679b7b525993b2285622e469b051",
+      "bytes": 953
+    },
+    {
+      "path": "services/edge-api/src/admin/identity/guards.mjs",
+      "sha256": "df242c1ca1dab685b578c76afd268f3b75471c4e19350ba32398ff53ec60907c",
+      "bytes": 11895
+    },
+    {
+      "path": "services/edge-api/src/admin/identity/mutations.ts",
+      "sha256": "5680020e97e51cfb954c6a0d48cff3374adb4630fb7fb6ffd4966f8dad2c7d62",
+      "bytes": 12158
+    },
+    {
+      "path": "services/edge-api/src/admin/identity/reads.ts",
+      "sha256": "6113ec52fa268fa5cb6ac97eb9bd602d37f995ea125ba6202da398646c322be5",
+      "bytes": 12225
+    },
+    {
+      "path": "services/edge-api/src/admin/identity/requests.ts",
+      "sha256": "1f4b2ab0e7031f6977a393036283f3f0d9bed4188945ba7a8b3f8410bf1f6cd1",
+      "bytes": 6067
+    },
+    {
+      "path": "services/edge-api/src/admin/identity/responses.ts",
+      "sha256": "4b3884fb5562df17f19b4fe06652b75cf665d6b47d72bed253876d0ad98c8aad",
+      "bytes": 4698
+    },
+    {
+      "path": "services/edge-api/src/admin/identity/routes.ts",
+      "sha256": "91ababf6c75ce45264889f1d22cea59c524c08be08dccdb424bf3fc5ca6922e0",
+      "bytes": 3666
+    },
+    {
+      "path": "services/edge-api/src/admin/identity/service.ts",
+      "sha256": "01ea9b126d41b078d8962396ecea7097a3ecfde2a48b0e6fe871770edc2764f6",
+      "bytes": 6789
+    },
+    {
+      "path": "services/edge-api/src/identity/catalog/admin-workflow.ts",
+      "sha256": "19505de6ee2ee6f9f2ddd6f991bfdbd381c12b546307845a6d190924458649d6",
+      "bytes": 26592
+    },
+    {
+      "path": "services/edge-api/src/identity/catalog/base-import.ts",
+      "sha256": "a1c4fd0f9fca29df59aedb14c9514fa1186e365eaeff002adf29fb74a4948f23",
+      "bytes": 5049
+    },
+    {
+      "path": "services/edge-api/test/admin/identity/api.test.ts",
+      "sha256": "57953bc2d4205638d6478a8f69d0dad9d28422f40ef794d39488937b304775a5",
+      "bytes": 42755
+    },
+    {
+      "path": "services/edge-api/test/admin/identity/auth.test.ts",
+      "sha256": "ccd1ad408b7df3587146a68815a4f1d3a75fadf6f34800016309ed3ce147668b",
+      "bytes": 3798
+    },
+    {
+      "path": "services/edge-api/test/admin/identity/boundaries.test.ts",
+      "sha256": "d361d1dc37f116e1a0cfa141a8953db62c0a838629ae65b99ba08a7173e373e7",
+      "bytes": 1321
+    },
+    {
+      "path": "services/edge-api/test/admin/identity/cli.test.mjs",
+      "sha256": "e0dd00b93b0a3a4002764145da25f44931ab054e1aa6cd4e6836bb7d97d4d793",
+      "bytes": 11316
+    },
+    {
+      "path": "services/edge-api/test/admin/identity/local-worker.ts",
+      "sha256": "79c7107f89e22efd2d86e464c8092e6bf4e1329fe907289c4c6b5c825bb46d45",
+      "bytes": 1063
+    },
+    {
+      "path": "services/edge-api/test/admin/identity/local.test.mjs",
+      "sha256": "79e579e919f935ab62f841633f946f55fe4cddf52819b3389960554f68b09537",
+      "bytes": 7771
+    },
+    {
+      "path": "services/edge-api/test/admin/identity/support.ts",
+      "sha256": "fb77417284c95a9543c4fea8c9d3e56232ab365930a15974421a6f3120880a73",
+      "bytes": 5833
+    }
+  ],
+  "status": "# branch.oid 027da5da59bf6b8c75a3fc432ef4fdc691772528\n# branch.head feat/jolpica-egress-proxy\n1 .M N... 100644 100644 100644 b96bddfbaa37520e4dce3eb2cb65161fc6f838c9 b96bddfbaa37520e4dce3eb2cb65161fc6f838c9 content/seasons/2026/provider-evidence.development.json\n1 .M N... 100644 100644 100644 d1eb5c69530aa6b4daa3022ad8fbb894e32916a9 d1eb5c69530aa6b4daa3022ad8fbb894e32916a9 docs/adr/0009-protected-staging-administration-token.md\n1 .M N... 100644 100644 100644 6fda7e3aa5241ce47e43a59154e06cef78a600e6 6fda7e3aa5241ce47e43a59154e06cef78a600e6 docs/adr/0020-provider-source-observation-and-reconciliation.md\n1 .M N... 100644 100644 100644 4521f86145ae133356c37eb83322ab53c2395314 4521f86145ae133356c37eb83322ab53c2395314 docs/adr/0022-curated-provider-identifier-mappings.md\n1 .M N... 100644 100644 100644 c1569c3d339366e65adba887d6f002aec6b60933 c1569c3d339366e65adba887d6f002aec6b60933 docs/adr/0023-multi-source-provider-coordination.md\n1 .M N... 100644 100644 100644 e6691bc24122db6aca3489d3e67491d05e3bfda1 e6691bc24122db6aca3489d3e67491d05e3bfda1 docs/adr/0024-deep-normalized-contract-validation.md\n1 .M N... 100644 100644 100644 28906a6798dc333340a1ae811425d8c5d96fca1b 28906a6798dc333340a1ae811425d8c5d96fca1b docs/adr/0025-season-publication-authority-and-rollback-republication.md\n1 .M N... 100644 100644 100644 36ee11c1ce08199e18a406f2a0cdf733188cd29b 36ee11c1ce08199e18a406f2a0cdf733188cd29b docs/adr/0026-season-participation-semantics-and-derivation.md\n1 .M N... 100644 100644 100644 94a1a2c45c35206923e20b46817341a317f03d82 94a1a2c45c35206923e20b46817341a317f03d82 docs/adr/0028-automatic-end-to-end-season-updates.md\n1 .M N... 100644 100644 100644 6053ca6b77bcc708fe61e0a845b36cda9184e452 6053ca6b77bcc708fe61e0a845b36cda9184e452 docs/adr/README.md\n1 .M N... 100644 100644 100644 81fba20baf76e61e0778e7d905cb455c670539ca 81fba20baf76e61e0778e7d905cb455c670539ca docs/operations/GridView_Provider_Mapping_Guide.md\n1 .M N... 100644 100644 100644 4178e41eb2c543ba223eece6eea7fb317ee3199d 4178e41eb2c543ba223eece6eea7fb317ee3199d docs/technical/GridView_Backend_Scheme.md\n1 .M N... 100644 100644 100644 e91de693ba7c4e96fd41255784df2f2958710f46 e91de693ba7c4e96fd41255784df2f2958710f46 docs/technical/GridView_Environments.md\n1 .M N... 100644 100644 100644 979573d53fd700d0de435328a24e378949a9c6b6 979573d53fd700d0de435328a24e378949a9c6b6 docs/technical/GridView_Implementation_Plan.md\n1 .M N... 100644 100644 100644 380d2f65831c8e172a638877a8481020c6815d92 380d2f65831c8e172a638877a8481020c6815d92 services/edge-api/.prettierignore\n1 .M N... 100644 100644 100644 8a7956b84f150530d79deff9957d39c3ac8b5c98 8a7956b84f150530d79deff9957d39c3ac8b5c98 services/edge-api/package-lock.json\n1 .M N... 100644 100644 100644 5dd5e6af0d37a9f5736b49b02d0cb12557b8dd63 5dd5e6af0d37a9f5736b49b02d0cb12557b8dd63 services/edge-api/package.json\n1 .M N... 100644 100644 100644 ee2352fda798b8f6ef944f13879f122ec72a17ac ee2352fda798b8f6ef944f13879f122ec72a17ac services/edge-api/scripts/lib/driver-entry-rules.mjs\n1 .M N... 100644 100644 100644 916f17f2d99490d0129e7f39a3ace0bb3376b75e 916f17f2d99490d0129e7f39a3ace0bb3376b75e services/edge-api/scripts/lib/provider-mapping-rules.mjs\n1 .M N... 100644 100644 100644 aeb8e1a70f2e9c8069e4deaa257ac31c449b83c6 aeb8e1a70f2e9c8069e4deaa257ac31c449b83c6 services/edge-api/src/admin/router.ts\n1 .M N... 100644 100644 100644 6fdf1b88a602576dbc64c5e319a765a1ca2f2fba 6fdf1b88a602576dbc64c5e319a765a1ca2f2fba services/edge-api/src/config/environment.ts\n1 .M N... 100644 100644 100644 c5abff7e3ec1579755be264eafd218163b223f07 c5abff7e3ec1579755be264eafd218163b223f07 services/edge-api/src/index.ts\n1 .M N... 100644 100644 100644 8502061f6b5a57e6a79f97740fed1380e25227ba 8502061f6b5a57e6a79f97740fed1380e25227ba services/edge-api/src/logging/logger.ts\n1 .M N... 100644 100644 100644 8321f67f9d64d7c8b726ef4c265dfab3706ee9cc 8321f67f9d64d7c8b726ef4c265dfab3706ee9cc services/edge-api/src/logging/request-log.ts\n1 .M N... 100644 100644 100644 38fb2c58e705e286514bbd8bbc17d7240c408efe 38fb2c58e705e286514bbd8bbc17d7240c408efe services/edge-api/src/providers/jolpica/calendar-port.ts\n1 .M N... 100644 100644 100644 8dfd56ffd2e76b074e707dacf0b69e683b23cae2 8dfd56ffd2e76b074e707dacf0b69e683b23cae2 services/edge-api/src/providers/jolpica/circuits-port.ts\n1 .M N... 100644 100644 100644 1a885aa19fb4ddff23b70c4e9f761a9425fcf87f 1a885aa19fb4ddff23b70c4e9f761a9425fcf87f services/edge-api/src/providers/jolpica/participants-port.ts\n1 .M N... 100644 100644 100644 e7c87a5eddbc9c8570d6547062dcf99adbe4f31d e7c87a5eddbc9c8570d6547062dcf99adbe4f31d services/edge-api/src/providers/jolpica/results-port.ts\n1 .M N... 100644 100644 100644 d1cb5cbad127f144597e42da64d05cc5939ea4af d1cb5cbad127f144597e42da64d05cc5939ea4af services/edge-api/src/providers/jolpica/standings-port.ts\n1 .M N... 100644 100644 100644 994667ce9113ddd1938599cddf34c70622d39f6d 994667ce9113ddd1938599cddf34c70622d39f6d services/edge-api/src/sync/coordinated/composition.ts\n1 .M N... 100644 100644 100644 ef1c720f8a3504c90d407f50f6a591e2fd293d3c ef1c720f8a3504c90d407f50f6a591e2fd293d3c services/edge-api/src/sync/coordinated/run.ts\n1 .M N... 100644 100644 100644 7c63694742a49496ec38222c6549e244eefa6605 7c63694742a49496ec38222c6549e244eefa6605 services/edge-api/test/providers/coordination/coordination-containment.test.ts\n1 .M N... 100644 100644 100644 779e7cda6038dffbde0ff8e4d6d79784fd626aff 779e7cda6038dffbde0ff8e4d6d79784fd626aff services/edge-api/test/providers/mappings/circuit-dataset-2026.test.ts\n1 .M N... 100644 100644 100644 1fcf50e9e3c2fe4e472eea5b3623f6cffdae504b 1fcf50e9e3c2fe4e472eea5b3623f6cffdae504b services/edge-api/test/providers/mappings/constructor-dataset-2026.test.ts\n1 .M N... 100644 100644 100644 42dd7219787da7a3b4fc7a32e6bbc27c05307cbe 42dd7219787da7a3b4fc7a32e6bbc27c05307cbe services/edge-api/test/providers/mappings/driver-dataset-2026.test.ts\n1 .M N... 100644 100644 100644 ac3129b848faa064e13a8b048dcd219e71dcaef4 ac3129b848faa064e13a8b048dcd219e71dcaef4 services/edge-api/test/providers/mappings/mapping-acknowledgement.test.ts\n1 .M N... 100644 100644 100644 7e9d90f9d095c5e6f88374c12f76dfbb1c7f602d 7e9d90f9d095c5e6f88374c12f76dfbb1c7f602d services/edge-api/test/providers/mappings/mapping-containment.test.ts\n1 .M N... 100644 100644 100644 ed46b350978eb733402209e279a0a9fb6e1bc58f ed46b350978eb733402209e279a0a9fb6e1bc58f services/edge-api/test/providers/provider-neutrality.test.ts\n1 .M N... 100644 100644 100644 9ce80decbc93e7c6e5c1d9d999a2e783f9398c64 9ce80decbc93e7c6e5c1d9d999a2e783f9398c64 services/edge-api/test/sync/coordinated/entry-points/proxy-transport.test.ts\n1 .M N... 100644 100644 100644 f6118a68b822d04909a27b66a902b3117e136f17 f6118a68b822d04909a27b66a902b3117e136f17 services/edge-api/tsconfig.json\n? docs/adr/0029-persistent-identity-discovery-and-reviewed-runtime-catalog.md\n? docs/adr/0030-provider-driver-inventory-and-required-identity-closure.md\n? docs/adr/0031-identity-review-authority-and-catalog-cutover.md\n? docs/operations/2026-11-12-jolpica-mapping-investigation.md\n? docs/operations/GridView_Identity_Admin_U5_Guide.md\n? docs/operations/GridView_Identity_Catalog_U3.md\n? docs/operations/GridView_Identity_Catalog_U4.md\n? docs/operations/GridView_Identity_Catalog_U4_Preflight.md\n? docs/operations/GridView_Identity_Catalog_U5.md\n? docs/operations/GridView_Identity_Discovery_U2.md\n? docs/operations/identity-seed-r0/\n? docs/operations/identity-u3-correction-baseline.json\n? docs/operations/identity-u4-baseline.json\n? docs/operations/identity-u4-preservation.json\n? docs/operations/identity-u4-resume-baseline.json\n? docs/operations/identity-u5-baseline.json\n? docs/operations/identity-u5-examples/\n? docs/operations/identity-u5-preservation.json\n? docs/technical/GridView_Identity_Management_Design.md\n? services/edge-api/scripts/identity/\n? services/edge-api/scripts/lib/driver-entry-rules.d.mts\n? services/edge-api/scripts/lib/provider-mapping-rules.d.mts\n? services/edge-api/src/admin/identity-routes.ts\n? services/edge-api/src/admin/identity/\n? services/edge-api/src/identity/\n? services/edge-api/test/admin/identity/\n? services/edge-api/test/identity/\n? services/edge-api/wrangler.identity-local.toml\n",
+  "notes": [
+    "All 1432 baseline paths accounted for; 1414 have identical bytes. Narrow U5 extensions in the 18 modified paths retain earlier investigation/U0-U4 work.",
+    "Ignored dependencies, local logs and transient test storage are excluded, as in the baseline.",
+    "Self hash and byte count intentionally omitted to avoid recursion.",
+    "No commit, push, merge, deployment, infrastructure change, real credential or real approval.",
+    "No files in wt-ui-redesign accessed or modified."
+  ],
+  "diffCheck": "passed"
+}

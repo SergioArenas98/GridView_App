@@ -20,6 +20,8 @@ import type {
   SyncJobCategory,
 } from '../storage/types';
 import { adminAuthOk, unauthorized } from './auth';
+import { isIdentityPath } from './identity-routes';
+import { handleIdentityRequest } from './identity/routes';
 import {
   calendarSingleGetPath,
   handleCalendarSingleGetRequest,
@@ -29,6 +31,7 @@ import {
   handleEgressIdentityRequest,
 } from './egress-identity-route';
 import { handleCutoverRequest, isCutoverPath } from './cutover-routes';
+import { handleRecoveryRequest, recoveryPath } from './recovery-route';
 import {
   handleCoordinatedRollback,
   handleReconciliationRequest,
@@ -110,11 +113,16 @@ export async function handleAdminRequest(
   request: Request,
   context: AdminContext,
 ): Promise<Response> {
+  if (isIdentityPath(new URL(request.url).pathname)) {
+    return handleIdentityRequest(request, context.env, context.requestId);
+  }
   if (!adminAuthOk(request, context.env)) {
     return unauthorized(context.requestId);
   }
 
   const url = new URL(request.url);
+  if (url.pathname === recoveryPath)
+    return handleRecoveryRequest(request, context.env, context.requestId);
   // Dispatched before the shared season resolution below: a cutover names its
   // season explicitly, and must never inherit `meta:current-season`.
   if (isCutoverPath(url.pathname)) {

@@ -94,7 +94,7 @@ describe('PROVIDER_MODE admission', () => {
     }
   });
 
-  it('is selected by no committed environment but the demonstration Worker and staging', () => {
+  it('is selected by no committed environment but the demonstration Worker, staging and production', () => {
     const wrangler = readFileSync(
       join(__dirname, '..', '..', 'wrangler.toml'),
       'utf8',
@@ -103,14 +103,18 @@ describe('PROVIDER_MODE admission', () => {
       [...toml.matchAll(/^PROVIDER_MODE = "([^"]*)"/gm)].map(
         (match) => match[1],
       );
-    // Production `none`; development leaves it unset.
+    // Development leaves it unset.
     const elsewhere = withoutAutomatic(wrangler);
-    expect(modesIn(elsewhere)).toEqual(['none']);
+    expect(modesIn(elsewhere)).toEqual([]);
     expect(elsewhere).not.toContain('coordinated');
     // The demonstration Worker (AU-2) selects it, with its controlled source,
     // and staging (AU-4) against the network.
     expect(modesIn(demonstrationSection(wrangler))).toEqual(['coordinated']);
     expect(modesIn(environmentSection(wrangler, 'staging'))).toEqual([
+      'coordinated',
+    ]);
+    // Production since gate AU-7, against the network through the proxy.
+    expect(modesIn(environmentSection(wrangler, 'production'))).toEqual([
       'coordinated',
     ]);
   });

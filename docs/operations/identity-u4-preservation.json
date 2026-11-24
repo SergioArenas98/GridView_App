@@ -1,0 +1,135 @@
+﻿{
+  "baseline": "docs/operations/identity-u4-resume-baseline.json",
+  "head": "027da5da59bf6b8c75a3fc432ef4fdc691772528",
+  "capturedAt": "2026-11-14T23:41:08.2949095Z",
+  "stagedPaths": [],
+  "unchangedPreexistingCount": 1399,
+  "format": "gridview-identity-u4-preservation/1",
+  "sourceByteChecks": [
+    {
+      "manifestHash": "sha256:e474ce061e0710fca8cacea94bff6084022cc186a9a74ec0b82ee678073bef36",
+      "path": "content/registries/circuits.mock.json",
+      "actualHash": "sha256:e474ce061e0710fca8cacea94bff6084022cc186a9a74ec0b82ee678073bef36",
+      "equal": true
+    },
+    {
+      "manifestHash": "sha256:a1c54c20f78a44da97e34cf2b9f7d7bd077af729b6af1772fe3575a6c2bd485c",
+      "path": "content/registries/constructors.mock.json",
+      "actualHash": "sha256:a1c54c20f78a44da97e34cf2b9f7d7bd077af729b6af1772fe3575a6c2bd485c",
+      "equal": true
+    },
+    {
+      "manifestHash": "sha256:f2810aee612c979daecda9cc997b9088039c8f7c306d782360bb7d623a5581a7",
+      "path": "content/registries/drivers.mock.json",
+      "actualHash": "sha256:f2810aee612c979daecda9cc997b9088039c8f7c306d782360bb7d623a5581a7",
+      "equal": true
+    },
+    {
+      "manifestHash": "sha256:9ee48d82c9f0ea3833d5079921ad855226efad9ff62dfd41c6d657031af3472a",
+      "path": "content/registries/events.development.json",
+      "actualHash": "sha256:9ee48d82c9f0ea3833d5079921ad855226efad9ff62dfd41c6d657031af3472a",
+      "equal": true
+    },
+    {
+      "manifestHash": "sha256:e9bca30b932b4988c17858a743a4536b832e3eabff5d90dd7888672e00f59576",
+      "path": "content/seasons/2026/constructor-entries.mock.json",
+      "actualHash": "sha256:e9bca30b932b4988c17858a743a4536b832e3eabff5d90dd7888672e00f59576",
+      "equal": true
+    },
+    {
+      "manifestHash": "sha256:a8090bd600fa19dd9f4551855a9110c6898280d6306e41f16815017001713e6f",
+      "path": "content/seasons/2026/driver-entries.mock.json",
+      "actualHash": "sha256:a8090bd600fa19dd9f4551855a9110c6898280d6306e41f16815017001713e6f",
+      "equal": true
+    },
+    {
+      "manifestHash": "sha256:54f3f33cc850fc5ee6d74b4837c913b285786d014c21c10c59cff66a5f191e3a",
+      "path": "content/seasons/2026/overrides.mock.json",
+      "actualHash": "sha256:54f3f33cc850fc5ee6d74b4837c913b285786d014c21c10c59cff66a5f191e3a",
+      "equal": true
+    },
+    {
+      "manifestHash": "sha256:9ab5c486201beff9fcd81ce4696a4b4d2a513149eef2c4ec85fabcd69c1c479d",
+      "path": "content/seasons/2026/provider-evidence.development.json",
+      "actualHash": "sha256:9ab5c486201beff9fcd81ce4696a4b4d2a513149eef2c4ec85fabcd69c1c479d",
+      "equal": true
+    },
+    {
+      "manifestHash": "sha256:6ff22dc4503d93f1b797ea4f4e5fc24fdb58290c40c24020d0e5871eb58b04a2",
+      "path": "content/seasons/2026/provider-mappings.development.json",
+      "actualHash": "sha256:6ff22dc4503d93f1b797ea4f4e5fc24fdb58290c40c24020d0e5871eb58b04a2",
+      "equal": true
+    },
+    {
+      "manifestHash": "sha256:0490b59785c6c0cf7b839a8d50396b98d46e31117c50ea12e2a3ec01c379f7e0",
+      "path": "content/seasons/2026/season-metadata.development.json",
+      "actualHash": "sha256:0490b59785c6c0cf7b839a8d50396b98d46e31117c50ea12e2a3ec01c379f7e0",
+      "equal": true
+    }
+  ],
+  "branch": "feat/jolpica-egress-proxy",
+  "modifiedPreexisting": [
+    {
+      "beforeSha256": "fd95da700193ad3e131553d361d3d1c158906e1dae2ef868d1f235670d74c7ec",
+      "path": "services/edge-api/src/identity/catalog/indexes.ts",
+      "afterSha256": "bbb66c8c57a7ac000f7824059f5d0282df73a28af670656af1b9d747958061bc"
+    },
+    {
+      "beforeSha256": "c37d09d1bd8f1d8ad785644576025f48347c76a0b9baba21e2a7ea1d3d0c6bd4",
+      "path": "services/edge-api/src/identity/catalog/model.ts",
+      "afterSha256": "0a49ac5f8817bed3af5ece22d1735fbc51718b072ba1b1052d303babdbc35584"
+    },
+    {
+      "beforeSha256": "795a086de133f25748652996c66ac63fa199aed647b0d30a7505b135355677a0",
+      "path": "services/edge-api/src/identity/discovery/keys.ts",
+      "afterSha256": "9f782dad4759fa01931fefde5ee03c4a608bd2fdb3e16b02e339f492643bc0b2"
+    },
+    {
+      "beforeSha256": "132d07a0126bfcad14abcf11beac9b6cc028312829142c59ba03708407ed5f84",
+      "path": "services/edge-api/src/identity/port.ts",
+      "afterSha256": "1561328e67a2cd3f3aed33bca10c06bed38f4a804c5f0108079b3f503e0e04d0"
+    },
+    {
+      "beforeSha256": "92f865f3a0c954db50777d08d46688ca96dd8e5f5f29416cdb59ac24de3f7b22",
+      "path": "services/edge-api/src/identity/response-decoders.ts",
+      "afterSha256": "75767e519b676ae7c797f07949de9522e231875bab8312c8e0093d768e427944"
+    },
+    {
+      "beforeSha256": "c70178f5fb3a366cfb908cc0806861d9918534f470cef23fad9449ba46337dd4",
+      "path": "services/edge-api/src/identity/store.ts",
+      "afterSha256": "235ed2573537f1ca18600089114d2d89dd9cf7d8187b91bcf766604483264524"
+    }
+  ],
+  "missingPreexisting": [],
+  "preexistingDirtyCount": 113,
+  "addedPaths": [
+    "docs/operations/GridView_Identity_Catalog_U4.md",
+    "docs/operations/identity-u4-preservation.json",
+    "docs/operations/identity-u4-resume-baseline.json",
+    "services/edge-api/src/identity/catalog/activation.ts",
+    "services/edge-api/src/identity/catalog/correction.ts",
+    "services/edge-api/src/identity/catalog/correction-store.ts",
+    "services/edge-api/src/identity/catalog/dataset-version.ts",
+    "services/edge-api/src/identity/catalog/evidence-store.ts",
+    "services/edge-api/src/identity/catalog/port.ts",
+    "services/edge-api/src/identity/catalog/repository.ts",
+    "services/edge-api/src/identity/catalog/review.ts",
+    "services/edge-api/src/identity/catalog/revision.ts",
+    "services/edge-api/src/identity/catalog/revision-export.ts",
+    "services/edge-api/src/identity/catalog/revision-store.ts",
+    "services/edge-api/src/identity/catalog/schema.ts",
+    "services/edge-api/src/identity/catalog/workflow.ts",
+    "services/edge-api/src/identity/storage-accounting.ts",
+    "services/edge-api/test/identity/catalog/u4-authority.ts",
+    "services/edge-api/test/identity/catalog/u4-concurrency.test.ts",
+    "services/edge-api/test/identity/catalog/u4-dataset.test.ts",
+    "services/edge-api/test/identity/catalog/u4-export.test.ts",
+    "services/edge-api/test/identity/catalog/u4-lifecycle.test.ts",
+    "services/edge-api/test/identity/catalog/u4-local.test.mjs",
+    "services/edge-api/test/identity/catalog/u4-local-worker.ts",
+    "services/edge-api/test/identity/catalog/u4-support.ts",
+    "services/edge-api/test/identity/catalog/u4-transactions.test.ts",
+    "services/edge-api/test/identity/catalog/u4-validation.test.ts"
+  ],
+  "preexistingFileCount": 1405
+}

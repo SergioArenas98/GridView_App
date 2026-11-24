@@ -27,6 +27,7 @@ import type {
   Session,
 } from '../../contract/types';
 import type { SyncJobCategory } from '../../storage/types';
+import type { DriverInventory } from '../../identity/inventory/model';
 
 /**
  * The closed set of logical resources.
@@ -104,6 +105,29 @@ export type CoordinatedResource =
 export type CoordinatedStandingsRound = number | null;
 
 /**
+ * The strict (pre-U9, default) participants contribution: a closed wrapper of
+ * exactly these collections. It never carries inventory accounting.
+ */
+export interface SeasonParticipantsPayload {
+  readonly kind: 'season-participants';
+  readonly drivers: readonly Driver[];
+  readonly constructors: readonly Constructor[];
+  readonly driverEntries: readonly DriverSeasonEntry[];
+  readonly constructorEntries: readonly ConstructorSeasonEntry[];
+}
+
+/**
+ * U9: the explicit optional-driver contribution. Valid **only** when the run's
+ * trusted policy is `optional-drivers`; the strict closed wrapper refuses it.
+ * `drivers` holds complete verified profiles only, `driverEntries` stays
+ * empty, and `driverInventory` is private coordination metadata that must be
+ * removed before any public source is constructed (U10 owns that boundary).
+ */
+export interface InventorySeasonParticipantsPayload extends SeasonParticipantsPayload {
+  readonly driverInventory: DriverInventory;
+}
+
+/**
  * The normalized payload a source contributes.
  *
  * Each member is pinned to exactly one resource kind, so a calendar payload
@@ -112,13 +136,8 @@ export type CoordinatedStandingsRound = number | null;
  */
 export type CoordinatedPayload =
   | { readonly kind: 'season-calendar'; readonly events: readonly GrandPrix[] }
-  | {
-      readonly kind: 'season-participants';
-      readonly drivers: readonly Driver[];
-      readonly constructors: readonly Constructor[];
-      readonly driverEntries: readonly DriverSeasonEntry[];
-      readonly constructorEntries: readonly ConstructorSeasonEntry[];
-    }
+  | SeasonParticipantsPayload
+  | InventorySeasonParticipantsPayload
   | { readonly kind: 'season-circuits'; readonly circuits: readonly Circuit[] }
   | {
       readonly kind: 'driver-standings';

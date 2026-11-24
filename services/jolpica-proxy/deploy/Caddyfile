@@ -1,0 +1,49 @@
+{
+	email {$ACME_EMAIL}
+	servers {
+		max_header_size 8KB
+		timeouts {
+			read_header 5s
+			read_body 5s
+			write 12s
+			idle 30s
+		}
+	}
+}
+
+{$PROXY_HOSTNAME} {
+	# Local readiness must not become an externally accessible provider probe.
+	@health path /healthz
+	header @health X-GridView-Proxy-Error local_health
+	header @health Content-Type application/json
+	header @health Cache-Control no-store
+	respond @health `{"error":"proxy_local_health"}` 404
+
+	# No access logging, response rewriting, compression or caching.
+	reverse_proxy 127.0.0.1:8788 {
+		lb_retries 0
+		lb_try_duration 0
+		header_up -Cookie
+		header_up -Forwarded
+		header_up -X-Forwarded-For
+		header_up -X-Real-IP
+		header_up -CF-Connecting-IP
+		header_up -True-Client-IP
+		transport http {
+			dial_timeout 2s
+			response_header_timeout 9s
+			max_response_header 16KB
+			compression off
+			# Avoid Go's implicit retries on a reused connection.
+			keepalive off
+		}
+	}
+
+	# Caddy-originated failures are distinct from upstream HTTP responses.
+	handle_errors {
+		header X-GridView-Proxy-Error ingress
+		header Cache-Control no-store
+		header Content-Type application/json
+		respond `{"error":"proxy_ingress"}` {err.status_code}
+	}
+}

@@ -275,7 +275,7 @@ describe('coordination performs no I/O of its own', () => {
 });
 
 describe('the coordination seam is dormant', () => {
-  it('is consumed only by the coordinated runtime composition', () => {
+  it('keeps consumers exact, including U1 resource types without runtime wiring', () => {
     const consumers = sourceFiles()
       .filter((file) => !file.startsWith('providers/coordination/'))
       .filter((file) => {
@@ -302,7 +302,10 @@ describe('the coordination seam is dormant', () => {
     // The guarded staging ingest re-validates a submitted source with the
     // pure referential preflight, and names the calendar payload type. It
     // builds no coordinator and calls no port.
-    expect(consumers).toEqual([
+    // U1 names CoordinatedResource by type only. The provider-neutrality
+    // bundle graph proves it creates no runtime edge into this package.
+    expect(consumers.sort()).toEqual([
+      'identity/discovery/model.ts',
       'ingest/batch-verification.ts',
       'ingest/source-validation.ts',
       'sync/coordinated/composition.ts',

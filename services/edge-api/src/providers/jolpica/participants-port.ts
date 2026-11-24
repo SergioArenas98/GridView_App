@@ -32,6 +32,15 @@
  * requests by cancellation or the limiter is `interrupted`, carrying the
  * drivers attempt that really happened.
  *
+ * **U9 optional-driver inventory.** Under an explicit `optional-drivers`
+ * policy - which no operational composition selects before U10 - a strictly
+ * decoded driver page whose only identity problem is one or more exact
+ * `unmapped` keys is accounted privately (`driverInventory`) instead of ending
+ * the resource, so the constructors request **is** made: one more actual
+ * attempt than strict mode's early exit, reported exactly as it happened.
+ * Transport, decoding, pagination, every other mapping/profile/duplicate
+ * problem and every constructor problem still fail the whole resource.
+ *
  * **What it produces** is the identity inventory plus one
  * `ConstructorSeasonEntry` per constructor, with `driverEntries` empty (ADR
  * 0026 D10, D11; see `participants-normalizer.ts`). It makes no race-result
@@ -39,6 +48,10 @@
  */
 
 import type { Logger } from '../../logging/logger';
+import {
+  captureDiscovery,
+  type DiscoverySink,
+} from '../../identity/discovery/persist';
 import type {
   CoordinatedSourceId,
   InterruptionReason,
@@ -56,9 +69,17 @@ import {
 import {
   providerMappingFailureEvent,
   providerMappingRegistry,
+  type ProviderMappingFailure,
   type ProviderMappingRegistry,
 } from '../mappings';
 import type { ProviderAttemptOutcome } from '../provider-metrics';
+import type { Driver } from '../../contract/types';
+import {
+  readDriverInventoryPolicy,
+  type DriverInventory,
+  type DriverInventoryPolicy,
+} from '../../identity/inventory/model';
+import type { DriverInventoryNormalization } from '../../identity/inventory/normalize';
 import {
   curatedParticipants,
   type CuratedParticipants,
@@ -66,12 +87,14 @@ import {
 import {
   constructorSeasonEntries,
   normalizeSeasonConstructors,
+  normalizeSeasonDriverInventory,
   normalizeSeasonDrivers,
   type IdentityNormalization,
 } from './participants-normalizer';
 import {
   decodeSeasonConstructors,
   decodeSeasonDrivers,
+  type DecodedDriver,
   type ParticipantsDecodeProblem,
 } from './participants-payload';
 
@@ -94,6 +117,7 @@ const constructorsPathFor = (season: number): string =>
 type ParticipantsEndpoint = 'drivers' | 'constructors';
 
 export interface JolpicaParticipantsPortOptions {
+  readonly discovery?: DiscoverySink;
   /** The hardened outbound boundary. Injected; never defaulted to `fetch`. */
   readonly client: ProviderHttpClient;
   readonly logger: Logger;
@@ -107,6 +131,12 @@ export interface JolpicaParticipantsPortOptions {
    * logged.
    */
   readonly reference?: () => string;
+  /**
+   * U9: the whole-run inventory policy from the trusted run context. Omitted
+   * means `strict`, the unchanged pre-U9 behaviour. A malformed value is a
+   * wiring error, never a permissive default.
+   */
+  readonly inventoryPolicy?: unknown;
 }
 
 /** One decoded page: its identity rows, or a bounded decode problem. */
@@ -125,17 +155,24 @@ export class JolpicaParticipantsPort implements ProviderResourcePort {
   private readonly client: ProviderHttpClient;
   private readonly logger: Logger;
   private readonly registry: ProviderMappingRegistry;
+  private readonly discovery: DiscoverySink | undefined;
   private readonly participants: CuratedParticipants;
   private readonly reference: () => string;
+  private readonly inventoryPolicy: DriverInventoryPolicy;
   private sequence = 0;
 
   constructor(options: JolpicaParticipantsPortOptions) {
+    this.discovery = options.discovery;
     this.client = options.client;
     this.logger = options.logger;
     this.registry = options.registry ?? providerMappingRegistry();
     this.participants = options.participants ?? curatedParticipants();
     this.reference =
       options.reference ?? (() => `jolpica-participants-${++this.sequence}`);
+    const policy = readDriverInventoryPolicy(options.inventoryPolicy);
+    if (policy === null)
+      throw new TypeError('The inventory policy must be a supported policy.');
+    this.inventoryPolicy = policy;
   }
 
   async fetchResource(
@@ -178,24 +215,47 @@ export class JolpicaParticipantsPort implements ProviderResourcePort {
     if (!driversResult.ok) return this.transportFailure(driversResult, []);
     const driversAttempts: ProviderTransportAttempts = [this.successful()];
 
-    const drivers = this.normalize(
-      'drivers',
-      season,
-      driversAttempts,
-      () => {
-        const decoded = decodeSeasonDrivers(
-          driversResult.data,
-          season,
-          participantsPageLimit,
-        );
-        return decoded.ok ? { ok: true, rows: decoded.drivers } : decoded;
-      },
-      (rows) =>
-        normalizeSeasonDrivers(rows, season, this.registry, this.participants),
-    );
-    // A drivers response that is invalid or unresolved ends the resource
-    // here: the constructors request is never begun.
-    if (drivers.done) return drivers.outcome;
+    let driverProfiles: readonly Driver[];
+    let driverInventory: DriverInventory | null = null;
+    if (this.inventoryPolicy.mode === 'strict') {
+      const drivers = this.normalize(
+        'drivers',
+        season,
+        driversAttempts,
+        () => this.decodeDrivers(season, driversResult.data),
+        (rows) =>
+          normalizeSeasonDrivers(
+            rows,
+            season,
+            this.registry,
+            this.participants,
+          ),
+      );
+      // A drivers response that is invalid or unresolved ends the resource
+      // here: the constructors request is never begun.
+      if (drivers.done) return drivers.outcome;
+      driverProfiles = drivers.value;
+    } else {
+      // U9: only exact `unmapped` keys are optional; anything else ends the
+      // resource here exactly as strict mode does.
+      const catalogHash = this.inventoryPolicy.catalogHash;
+      const inventory = await this.normalizeInventory(
+        season,
+        driversAttempts,
+        () => this.decodeDrivers(season, driversResult.data),
+        (rows) =>
+          normalizeSeasonDriverInventory(
+            rows,
+            season,
+            this.registry,
+            this.participants,
+            catalogHash,
+          ),
+      );
+      if (inventory.done) return inventory.outcome;
+      driverProfiles = inventory.value.drivers;
+      driverInventory = inventory.value.inventory;
+    }
 
     // Cancelled between the two requests. The drivers request happened and is
     // reported; the constructors request never left and is not an attempt.
@@ -228,6 +288,18 @@ export class JolpicaParticipantsPort implements ProviderResourcePort {
           season,
           participantsPageLimit,
         );
+        if (decoded.ok)
+          captureDiscovery(
+            this.discovery,
+            {
+              endpointKind: 'season-constructors',
+              season,
+              requestedLimit: participantsPageLimit,
+              decoded,
+            },
+            constructorsResult.data,
+            this.registry,
+          );
         return decoded.ok ? { ok: true, rows: decoded.constructors } : decoded;
       },
       (rows) =>
@@ -245,7 +317,7 @@ export class JolpicaParticipantsPort implements ProviderResourcePort {
       attempts,
       payload: {
         kind: 'season-participants',
-        drivers: drivers.value,
+        drivers: driverProfiles,
         constructors: constructors.value,
         // Participation spans are assembly-owned (ADR 0026 D3, D11). Empty is
         // the accepted state of this contribution, not a placeholder.
@@ -254,8 +326,103 @@ export class JolpicaParticipantsPort implements ProviderResourcePort {
           season,
           constructors.value,
         ),
+        // Private accounting, present only under the explicit optional
+        // policy. The strict payload keeps its exact closed shape.
+        ...(driverInventory === null ? {} : { driverInventory }),
       },
     };
+  }
+
+  /** Strictly decodes the drivers page and captures shadow evidence after it. */
+  private decodeDrivers(
+    season: number,
+    data: unknown,
+  ): DecodeStep<readonly DecodedDriver[]> {
+    const decoded = decodeSeasonDrivers(data, season, participantsPageLimit);
+    // U1: evidence is extracted only from a successfully decoded page.
+    if (decoded.ok)
+      captureDiscovery(
+        this.discovery,
+        {
+          endpointKind: 'season-drivers',
+          season,
+          requestedLimit: participantsPageLimit,
+          decoded,
+        },
+        data,
+        this.registry,
+      );
+    return decoded.ok ? { ok: true, rows: decoded.drivers } : decoded;
+  }
+
+  /**
+   * U9: decodes and normalizes the drivers page under the optional policy.
+   * Every exception is contained as the bounded invalid-payload outcome, with
+   * the answered attempt still reported, exactly like `normalize`.
+   */
+  private async normalizeInventory(
+    season: number,
+    attempts: ProviderTransportAttempts,
+    decode: () => DecodeStep<readonly DecodedDriver[]>,
+    normalize: (
+      rows: readonly DecodedDriver[],
+    ) => Promise<DriverInventoryNormalization<ProviderMappingFailure>>,
+  ): Promise<
+    Step<{
+      readonly drivers: readonly Driver[];
+      readonly inventory: DriverInventory;
+    }>
+  > {
+    let decoded: DecodeStep<readonly DecodedDriver[]>;
+    try {
+      decoded = decode();
+    } catch {
+      decoded = { ok: false, problem: 'envelope' };
+    }
+    if (!decoded.ok) {
+      return this.invalidPayload('drivers', season, attempts, decoded.problem);
+    }
+
+    let normalized: DriverInventoryNormalization<ProviderMappingFailure>;
+    try {
+      normalized = await normalize(decoded.rows);
+    } catch {
+      return this.invalidPayload('drivers', season, attempts, 'normalization');
+    }
+
+    if (normalized.ok) {
+      if (normalized.inventory.unresolved.length > 0) {
+        // A bounded count only: no provider value, key or candidate ID.
+        this.logger.info({
+          operation: 'provider.participants.inventory_unresolved',
+          providerSourceId: 'jolpica',
+          providerRequestAttempted: true,
+          season,
+          identityUnresolvedCount: normalized.inventory.unresolved.length,
+        });
+      }
+      return {
+        done: false,
+        value: { drivers: normalized.drivers, inventory: normalized.inventory },
+      };
+    }
+    if (normalized.kind === 'mapping') {
+      for (const failure of normalized.failures) {
+        this.logger.error(providerMappingFailureEvent(failure));
+      }
+      return { done: true, outcome: { outcome: 'mapping-failure', attempts } };
+    }
+    if (normalized.problem === 'curated-driver-missing') {
+      this.logger.error({
+        operation: 'provider.participants.curated_content_missing',
+        providerSourceId: 'jolpica',
+        providerRequestAttempted: true,
+        season,
+        failureCategory: normalized.problem,
+      });
+      return { done: true, outcome: { outcome: 'mapping-failure', attempts } };
+    }
+    return this.invalidPayload('drivers', season, attempts, normalized.problem);
   }
 
   /**
