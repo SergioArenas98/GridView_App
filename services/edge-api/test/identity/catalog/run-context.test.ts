@@ -302,7 +302,7 @@ describe('U6 complete contexts and durable pins', () => {
       context.participants.driverById(seed.snapshot.drivers[0]!.profile.id),
     ).not.toBeNull();
   });
-  it('bounds two uncertain attempts at exactly two seconds each and stops on cancellation', async () => {
+  it('bounds two uncertain attempts at exactly ten seconds each and stops on cancellation', async () => {
     vi.useFakeTimers();
     const fetch = vi.fn(() => new Promise<Response>(() => {}));
     const config = {
@@ -314,11 +314,11 @@ describe('U6 complete contexts and durable pins', () => {
     const assertion = expect(pending).rejects.toMatchObject({
       failure: 'catalog-unavailable',
     });
-    await vi.advanceTimersByTimeAsync(1999);
+    await vi.advanceTimersByTimeAsync(9999);
     expect(fetch).toHaveBeenCalledTimes(1);
     await vi.advanceTimersByTimeAsync(1);
     expect(fetch).toHaveBeenCalledTimes(2);
-    await vi.advanceTimersByTimeAsync(2000);
+    await vi.advanceTimersByTimeAsync(10_000);
     await assertion;
     const controller = new AbortController();
     controller.abort();

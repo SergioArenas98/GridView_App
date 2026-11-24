@@ -18,14 +18,17 @@ import {
   type RepositorySource,
 } from './model';
 
-export function boundedJson(input: unknown): Json {
+export function boundedJson(
+  input: unknown,
+  maxBytes: number = catalogLimits.exportBytes,
+): Json {
   let nodes = 0,
     size = 0;
   const visit = (v: unknown, depth: number): Json => {
     requireCatalog(++nodes <= 200000 && depth <= 32, 'structure-limit');
     if (typeof v === 'string') {
       size += utf8(v).length;
-      requireCatalog(size <= catalogLimits.exportBytes, 'byte-limit');
+      requireCatalog(size <= maxBytes, 'byte-limit');
       return v;
     }
     if (v === null || typeof v === 'boolean') return v;
@@ -67,10 +70,7 @@ export function boundedJson(input: unknown): Json {
     return out;
   };
   const result = visit(input, 0);
-  requireCatalog(
-    utf8(canonicalJson(result)).length <= catalogLimits.exportBytes,
-    'byte-limit',
-  );
+  requireCatalog(utf8(canonicalJson(result)).length <= maxBytes, 'byte-limit');
   return result;
 }
 export function object(v: unknown): asserts v is Document {

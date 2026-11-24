@@ -53,6 +53,15 @@ import { exact, freeze } from './sources';
 
 /** Internal namespace routing only, following IdentityClient's call convention. */
 const pinRequestUrl = 'https://identity-catalog/run-pin';
+/**
+ * Each pin attempt's deadline, response body included (ADR 0031, amended
+ * 2026-11-23). The catalog object rebuilds the canonical lineage on every pin,
+ * so its cost grows with the active revision's history: staging's three-
+ * revision catalog R2 took 4.4 s, and two 2 s attempts both failed. Both
+ * attempts still consume the 240 s coordination budget. Batch admission reads
+ * the same pinned catalog and shares this deadline.
+ */
+export const pinAttemptTimeoutMs = 10_000;
 export class CatalogAdmissionError extends Error {
   constructor(readonly failure: 'catalog-unavailable' | 'catalog-invalid') {
     super(failure);
@@ -482,7 +491,7 @@ async function readPin(
   for (let n = 0; n < 2; n++) {
     if (signal?.aborted) throw new CatalogAdmissionError('catalog-unavailable');
     try {
-      value = await within(attempt(), 2000);
+      value = await within(attempt(), pinAttemptTimeoutMs);
       break;
     } catch (error) {
       if (

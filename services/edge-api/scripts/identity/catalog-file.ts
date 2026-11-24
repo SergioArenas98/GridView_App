@@ -26,13 +26,20 @@ export async function verifyCatalogFile(
   },
 ) {
   requireCatalog(
-    bytes.byteLength > 0 && bytes.byteLength <= catalogLimits.exportBytes,
+    bytes.byteLength > 0 &&
+      // A complete file carries decisions and evidence beside the lineage, so
+      // it may exceed one revision export; the runtime pin accepts twice that.
+      bytes.byteLength <= catalogLimits.exportBytes * 2,
     'catalog-file-capacity',
   );
+  // The wrapper repeats the revision and decisions beside the lineage, so its
+  // strings are bounded at the file bound; the lineage keeps the revision
+  // bound wherever it is rebuilt.
   const wrapper = boundedJson(
     JSON.parse(
       new TextDecoder('utf-8', { fatal: true, ignoreBOM: false }).decode(bytes),
     ),
+    catalogLimits.exportBytes * 2,
   );
   exact(wrapper, [
     'schemaVersion',

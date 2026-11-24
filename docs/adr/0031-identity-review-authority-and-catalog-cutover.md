@@ -67,7 +67,8 @@ refresh or bundled defaults inside runtime composition.
 
 Acquire the existing lease and recover/read authoritative publication state,
 plan, then pin before constructing provider ports and before provider requests.
-Nothing-due runs need not pin. Pin timeout is two seconds with at most one
+Nothing-due runs need not pin. Pin timeout is ten seconds (two seconds until
+the 2026-11-23 amendment below) with at most one
 retry of the identical run ID/season/purpose; a committed pin is returned on
 retry, never rebound to a newer head. Both attempts consume existing
 240-second coordination / 300-second publication-intent budgets.
@@ -269,3 +270,23 @@ historical classifications/identity protections and D14-D16 remain effective.
 Flutter, public API v1, production Android identity `com.sejuma.gridview` and
 its signing configuration are unchanged. Resource-scoped publication and
 destructive historical corrections are separate future projects.
+
+## Amendment (2026-11-23): pin deadline
+
+The catalog object rebuilds the canonical lineage on every pin, so a pin's
+cost grows with the active revision's history. On 2026-11-23 staging's
+three-revision catalog R2 (the P0 base import) took 4.4 s for one pin in the
+Durable Object; both 2 s attempts of the first scheduled run timed out (the
+second queued behind the first), and the run failed closed as
+`catalog-unavailable` before any provider request. Each attempt's deadline is
+now 10 s, still with at most one identical retry, and both attempts still
+consume the 240-second coordination budget. Batch admission returns the same
+pinned catalog and takes the same deadline. The offline catalog file verifier
+bounds a complete file at twice one revision export, as the runtime pin
+response already did, because the file repeats the revision and decisions
+beside the lineage.
+
+**Recorded follow-up (performance, owner decision 2026-11-23):** make the pin's
+cost independent of history, for example by storing each immutable revision's
+canonical lineage once instead of rebuilding it on every pin. The 10 s
+deadline is accepted for the 2026 rollout; no other change is made now.

@@ -28,7 +28,7 @@ describe('wrangler staging configuration', () => {
     expect(Object.keys(jsoncConfig)).toHaveLength(0);
   });
 
-  it('declares the staging Worker, workers.dev endpoint, KV binding and its minute-47 hourly cron', () => {
+  it('declares the staging Worker, workers.dev endpoint, KV binding and its explicitly empty schedule', () => {
     expect(config).toMatch(
       /\[env\.staging\][\s\S]*name = "gridview-api-staging"/,
     );
@@ -39,9 +39,7 @@ describe('wrangler staging configuration', () => {
     expect(config).toMatch(
       /\[\[env\.staging\.kv_namespaces\]\][\s\S]*binding = "GRIDVIEW_DATA"[\s\S]*id = "1d0fb55486a745a1ad12e03d9f04942b"/,
     );
-    expect(config).toMatch(
-      /\[env\.staging\.triggers\]\ncrons = \["47 \* \* \* \*"\]\n/,
-    );
+    expect(config).toMatch(/\[env\.staging\.triggers\]\ncrons = \[\]\n/);
   });
 
   it('requires the staging secrets without committing their values', () => {
@@ -232,7 +230,7 @@ describe('season 2026 activation-phase configuration (ADR 0025 D12)', () => {
     });
   });
 
-  it('keeps both existing staging bindings, the secret and observability, adds only the ledger, and schedules minute 47', () => {
+  it('keeps both existing staging bindings, the secret and observability, adds only the ledger, and keeps the schedule explicitly empty', () => {
     expect(config).toMatch(
       /\[\[env\.staging\.durable_objects\.bindings\]\]\nname = "PROVIDER_RATE_LIMITER"\nclass_name = "ProviderRateLimiter"/,
     );
@@ -252,9 +250,7 @@ describe('season 2026 activation-phase configuration (ADR 0025 D12)', () => {
     expect(config).toMatch(
       /\[env\.staging\.secrets\]\nrequired = \["ADMIN_TOKEN", "JOLPICA_PROXY_TOKEN", "IDENTITY_REVIEWER_CREDENTIALS"\]/,
     );
-    expect(config).toMatch(
-      /\[env\.staging\.triggers\]\ncrons = \["47 \* \* \* \*"\]\n/,
-    );
+    expect(config).toMatch(/\[env\.staging\.triggers\]\ncrons = \[\]\n/);
     expect(config).toMatch(
       /\[env\.staging\.observability\]\nenabled = true\nhead_sampling_rate = 1\n\n\[env\.staging\.observability\.logs\]\nenabled = true\npersist = true\ninvocation_logs = false/,
     );

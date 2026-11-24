@@ -1,5 +1,9 @@
 import type { IdentityContextConfiguration } from '../identity/catalog/run-context';
-import { contextFromPin, pinRequestFor } from '../identity/catalog/run-context';
+import {
+  contextFromPin,
+  pinAttemptTimeoutMs,
+  pinRequestFor,
+} from '../identity/catalog/run-context';
 import type {
   BatchAdmissionRequest,
   BatchAdmissionReceipt,
@@ -64,7 +68,7 @@ export async function batchCatalogCall(
   };
   for (let n = 0; ; n++) {
     try {
-      return await within(call(), 2000);
+      return await within(call(), pinAttemptTimeoutMs);
     } catch (error) {
       if (n === 1) throw error;
     }

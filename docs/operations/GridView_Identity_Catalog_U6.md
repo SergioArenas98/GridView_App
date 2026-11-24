@@ -217,7 +217,8 @@ two attempts have identical bytes, including their current fence. Operator
 verification uses its operation UUID as stable run ID, so an uncertain record
 write followed by a retry cannot silently adopt a later revision.
 
-Each pin attempt, including response-body reading, is limited to **2,000 ms**,
+Each pin attempt, including response-body reading, is limited to **2,000 ms**
+(10,000 ms since the ADR 0031 amendment of 2026-11-23),
 with at most one identical retry. Both attempts and complete context validation
 consume the existing run budget. No coordination, publication-intent,
 verification, provider or U5 administrative deadline was enlarged.

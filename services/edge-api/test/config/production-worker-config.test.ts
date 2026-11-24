@@ -252,9 +252,9 @@ describe('the resolved production configuration', () => {
     expect(rawConfig).toMatch(
       /^\[env\.production\.triggers\]\ncrons = \["17 \* \* \* \*"\]$/m,
     );
-    expect(resolved('staging').triggers).toEqual({ crons: ['47 * * * *'] });
-    // Exactly two schedules in the file; the demonstration stays unscheduled.
-    expect(rawConfig.match(/^\s*crons\s*=\s*\[\s*"/gm)).toHaveLength(2);
+    expect(resolved('staging').triggers).toEqual({ crons: [] });
+    // Exactly one schedule in the file: production's.
+    expect(rawConfig.match(/^\s*crons\s*=\s*\[\s*"/gm)).toHaveLength(1);
   });
 
   it('persists the Worker lines, never the invocation logs or traces (ADR 0028 D8)', () => {
@@ -320,7 +320,7 @@ describe('the resolved production configuration', () => {
     expect(staging.kv_namespaces).toEqual([
       { binding: 'GRIDVIEW_DATA', id: STAGING_KV_ID },
     ]);
-    expect(staging.triggers).toEqual({ crons: ['47 * * * *'] });
+    expect(staging.triggers).toEqual({ crons: [] });
     expect(staging.observability).toEqual({
       enabled: true,
       head_sampling_rate: 1,

@@ -173,14 +173,12 @@ describe('the resolved configuration', () => {
     expect(resolved('').vars).toEqual({ ENVIRONMENT: 'development' });
   });
 
-  it('schedules staging and production hourly (AU-4 step 3, AU-7), keeps the demonstration Worker empty and leaves development unscheduled', () => {
+  it('schedules production hourly (AU-7), leaves staging and the demonstration Worker explicitly empty and development unscheduled', () => {
     // Set, not absent: `wrangler deploy` PUTs the schedules only when
     // `crons` is set, so an absent key would silently keep a live one.
-    expect(resolved('staging').triggers).toEqual({ crons: ['47 * * * *'] });
-    expect(rawConfig).toMatch(
-      /^\[env\.staging\.triggers\]\ncrons = \["47 \* \* \* \*"\]\n/m,
-    );
-    expect(rawConfig.match(/^\s*crons\s*=\s*\[\s*"/gm)).toHaveLength(2);
+    expect(resolved('staging').triggers).toEqual({ crons: [] });
+    expect(rawConfig).toMatch(/^\[env\.staging\.triggers\]\ncrons = \[\]\n/m);
+    expect(rawConfig.match(/^\s*crons\s*=\s*\[\s*"/gm)).toHaveLength(1);
     // Development declared no trigger before and still does not.
     expect(resolved('production').triggers).toEqual({
       crons: ['17 * * * *'],

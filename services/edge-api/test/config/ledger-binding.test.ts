@@ -158,8 +158,8 @@ describe('the committed configuration declares the reconciliation ledger in stag
     expect(production.vars.PROVIDER_MODE).toBe('coordinated');
     expect(JSON.stringify(production.vars)).not.toMatch(/RECONCILIATION/);
     expect(resolved('').vars).toEqual({ ENVIRONMENT: 'development' });
-    // Offset minutes, so the two paced runs never share the proxy at once.
-    expect(staging.triggers.crons).toEqual(['47 * * * *']);
+    // Production is the proxy egress's only scheduled user.
+    expect(staging.triggers.crons).toEqual([]);
     expect(production.triggers.crons).toEqual(['17 * * * *']);
     expect(resolved('e2e').triggers.crons).toEqual([]);
     expect(resolved('').triggers.crons).toBeUndefined();
