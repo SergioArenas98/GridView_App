@@ -95,6 +95,13 @@ function pad(value: number, width: number): string {
   return String(value).padStart(width, '0');
 }
 
+/** Linear even when an unbounded fraction has zeros before a nonzero digit. */
+function trimTrailingZeros(value: string): string {
+  let end = value.length;
+  while (end > 0 && value.charCodeAt(end - 1) === 48) end -= 1;
+  return value.slice(0, end);
+}
+
 /**
  * The canonical UTC spelling of one RFC 3339 `date-time`, or `null` when the
  * value is not one.
@@ -140,7 +147,7 @@ export function canonicalInstant(value: string): string | null {
   const civil = civilFromDays(days);
   if (civil.year < 0 || civil.year > 9999) return null;
 
-  const trimmed = fraction === undefined ? '' : fraction.replace(/0+$/, '');
+  const trimmed = trimTrailingZeros(fraction ?? '');
   const secfrac = trimmed === '' ? '' : `.${trimmed}`;
   return (
     `${pad(civil.year, 4)}-${pad(civil.month, 2)}-${pad(civil.day, 2)}` +
@@ -267,8 +274,9 @@ export function instantPlusMillisecond(value: string): string | null {
 
   if (year < 0 || year > 9999) return null;
 
-  const rebuiltFraction =
-    `${String(newMilli).padStart(3, '0')}${subMilli}`.replace(/0+$/, '');
+  const rebuiltFraction = trimTrailingZeros(
+    `${String(newMilli).padStart(3, '0')}${subMilli}`,
+  );
   const secfrac = rebuiltFraction === '' ? '' : `.${rebuiltFraction}`;
   return (
     `${pad(year, 4)}-${pad(month, 2)}-${pad(day, 2)}` +

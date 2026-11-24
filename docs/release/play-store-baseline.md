@@ -1,5 +1,11 @@
 # Google Play baseline
 
+> **2026-11-24:** see the dated readiness record in
+> [production-release-plan.md](production-release-plan.md). Production AU-7 is
+> accepted and the 5 November privacy policy is live. The current Play maximum
+> still needs a Console recheck before signing; the older value below is a
+> historical baseline, not a new Console observation.
+
 Confirmed in Play Console on 2026-10-20 (read-only, developer account
 "Sejuma"). Fingerprints are public certificate digests, not credentials.
 
@@ -19,7 +25,7 @@ Confirmed in Play Console on 2026-10-20 (read-only, developer account
   16 KB page-size compatible, automatic protection "installer check".
 - Policy status: updates are rejected unless they target API 36 and support
   16 KB memory pages. 2.0.0 targets 36 and passes the 16 KB checks (below).
-- Store listing: "Contains ads", Data safety "No data collected / No data
+- Historical store listing (2026-10-20): "Contains ads", Data safety "No data collected / No data
   shared", privacy policy https://gridview.netlify.app (dated 2025-02-19). All
   three must change for 2.0.0 (`data-safety.md`).
 
@@ -79,11 +85,12 @@ Confirmed in Play Console on 2026-10-20 (read-only, developer account
   constants. This item records technical behaviour; the
   declaration needs a legal/privacy review, not an engineering assertion.
 
-- **Privacy policy URL (blocking for release).** Release builds now set
+- **Privacy policy URL (verified 2026-11-24).** Release builds set
   `PRIVACY_POLICY_URL=https://gridview.netlify.app` through
-  `config/dart_defines/production.json`. The URL already exists, but it still
-  serves the 2025 policy, so publishing the 2.0.0 policy there remains a
-  release blocker.
+  `config/dart_defines/production.json`. The live URL serves the 5 November
+  2026 policy, identical to the repository HTML except line endings. Policy
+  publication is complete; this does not approve Data safety submission or
+  settle the remaining self-assessment questions.
 
 - **Symbol handling.** Dart obfuscation is **not** enabled: no `--obfuscate` or
   `--split-debug-info` is used in any build or CI workflow, so there is no
@@ -213,32 +220,37 @@ Confirmed in Play Console on 2026-10-20 (read-only, developer account
 
 Tracked, with their approval gates, in `production-release-plan.md`:
 
-1. **No production API.** Production genesis (ADR 0025 O-16) and production
-   ingest admission are merged (PR #84, `527444b`). Two things must exist
-   before a release candidate is built:
-   - the production Worker configuration;
-   - a submission path chosen under W-P (`submission-path-decision.md`):
-     Workers Paid with the existing ingest, or a Free-plan redesign that has
-     passed that document's §4.7.
-2. **Privacy policy not published.** The policy covering both 1.x and 2.0.0
-   is in PR #82, which is not merged. It must be published at
-   https://gridview.netlify.app.
-3. **Play Data safety declaration.** It must be resubmitted from PR #82's
+1. **Release commit and artifact.** Complete integration, the CodeQL regex fix,
+   exact-commit A0/AU-8 checks (including a disposition for deliberately
+   unscheduled staging), and the signed A2 AAB verification. The successful
+   local profile AAB rehearsal is not the publishing artifact.
+2. **Current Play version maximum.** Reconfirm all tracks/bundles in Console;
+   use the existing `2.0.0+8` only if 8 remains greater than that maximum.
+3. **Play Data safety declaration.** Confirm its current Console state and
+   complete submission using the existing
    `data-safety.md` after the owner's privacy decisions (`privacy-self-assessment.md`; no external review is planned), starting with state 0 for 1.x, then:
    - **Transition state T**, with Ads still **Yes**, while any 1.x build is
      distributed.
    - **Final state F**, with Ads **No**, once only 2.0.0 is distributed.
-   The live "No data collected" is already inaccurate for 1.2.1, which shows
-   AdMob ads.
+   On 2026-11-24 the public page declares collection of Approximate location,
+   App interactions, Crash logs, Diagnostics and Device or other IDs, with
+   Analytics and Fraud prevention/security/compliance purposes, but says
+   **No data shared**. The listing still says **Contains ads**. The earlier
+   "No data collected" description is historical. Reconcile the current
+   answers with state T's legacy ads sharing/advertising purposes and FCM
+   Developer communications purpose; their absence is visible publicly,
+   while pending Console changes are not.
 
-The `PENDING` Play Console values and the NDK decision are resolved above.
+The production API and privacy policy publication are complete. The NDK
+decision remains resolved above. Store submission and the Play-delivered
+upgrade check still follow the existing release procedure.
 
-**External prerequisites, still open and owned outside engineering.** None is
-marked complete: Formula 1 **media rights and attribution approval**, **R2
-provisioning**, media upload and manifest publication (no R2 bucket exists in any
-environment, so nothing has ever been published); and **production provider legal
-approval** with the production provider itself. These are tracked in
-`../technical/GridView_Implementation_Plan.md`.
+**Deferred media work is not an app-release blocker.** The owner accepted
+placeholder media for 2.0.0 on 2026-11-05. Rights approval, R2 provisioning,
+upload and manifest publication apply before publishing approved media.
+Provider compliance follows ADR 0019's accepted public-licence model and its
+release sweep; individual provider approval is not required by that ADR.
+Qualifying-session support is explicitly deferred by the owner (2026-11-24).
 
 **Phase 8C-2 itself is complete** — nothing about Firebase observability is
 outstanding. Every other pre-existing release requirement remains governed by

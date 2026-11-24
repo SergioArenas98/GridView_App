@@ -65,6 +65,13 @@ describe('compareInstants', () => {
 });
 
 describe('instantPlusMillisecond', () => {
+  it('preserves long sub-millisecond zero runs and trims only trailing zeros', () => {
+    const tail = `${'0'.repeat(100_000)}1`;
+    expect(instantPlusMillisecond(`2026-01-01T00:00:00.123${tail}000Z`)).toBe(
+      `2026-01-01T00:00:00.124${tail}Z`,
+    );
+  });
+
   it('advances an ordinary second', () => {
     expect(instantPlusMillisecond('2026-01-01T00:00:00Z')).toBe(
       '2026-01-01T00:00:00.001Z',

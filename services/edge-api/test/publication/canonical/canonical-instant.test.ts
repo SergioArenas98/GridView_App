@@ -82,6 +82,15 @@ describe('canonical instants', () => {
     );
   });
 
+  it('preserves long zero runs before a significant digit and trims only the suffix', () => {
+    const zeros = '0'.repeat(100_000);
+    const head = '2026-07-18T12:00:00';
+    expect(canonicalInstant(`${head}.${zeros}1${zeros}Z`)).toBe(
+      `${head}.${zeros}1Z`,
+    );
+    expect(canonicalInstant(`${head}.${zeros}Z`)).toBe(`${head}Z`);
+  });
+
   it('preserves a leap second instead of rolling it into the next minute', () => {
     expect(canonicalInstant('2016-12-31T23:59:60Z')).toBe(
       '2016-12-31T23:59:60Z',

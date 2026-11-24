@@ -174,9 +174,13 @@ node scripts/monitor/automation-monitor.mjs --base-url https://gridview-api-stag
 
 (`--skip-heartbeat` only before the environment is automatic.)
 
-`.github/workflows/automation-monitor.yml` runs it, **manual-only**. A failed
-run e-mails the owner through GitHub's own notifications; the AU-6 drill
-verified that delivery on 2026-10-22 (§7). Known limits:
+`.github/workflows/automation-monitor.yml` runs it **hourly for production at
+minute 47 UTC**, enabled on `master` by PR #111's merge on 2026-11-24. Scheduled
+runs require a fresh heartbeat and never simulate failure. Manual dispatch
+remains available for either environment. A failed run uses GitHub's own
+notifications; the AU-6 drill verified a manual staging failure e-mail on
+2026-10-22 (§7). That receipt does not prove scheduled production delivery.
+Known limits:
 
 - GitHub can delay scheduled runs;
 - GitHub disables scheduled workflows in a public repository after 60 days
